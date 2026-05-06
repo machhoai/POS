@@ -2,16 +2,24 @@
 // Product Types — POS product catalog
 // =============================================================================
 
-/** Product category for organizing the product grid. */
-export interface ProductCategory {
-  id: string;
-  name: string;
-  sortOrder?: number;
-}
+/**
+ * Category mapping from HK API numeric IDs to Vietnamese labels.
+ * Shared constant used in UI tabs and product cards.
+ */
+export const CATEGORY_MAP: Record<number, string> = {
+  1: "Gói Xu",
+  2: "Gói Điểm",
+  4: "Vé & Combo",
+  6: "Nạp Thẻ",
+};
+
+/** All category IDs in display order. */
+export const CATEGORY_IDS = [1, 2, 4, 6] as const;
 
 /**
  * A product in the POS catalog.
  * Synced from the HK API via the syncProducts Cloud Function.
+ * Stored in Firestore `products/{goodsId}`.
  */
 export interface Product {
   /** Unique product ID from the HK system */
@@ -20,18 +28,10 @@ export interface Product {
   goodsName: string;
   /** Selling price in local currency */
   price: number;
-  /** Product image URL (optional) */
-  imageUrl?: string;
-  /** Category for filtering in the product grid */
-  categoryId?: string;
-  /** Category name (denormalized for display) */
-  categoryName?: string;
-  /** Whether this product is available for sale */
-  isActive: boolean;
-  /** Stock quantity (0 = unlimited/not tracked) */
-  stock?: number;
-  /** Barcode for scanner support */
-  barcode?: string;
-  /** Sort order for display */
-  sortOrder?: number;
+  /** Numeric category ID from HK API (1, 2, 4, 6) */
+  category: number;
+  /** Sub-category name from HK API (if available) */
+  subCategory: string;
+  /** ISO 8601 timestamp of last sync */
+  lastSyncAt?: string;
 }

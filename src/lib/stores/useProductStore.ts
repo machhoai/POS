@@ -1,57 +1,80 @@
 // =============================================================================
 // Zustand Product Store — In-memory product catalog with Firestore sync
 // =============================================================================
-// Fetches all products from Firestore's `pos_products` collection into RAM.
+// Fetches all products from Firestore's `products` collection into RAM.
+// Categories are derived from the `category` field using CATEGORY_MAP.
 // Provides category filtering and search functionality.
-// Products are synced to Firestore by the `syncProducts` Cloud Function.
 // =============================================================================
 
 import { create } from "zustand";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy,
-} from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import type { Product, ProductCategory } from "@/lib/types/product";
+import type { Product } from "@/lib/types/product";
+import { CATEGORY_MAP } from "@/lib/types/product";
+
+/** A category entry derived from product data. */
+export interface CategoryEntry {
+  id: number;
+  label: string;
+}
 
 /** Shape of the product store state. */
 interface ProductState {
   // ── State ──────────────────────────────────────────────────────────────────
   products: Product[];
-  categories: ProductCategory[];
-  selectedCategoryId: string | null;
+  /** Categories that have at least one product (computed on fetch) */
+  availableCategories: CategoryEntry[];
+  /** Currently selected category filter (null = show all) */
+  selectedCategory: number | null;
   searchQuery: string;
   isLoading: boolean;
   lastSyncAt: string | null;
   error: string | null;
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  /** Fetch all products from Firestore for a given store */
-  fetchProducts: (storeId: string) => Promise<void>;
+  /** Fetch all products from Firestore */
+  fetchProducts: () => Promise<void>;
   /** Set the active category filter */
-  setSelectedCategory: (categoryId: string | null) => void;
+  setSelectedCategory: (category: number | null) => void;
   /** Set the search query */
   setSearchQuery: (query: string) => void;
   /** Clear all filters */
   clearFilters: () => void;
 }
 
-/** Firestore collection names */
-const PRODUCTS_COLLECTION = "pos_products";
-const CATEGORIES_COLLECTION = "pos_categories";
+/** Firestore collection name */
+const PRODUCTS_COLLECTION = "products";
+
+/**
+ * Derive unique category entries from the product list.
+ * Returns a stable array that only changes when products change.
+ */
+function deriveCategories(products: Product[]): CategoryEntry[] {
+  const seen = new Set<number>();
+  const result: CategoryEntry[] = [];
+
+  for (const product of products) {
+    if (!seen.has(product.category) && CATEGORY_MAP[product.category]) {
+      seen.add(product.category);
+      result.push({
+        id: product.category,
+        label: CATEGORY_MAP[product.category],
+      });
+    }
+  }
+
+  return result;
+}
 
 /**
  * Product store — fetches all products into RAM for zero-latency filtering.
- * The POS operates on a per-store product set synced from the HK API.
+ * Categories are derived from product data, not stored separately.
  */
 export const useProductStore = create<ProductState>((set) => ({
   // ── Initial State ──────────────────────────────────────────────────────────
   products: [],
-  categories: [],
-  selectedCategoryId: null,
+  availableCategories: [],
+  selectedCategory: null,
   searchQuery: "",
   isLoading: false,
   lastSyncAt: null,
@@ -59,36 +82,35 @@ export const useProductStore = create<ProductState>((set) => ({
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  fetchProducts: async (storeId: string) => {
+  fetchProducts: async () => {
     set({ isLoading: true, error: null });
 
     try {
-      // Fetch products for this store
-      const productsQuery = query(
-        collection(db, PRODUCTS_COLLECTION),
-        where("storeId", "==", storeId),
-        where("isActive", "==", true),
-        orderBy("sortOrder", "asc")
-      );
-      const productsSnapshot = await getDocs(productsQuery);
-      const products: Product[] = productsSnapshot.docs.map(
-        (doc) => ({ goodsId: doc.id, ...doc.data() }) as Product
-      );
+      const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
 
-      // Fetch categories
-      const categoriesQuery = query(
-        collection(db, CATEGORIES_COLLECTION),
-        where("storeId", "==", storeId),
-        orderBy("sortOrder", "asc")
-      );
-      const categoriesSnapshot = await getDocs(categoriesQuery);
-      const categories: ProductCategory[] = categoriesSnapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() }) as ProductCategory
-      );
+      // 🔍 DEBUG: Log raw Firestore data
+      console.log(`[Product Store] 🔍 Loaded ${snapshot.docs.length} docs from Firestore`);
+      if (snapshot.docs.length > 0) {
+        const firstDoc = snapshot.docs[0];
+        console.log("[Product Store] 🔍 FIRST DOC id:", firstDoc.id);
+        console.log("[Product Store] 🔍 FIRST DOC data:", JSON.stringify(firstDoc.data()));
+      }
+
+      const products: Product[] = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          goodsId: data.goodsId || doc.id,
+          goodsName: data.goodsName || "Không rõ tên",
+          price: data.price || 0,
+          category: data.category || 0,
+          subCategory: data.subCategory || "",
+          lastSyncAt: data.lastSyncAt,
+        };
+      });
 
       set({
         products,
-        categories,
+        availableCategories: deriveCategories(products),
         isLoading: false,
         lastSyncAt: new Date().toISOString(),
         error: null,
@@ -102,12 +124,12 @@ export const useProductStore = create<ProductState>((set) => ({
     }
   },
 
-  setSelectedCategory: (categoryId) =>
-    set({ selectedCategoryId: categoryId }),
+  setSelectedCategory: (category) =>
+    set({ selectedCategory: category }),
 
   setSearchQuery: (searchQuery) => set({ searchQuery }),
 
-  clearFilters: () => set({ selectedCategoryId: null, searchQuery: "" }),
+  clearFilters: () => set({ selectedCategory: null, searchQuery: "" }),
 }));
 
 // =============================================================================
@@ -122,19 +144,17 @@ export const selectFilteredProducts = (state: ProductState): Product[] => {
   let filtered = state.products;
 
   // Filter by category
-  if (state.selectedCategoryId) {
+  if (state.selectedCategory !== null) {
     filtered = filtered.filter(
-      (p) => p.categoryId === state.selectedCategoryId
+      (p) => p.category === state.selectedCategory
     );
   }
 
-  // Filter by search query (name or barcode)
+  // Filter by search query (name only)
   if (state.searchQuery.trim()) {
     const q = state.searchQuery.toLowerCase().trim();
-    filtered = filtered.filter(
-      (p) =>
-        p.goodsName.toLowerCase().includes(q) ||
-        (p.barcode && p.barcode.toLowerCase().includes(q))
+    filtered = filtered.filter((p) =>
+      p.goodsName.toLowerCase().includes(q)
     );
   }
 

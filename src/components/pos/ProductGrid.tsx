@@ -1,27 +1,28 @@
 "use client";
 
 // =============================================================================
-// ProductGrid — Displays the product catalog with category filter and search
+// ProductGrid — Displays the product catalog with category tabs and search
 // =============================================================================
 
-import type { Product, ProductCategory } from "@/lib/types/product";
+import type { Product } from "@/lib/types/product";
+import { CATEGORY_MAP } from "@/lib/types/product";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 
 interface ProductGridProps {
   products: Product[];
-  categories: ProductCategory[];
-  selectedCategoryId: string | null;
+  availableCategories: { id: number; label: string }[];
+  selectedCategory: number | null;
   searchQuery: string;
   isLoading: boolean;
-  onSelectCategory: (categoryId: string | null) => void;
+  onSelectCategory: (category: number | null) => void;
   onSearchChange: (query: string) => void;
   onAddToCart: (product: Product) => void;
 }
 
 export default function ProductGrid({
   products,
-  categories,
-  selectedCategoryId,
+  availableCategories,
+  selectedCategory,
   searchQuery,
   isLoading,
   onSelectCategory,
@@ -48,7 +49,7 @@ export default function ProductGrid({
           </svg>
           <input
             type="text"
-            placeholder="Tìm sản phẩm hoặc quét mã..."
+            placeholder="Tìm sản phẩm..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-[var(--color-background)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] transition-colors"
@@ -61,14 +62,14 @@ export default function ProductGrid({
         <div className="flex gap-1.5 overflow-x-auto scrollbar-thin pb-1">
           <CategoryTab
             label="Tất cả"
-            isActive={selectedCategoryId === null}
+            isActive={selectedCategory === null}
             onClick={() => onSelectCategory(null)}
           />
-          {categories.map((cat) => (
+          {availableCategories.map((cat) => (
             <CategoryTab
               key={cat.id}
-              label={cat.name}
-              isActive={selectedCategoryId === cat.id}
+              label={cat.label}
+              isActive={selectedCategory === cat.id}
               onClick={() => onSelectCategory(cat.id)}
             />
           ))}
@@ -151,14 +152,16 @@ function ProductCard({
   product: Product;
   onAdd: () => void;
 }) {
+  const categoryLabel = CATEGORY_MAP[product.category] || "";
+
   return (
     <button
       onClick={onAdd}
       className="group relative flex flex-col p-3.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl hover:border-emerald-700/50 hover:bg-[var(--color-surface-hover)] transition-all duration-150 text-left active:scale-[0.98]"
     >
-      {/* Product emoji/icon placeholder */}
+      {/* Product icon */}
       <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-800/20 flex items-center justify-center mb-2.5 group-hover:from-emerald-500/20 group-hover:to-teal-500/20 transition-colors">
-        <span className="text-lg">🦆</span>
+        <span className="text-lg">{getCategoryEmoji(product.category)}</span>
       </div>
 
       {/* Name */}
@@ -167,9 +170,9 @@ function ProductCard({
       </p>
 
       {/* Category Badge */}
-      {product.categoryName && (
+      {categoryLabel && (
         <span className="inline-block text-[10px] px-1.5 py-0.5 bg-[var(--color-surface-active)] text-[var(--color-text-muted)] rounded-md mb-2 w-fit">
-          {product.categoryName}
+          {categoryLabel}
         </span>
       )}
 
@@ -177,13 +180,6 @@ function ProductCard({
       <p className="text-sm font-bold text-[var(--color-accent)] mt-auto">
         {formatCurrency(product.price)}
       </p>
-
-      {/* Stock indicator */}
-      {product.stock !== undefined && product.stock > 0 && product.stock < 10 && (
-        <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 bg-[var(--color-warning-subtle)] text-[var(--color-warning)] rounded-md font-medium">
-          Còn {product.stock}
-        </span>
-      )}
 
       {/* Hover add indicator */}
       <div className="absolute bottom-2.5 right-2.5 w-6 h-6 rounded-md bg-[var(--color-accent)] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md shadow-emerald-500/20">
@@ -193,4 +189,15 @@ function ProductCard({
       </div>
     </button>
   );
+}
+
+/** Map category ID to a display emoji for product cards. */
+function getCategoryEmoji(category: number): string {
+  switch (category) {
+    case 1: return "🪙";  // Gói Xu
+    case 2: return "⭐";  // Gói Điểm
+    case 4: return "🎫";  // Vé & Combo
+    case 6: return "💳";  // Nạp Thẻ
+    default: return "🦆";
+  }
 }

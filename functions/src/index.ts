@@ -4,8 +4,8 @@
 // This is the main entry point for all Cloud Functions in the POS system.
 //
 // Functions:
-//   1. `onOrderLocalPaid` — Firestore trigger for order sync to HK API
-//   2. `syncProducts` — onCall function to sync product catalog from HK API
+//   1. `syncProducts` — onCall function to sync product catalog from HK API
+//   2. `onOrderLocalPaid` — Firestore trigger for order sync to HK API
 // =============================================================================
 
 import {
@@ -16,16 +16,18 @@ import {
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as functions from "firebase-functions";
 import { db } from "./config/firebase";
-import { createRemoteOrder, confirmRemotePayment } from "./services/hkApiService";
+import { createRemoteOrder, confirmRemotePayment, fetchGoodsByCategory, fetchSubscribeBaseList } from "./services/hkApiService";
+import type { HKGoodsItem } from "./services/hkApiService";
 import type { PosOrder } from "./types/order";
-import type { PosProduct } from "./types/product";
+import type { SyncProduct } from "./types/product";
+import { SYNC_CATEGORY_IDS } from "./types/product";
 
 // =============================================================================
 // syncProducts — onCall Cloud Function
 // =============================================================================
-// Called from the POS frontend to refresh the product catalog.
-// In production, this will call the HK API to fetch the latest product list.
-// For now, uses mock data when the HK API doesn't have a product endpoint.
+// Iterates through category IDs (1, 2, 4, 6), calls the HK API
+// `setmeal_getsellgoods` for each, then batch-writes all products
+// to the Firestore `products` collection with docId = goodsId.
 // =============================================================================
 
 export const syncProducts = onCall(
@@ -39,189 +41,140 @@ export const syncProducts = onCall(
       );
     }
 
-    const { storeId } = request.data as { storeId: string };
-
-    if (!storeId) {
-      throw new HttpsError(
-        "invalid-argument",
-        "Thiếu thông tin cửa hàng (storeId)."
-      );
-    }
-
     functions.logger.info(
-      `[syncProducts] Syncing products for store ${storeId} by user ${request.auth.uid}`
+      `[syncProducts] Bắt đầu đồng bộ sản phẩm bởi user ${request.auth.uid}`
     );
 
     try {
-      // TODO: Replace with actual HK API call when goods_list endpoint is available
-      // For now, generate mock products for development
-      const mockProducts: PosProduct[] = [
-        {
-          goodsId: "DUCK-001",
-          goodsName: "B.Duck Cổ Điển",
-          price: 250000,
-          imageUrl: "",
-          categoryId: "CAT-TOY",
-          categoryName: "Đồ chơi",
-          isActive: true,
-          stock: 50,
-          barcode: "8801234567001",
-          sortOrder: 1,
-          storeId,
-          lastSyncAt: new Date().toISOString(),
-        },
-        {
-          goodsId: "DUCK-002",
-          goodsName: "B.Duck Mini Keychain",
-          price: 89000,
-          imageUrl: "",
-          categoryId: "CAT-ACC",
-          categoryName: "Phụ kiện",
-          isActive: true,
-          stock: 100,
-          barcode: "8801234567002",
-          sortOrder: 2,
-          storeId,
-          lastSyncAt: new Date().toISOString(),
-        },
-        {
-          goodsId: "DUCK-003",
-          goodsName: "B.Duck Balo Trẻ Em",
-          price: 450000,
-          imageUrl: "",
-          categoryId: "CAT-BAG",
-          categoryName: "Túi xách",
-          isActive: true,
-          stock: 30,
-          barcode: "8801234567003",
-          sortOrder: 3,
-          storeId,
-          lastSyncAt: new Date().toISOString(),
-        },
-        {
-          goodsId: "DUCK-004",
-          goodsName: "B.Duck Nón Lưỡi Trai",
-          price: 180000,
-          imageUrl: "",
-          categoryId: "CAT-ACC",
-          categoryName: "Phụ kiện",
-          isActive: true,
-          stock: 45,
-          barcode: "8801234567004",
-          sortOrder: 4,
-          storeId,
-          lastSyncAt: new Date().toISOString(),
-        },
-        {
-          goodsId: "DUCK-005",
-          goodsName: "B.Duck Bình Nước 500ml",
-          price: 195000,
-          imageUrl: "",
-          categoryId: "CAT-HOME",
-          categoryName: "Gia dụng",
-          isActive: true,
-          stock: 60,
-          barcode: "8801234567005",
-          sortOrder: 5,
-          storeId,
-          lastSyncAt: new Date().toISOString(),
-        },
-        {
-          goodsId: "DUCK-006",
-          goodsName: "B.Duck Gấu Bông Lớn",
-          price: 350000,
-          imageUrl: "",
-          categoryId: "CAT-TOY",
-          categoryName: "Đồ chơi",
-          isActive: true,
-          stock: 25,
-          barcode: "8801234567006",
-          sortOrder: 6,
-          storeId,
-          lastSyncAt: new Date().toISOString(),
-        },
-        {
-          goodsId: "DUCK-007",
-          goodsName: "B.Duck Áo Thun Trẻ Em",
-          price: 220000,
-          imageUrl: "",
-          categoryId: "CAT-CLOTH",
-          categoryName: "Quần áo",
-          isActive: true,
-          stock: 40,
-          barcode: "8801234567007",
-          sortOrder: 7,
-          storeId,
-          lastSyncAt: new Date().toISOString(),
-        },
-        {
-          goodsId: "DUCK-008",
-          goodsName: "B.Duck Bút Chì Màu Set",
-          price: 125000,
-          imageUrl: "",
-          categoryId: "CAT-SCHOOL",
-          categoryName: "Văn phòng phẩm",
-          isActive: true,
-          stock: 80,
-          barcode: "8801234567008",
-          sortOrder: 8,
-          storeId,
-          lastSyncAt: new Date().toISOString(),
-        },
-      ];
+      const allProducts: SyncProduct[] = [];
+      const now = new Date().toISOString();
 
-      // Write products to Firestore (batch write for efficiency)
-      const batch = db.batch();
+      // ── Step 1: Fetch tickets/packages from oversea_subscribe_base_list ──
+      functions.logger.info("[syncProducts] 🔍 Calling oversea_subscribe_base_list...");
+      const subscribeResponse = await fetchSubscribeBaseList();
+      functions.logger.info(
+        "[syncProducts] 🔍 oversea_subscribe_base_list RAW RESPONSE:",
+        {
+          success: subscribeResponse.success,
+          code: subscribeResponse.code,
+          msg: subscribeResponse.msg,
+          dataType: typeof subscribeResponse.data,
+          dataKeys: subscribeResponse.data ? Object.keys(subscribeResponse.data) : [],
+          rawData: JSON.stringify(subscribeResponse.data).substring(0, 3000),
+        }
+      );
 
-      for (const product of mockProducts) {
-        const docRef = db
-          .collection("pos_products")
-          .doc(`${storeId}_${product.goodsId}`);
-        batch.set(docRef, product, { merge: true });
-      }
-
-      // Write categories (deduplicated from products)
-      const categoryMap = new Map<string, { id: string; name: string; sortOrder: number }>();
-      for (const product of mockProducts) {
-        if (product.categoryId && product.categoryName) {
-          if (!categoryMap.has(product.categoryId)) {
-            categoryMap.set(product.categoryId, {
-              id: product.categoryId,
-              name: product.categoryName,
-              sortOrder: categoryMap.size + 1,
-            });
-          }
+      // Log first item if it's an array or has a list
+      if (subscribeResponse.data) {
+        const possibleList =
+          Array.isArray(subscribeResponse.data) ? subscribeResponse.data :
+          Array.isArray((subscribeResponse.data as Record<string, unknown>).list) ? (subscribeResponse.data as Record<string, unknown>).list as unknown[] :
+          Array.isArray((subscribeResponse.data as Record<string, unknown>).data) ? (subscribeResponse.data as Record<string, unknown>).data as unknown[] :
+          Array.isArray((subscribeResponse.data as Record<string, unknown>).items) ? (subscribeResponse.data as Record<string, unknown>).items as unknown[] :
+          null;
+        if (possibleList && possibleList.length > 0) {
+          functions.logger.info(
+            "[syncProducts] 🔍 FIRST SUBSCRIBE ITEM:",
+            { item: JSON.stringify(possibleList[0]).substring(0, 1500) }
+          );
+          functions.logger.info(
+            `[syncProducts] 🔍 Total subscribe items: ${possibleList.length}`
+          );
         }
       }
 
-      for (const [categoryId, category] of categoryMap) {
-        const catRef = db
-          .collection("pos_categories")
-          .doc(`${storeId}_${categoryId}`);
-        batch.set(
-          catRef,
-          { ...category, storeId },
-          { merge: true }
+      // ── Step 2: Fetch goods by category from setmeal_getsellgoods ──
+      for (const categoryId of SYNC_CATEGORY_IDS) {
+        functions.logger.info(
+          `[syncProducts] Đang tải category ${categoryId}...`
+        );
+
+        const response = await fetchGoodsByCategory(categoryId);
+
+        // 🔍 DEBUG: Log raw API response to identify field names
+        functions.logger.info(
+          `[syncProducts] 🔍 RAW response for category ${categoryId}:`,
+          {
+            success: response.success,
+            code: response.code,
+            msg: response.msg,
+            dataType: typeof response.data,
+            dataIsArray: Array.isArray(response.data),
+            dataKeys: response.data ? Object.keys(response.data) : [],
+            rawData: JSON.stringify(response.data).substring(0, 2000),
+          }
+        );
+
+        if (!response.success) {
+          functions.logger.warn(
+            `[syncProducts] ⚠️ Category ${categoryId} trả về lỗi: ${response.msg}`
+          );
+          continue; // Skip this category, try the next one
+        }
+
+        // Extract goods list from response.data
+        // HK API may return { data: [...] } or { data: { list: [...] } }
+        const rawItems = extractGoodsList(response.data);
+
+        // 🔍 DEBUG: Log first raw item to see exact field names
+        if (rawItems.length > 0) {
+          functions.logger.info(
+            `[syncProducts] 🔍 FIRST RAW ITEM for category ${categoryId}:`,
+            { item: JSON.stringify(rawItems[0]).substring(0, 1000) }
+          );
+        }
+
+        for (const item of rawItems) {
+          const goodsId = item.GoodsId || item.goodsId;
+          if (!goodsId) continue;
+
+          allProducts.push({
+            goodsId,
+            goodsName: item.GoodsName || item.goodsName || "Không rõ tên",
+            price: item.Price || item.price || 0,
+            category: categoryId,
+            subCategory: item.SubCategory || item.subCategory
+              || item.CategoryGroupName || item.categoryGroupName || "",
+            lastSyncAt: now,
+          });
+        }
+
+        functions.logger.info(
+          `[syncProducts] Category ${categoryId}: ${rawItems.length} sản phẩm`
         );
       }
 
-      await batch.commit();
+      // Batch write to Firestore (max 500 per batch)
+      const BATCH_LIMIT = 500;
+      let totalWritten = 0;
+
+      for (let i = 0; i < allProducts.length; i += BATCH_LIMIT) {
+        const chunk = allProducts.slice(i, i + BATCH_LIMIT);
+        const batch = db.batch();
+
+        for (const product of chunk) {
+          const docRef = db.collection("products").doc(product.goodsId);
+          batch.set(docRef, product, { merge: true });
+        }
+
+        await batch.commit();
+        totalWritten += chunk.length;
+      }
 
       functions.logger.info(
-        `[syncProducts] ✅ Synced ${mockProducts.length} products and ${categoryMap.size} categories for store ${storeId}`
+        `[syncProducts] ✅ Đồng bộ thành công ${totalWritten} sản phẩm`
       );
 
       return {
         success: true,
-        productCount: mockProducts.length,
-        categoryCount: categoryMap.size,
-        syncedAt: new Date().toISOString(),
+        productCount: totalWritten,
+        syncedAt: now,
       };
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       functions.logger.error(
-        `[syncProducts] ❌ Failed to sync products: ${errorMessage}`
+        `[syncProducts] ❌ Đồng bộ thất bại: ${errorMessage}`
       );
       throw new HttpsError(
         "internal",
@@ -231,6 +184,34 @@ export const syncProducts = onCall(
   }
 );
 
+/**
+ * Extract the goods list array from the HK API response data.
+ * Handles multiple possible response shapes defensively.
+ */
+function extractGoodsList(
+  data: Record<string, unknown> | null
+): HKGoodsItem[] {
+  if (!data) return [];
+
+  // Shape 1: data is an array directly
+  if (Array.isArray(data)) return data as HKGoodsItem[];
+
+  // Shape 2: { list: [...] }
+  if (Array.isArray(data.list)) return data.list as HKGoodsItem[];
+
+  // Shape 3: { data: [...] }
+  if (Array.isArray(data.data)) return data.data as HKGoodsItem[];
+
+  // Shape 4: { items: [...] }
+  if (Array.isArray(data.items)) return data.items as HKGoodsItem[];
+
+  return [];
+}
+
+
+// =============================================================================
+// onOrderLocalPaid — Firestore Trigger
+// =============================================================================
 
 /**
  * Firestore Trigger: Fires when any document in `pos_orders` is updated.

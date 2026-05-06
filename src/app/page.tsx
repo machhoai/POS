@@ -24,8 +24,8 @@ export default function CashierPage() {
 
   // ── Product Store ──────────────────────────────────────────────────────
   const products = useProductStore(selectFilteredProducts);
-  const categories = useProductStore((s) => s.categories);
-  const selectedCategoryId = useProductStore((s) => s.selectedCategoryId);
+  const availableCategories = useProductStore((s) => s.availableCategories);
+  const selectedCategory = useProductStore((s) => s.selectedCategory);
   const searchQuery = useProductStore((s) => s.searchQuery);
   const isProductsLoading = useProductStore((s) => s.isLoading);
   const fetchProducts = useProductStore((s) => s.fetchProducts);
@@ -55,18 +55,16 @@ export default function CashierPage() {
 
   // ── Load Products on Mount ─────────────────────────────────────────────
   useEffect(() => {
-    if (effectiveStoreId) {
-      fetchProducts(effectiveStoreId);
+    if (user && userDoc) {
+      fetchProducts();
     }
-  }, [effectiveStoreId, fetchProducts]);
+  }, [user, userDoc, fetchProducts]);
 
-  // ── Product Sync (via Cloud Function — placeholder for now) ────────────
+  // ── Product Sync (via Cloud Function) ──────────────────────────────────
   const handleSyncProducts = useCallback(async () => {
-    if (!effectiveStoreId) return;
-    // For now, just re-fetch from Firestore
     // TODO: Call syncProducts Cloud Function first, then re-fetch
-    await fetchProducts(effectiveStoreId);
-  }, [effectiveStoreId, fetchProducts]);
+    await fetchProducts();
+  }, [fetchProducts]);
 
   // ── Add to Cart ────────────────────────────────────────────────────────
   const handleAddToCart = useCallback(
@@ -133,8 +131,8 @@ export default function CashierPage() {
         <div className="flex-1 min-w-0 border-r border-[var(--color-border)]">
           <ProductGrid
             products={products}
-            categories={categories}
-            selectedCategoryId={selectedCategoryId}
+            availableCategories={availableCategories}
+            selectedCategory={selectedCategory}
             searchQuery={searchQuery}
             isLoading={isProductsLoading}
             onSelectCategory={setSelectedCategory}

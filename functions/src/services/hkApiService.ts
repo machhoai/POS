@@ -237,3 +237,51 @@ export async function queryPaymentStatus(params: {
     OrderNumber: params.orderNumber,
   });
 }
+
+// =============================================================================
+// Product Catalog
+// =============================================================================
+
+/** Raw product item shape from the HK API response. */
+export interface HKGoodsItem {
+  GoodsId?: string;
+  goodsId?: string;
+  GoodsName?: string;
+  goodsName?: string;
+  Price?: number;
+  price?: number;
+  SubCategory?: string;
+  subCategory?: string;
+  CategoryGroupName?: string;
+  categoryGroupName?: string;
+}
+
+/**
+ * Fetch sell-goods by category from the HK API.
+ * Action: `setmeal_getsellgoods`
+ *
+ * @param category - The numeric category ID (1, 2, 4, 6).
+ * @returns Response with goods data for the given category.
+ */
+export async function fetchGoodsByCategory(
+  category: number
+): Promise<HKApiResponse> {
+  return sendToHKApi("setmeal_getsellgoods", { category });
+}
+
+/**
+ * Fetch ticket/package list from the HK API.
+ * Action: `oversea_subscribe_base_list`
+ *
+ * @param category - Optional category filter (4 = Vé, etc.)
+ * @returns Response with ticket/package data.
+ */
+export async function fetchSubscribeBaseList(
+  category?: number
+): Promise<HKApiResponse> {
+  const body: Record<string, unknown> = { page: 1, limit: 99999 };
+  if (category !== undefined) {
+    body.category = category;
+  }
+  return sendToHKApi("oversea_subscribe_base_list", body);
+}

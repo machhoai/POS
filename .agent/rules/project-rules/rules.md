@@ -52,3 +52,6 @@ trigger: always_on
 2. Lập kế hoạch trước khi Code (Plan Before Execution): TRƯỚC KHI viết bất kỳ dòng code nào, Agent PHẢI xuất ra một Danh sách Task (Task List) và Kế hoạch triển khai (Implementation Plan) chi tiết.
 3. Cập nhật tiến độ (Track Progress): Trong suốt quá trình code, Agent phải liên tục cập nhật trạng thái của Task List (đánh dấu [x] các task đã hoàn thành).
 4. Phân tích tư duy (Walkthrough/Thought Process): Bất cứ khi nào hoàn thành một module hoặc một file code quan trọng, Agent phải cung cấp một đoạn giải thích ngắn gọn về luồng tư duy (throughout) và lý do tại sao lại code như vậy để dev dễ dàng review.
+
+#API từ hệ thống quản lý chính
+- Mọi API sẽ được lấy từ hệ thống chính và có mô tả trong tài liệu API (tài liệu tên là OpenApi.md) nếu trong tài liệu không có API để đáp ứng yêu cầu cần báo ngay lập tức và không thực hiện thêm.
