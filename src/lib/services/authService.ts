@@ -11,7 +11,7 @@
 // It only handles Firestore reads and business logic.
 // =============================================================================
 
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { UserDoc, CustomRoleDoc } from "@/lib/types/user";
 import { ADMIN_ROLES } from "@/lib/types/user";
@@ -128,4 +128,40 @@ export function resolveEffectiveStoreId(
   }
 
   return null;
+}
+
+// =============================================================================
+// Store Info — for admin store selector
+// =============================================================================
+
+/** Minimal store info for the store selector UI. */
+export interface StoreInfo {
+  id: string;
+  name: string;
+  address?: string;
+}
+
+/**
+ * Fetch all active stores from Firestore.
+ * Used by the admin store selector when the admin doesn't have a pre-assigned storeId.
+ */
+export async function fetchAllActiveStores(): Promise<StoreInfo[]> {
+  try {
+    const storesRef = collection(db, "stores");
+    const q = query(
+      storesRef,
+      where("isActive", "==", true),
+      orderBy("name")
+    );
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      name: doc.data().name || "Không rõ",
+      address: doc.data().address,
+    }));
+  } catch (error) {
+    console.error("[Auth] Lỗi khi tải danh sách cửa hàng:", error);
+    return [];
+  }
 }

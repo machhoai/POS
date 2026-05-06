@@ -15,11 +15,12 @@ import { useProductStore, selectFilteredProducts } from "@/lib/stores/useProduct
 import TopNav from "@/components/pos/TopNav";
 import ProductGrid from "@/components/pos/ProductGrid";
 import CartPanel from "@/components/pos/CartPanel";
+import StoreSelector from "@/components/pos/StoreSelector";
 import type { Product } from "@/lib/types/product";
 
 export default function CashierPage() {
   const router = useRouter();
-  const { user, userDoc, effectiveStoreId, isLoading: authLoading, logout } = useAuth();
+  const { user, userDoc, effectiveStoreId, isLoading: authLoading, logout, needsStoreSelection, selectStore } = useAuth();
 
   // ── Product Store ──────────────────────────────────────────────────────
   const products = useProductStore(selectFilteredProducts);
@@ -101,6 +102,17 @@ export default function CashierPage() {
           <p className="text-sm text-[var(--color-text-muted)]">Đang tải...</p>
         </div>
       </div>
+    );
+  }
+
+  // ── Admin Store Selector ────────────────────────────────────────────────
+  if (needsStoreSelection) {
+    return (
+      <StoreSelector
+        adminName={userDoc.name}
+        onSelectStore={selectStore}
+        onLogout={logout}
+      />
     );
   }
 

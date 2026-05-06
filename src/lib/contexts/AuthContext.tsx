@@ -12,6 +12,7 @@
 //   Gate 1: Account must be active (isActive === true)
 //   Gate 2: Must have 'page.pos.access' permission (or be admin)
 //   Gate 3: Must have an assigned store (effectiveStoreId)
+//           → Admin WITHOUT storeId enters "store selection" mode
 // =============================================================================
 
 import {
@@ -55,6 +56,11 @@ interface AuthState {
   isLoading: boolean;
   /** Error message from login (Vietnamese) */
   loginError: string | null;
+  /**
+   * True when admin is authenticated but hasn't selected a store yet.
+   * The dashboard shows a StoreSelector in this state.
+   */
+  needsStoreSelection: boolean;
 }
 
 interface AuthContextValue extends AuthState {
@@ -67,6 +73,10 @@ interface AuthContextValue extends AuthState {
    * Admin/super_admin always returns true (bypass).
    */
   hasPermission: (key: string) => boolean;
+  /**
+   * Set the effective store ID (used by admin store selector).
+   */
+  selectStore: (storeId: string) => void;
 }
 
 // =============================================================================
@@ -87,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     effectiveStoreId: null,
     isLoading: true,
     loginError: null,
+    needsStoreSelection: false,
   });
 
   // ── Permission check with admin bypass ──────────────────────────────────
@@ -98,6 +109,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return state.permissions.has(key);
     },
     [state.userDoc, state.permissions]
+  );
+
+  // ── Admin store selector ────────────────────────────────────────────────
+  const selectStore = useCallback(
+    (storeId: string) => {
+      setState((prev) => ({
+        ...prev,
+        effectiveStoreId: storeId,
+        needsStoreSelection: false,
+      }));
+    },
+    []
   );
 
   // ── Load user profile + permissions + storeId ───────────────────────────
@@ -116,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           effectiveStoreId: null,
           isLoading: false,
           loginError: "Không tìm thấy thông tin tài khoản trong hệ thống.",
+          needsStoreSelection: false,
         }));
         return;
       }
@@ -131,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           effectiveStoreId: null,
           isLoading: false,
           loginError: "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản lý.",
+          needsStoreSelection: false,
         }));
         return;
       }
@@ -151,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isLoading: false,
           loginError:
             "Tài khoản của bạn không có quyền truy cập hệ thống POS. Vui lòng liên hệ quản trị viên.",
+          needsStoreSelection: false,
         }));
         return;
       }
@@ -160,6 +186,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Gate 3: Must have a store assigned
       if (!effectiveStoreId) {
+        if (isAdmin) {
+          // Admin without storeId → allow login, show store selector
+          setState({
+            user: firebaseUser,
+            userDoc,
+            permissions,
+            effectiveStoreId: null,
+            isLoading: false,
+            loginError: null,
+            needsStoreSelection: true,
+          });
+          return;
+        }
+
+        // Non-admin without store → reject
         await signOut(auth);
         setState((prev) => ({
           ...prev,
@@ -170,6 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isLoading: false,
           loginError:
             "Tài khoản chưa được gán cửa hàng. Vui lòng liên hệ quản lý để được phân công.",
+          needsStoreSelection: false,
         }));
         return;
       }
@@ -182,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         effectiveStoreId,
         isLoading: false,
         loginError: null,
+        needsStoreSelection: false,
       });
     } catch (error) {
       console.error("[Auth] Lỗi khi tải hồ sơ người dùng:", error);
@@ -194,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         effectiveStoreId: null,
         isLoading: false,
         loginError: "Đã có lỗi xảy ra khi xác thực. Vui lòng thử lại.",
+        needsStoreSelection: false,
       }));
     }
   }, []);
@@ -211,6 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           effectiveStoreId: null,
           isLoading: false,
           loginError: null,
+          needsStoreSelection: false,
         });
       }
     });
@@ -268,6 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     hasPermission,
+    selectStore,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
