@@ -1,0 +1,9 @@
+{
+  "identifier": "default",
+  "description": "Capability for the main POS window and customer display",
+  "windows": ["main", "customer-display"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open"
+  ]
+}

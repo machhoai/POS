@@ -1,0 +1,4 @@
+packages:
+  - "."
+  # Functions have their own package.json and are deployed independently
+  # They are NOT part of the pnpm workspace
