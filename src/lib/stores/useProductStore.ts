@@ -1,7 +1,7 @@
 // =============================================================================
 // Zustand Product Store — In-memory product catalog with Firestore sync
 // =============================================================================
-// Fetches all products from Firestore's `products` collection into RAM.
+// Fetches all products from Firestore's `jpos_products` collection into RAM.
 // Categories are derived from the `category` field using CATEGORY_MAP.
 // Provides category filtering and search functionality.
 // =============================================================================
@@ -43,7 +43,7 @@ interface ProductState {
 }
 
 /** Firestore collection name */
-const PRODUCTS_COLLECTION = "products";
+const PRODUCTS_COLLECTION = "jpos_products";
 
 /**
  * Derive unique category entries from the product list.
@@ -100,7 +100,8 @@ export const useProductStore = create<ProductState>((set) => ({
         const data = doc.data();
         return {
           goodsId: data.goodsId || doc.id,
-          goodsName: data.goodsName || "Không rõ tên",
+          goodsName: data.goodsName || data.GoodsName || "Không rõ tên",
+          description: data.description || data.remark || data.Remark || "",
           price: data.price || 0,
           category: data.category || 0,
           subCategory: data.subCategory || "",

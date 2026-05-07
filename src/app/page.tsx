@@ -7,11 +7,12 @@
 // Auth-guarded: redirects to /login if not authenticated.
 // =============================================================================
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/useCartStore";
 import { useProductStore, selectFilteredProducts } from "@/lib/stores/useProductStore";
+import { syncProducts } from "@/lib/services/productService";
 import TopNav from "@/components/pos/TopNav";
 import ProductGrid from "@/components/pos/ProductGrid";
 import CartPanel from "@/components/pos/CartPanel";
@@ -45,6 +46,7 @@ export default function CashierPage() {
   const setPaymentMethod = useCartStore((s) => s.setPaymentMethod);
   const checkout = useCartStore((s) => s.checkout);
   const clearCart = useCartStore((s) => s.clearCart);
+  const [isSyncingProducts, setIsSyncingProducts] = useState(false);
 
   // ── Auth Guard ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -62,8 +64,18 @@ export default function CashierPage() {
 
   // ── Product Sync (via Cloud Function) ──────────────────────────────────
   const handleSyncProducts = useCallback(async () => {
-    // TODO: Call syncProducts Cloud Function first, then re-fetch
-    await fetchProducts();
+    setIsSyncingProducts(true);
+
+    try {
+      const result = await syncProducts();
+      if (result.success) {
+        await fetchProducts();
+      }
+    } catch (error) {
+      console.error("[POS] Lỗi đồng bộ sản phẩm:", error);
+    } finally {
+      setIsSyncingProducts(false);
+    }
   }, [fetchProducts]);
 
   // ── Add to Cart ────────────────────────────────────────────────────────
@@ -122,7 +134,7 @@ export default function CashierPage() {
         cashierName={userDoc.name}
         onLogout={logout}
         onSyncProducts={handleSyncProducts}
-        isSyncing={isProductsLoading}
+        isSyncing={isSyncingProducts}
       />
 
       {/* Main Content: Product Grid + Cart */}

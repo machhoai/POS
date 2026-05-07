@@ -19,13 +19,15 @@ export const CATEGORY_IDS = [1, 2, 4, 6] as const;
 /**
  * A product in the POS catalog.
  * Synced from the HK API via the syncProducts Cloud Function.
- * Stored in Firestore `products/{goodsId}`.
+ * Stored in Firestore `jpos_products/{goodsId}`.
  */
 export interface Product {
   /** Unique product ID from the HK system */
   goodsId: string;
   /** Display name */
   goodsName: string;
+  /** Product description from HK API remark field */
+  description?: string;
   /** Selling price in local currency */
   price: number;
   /** Numeric category ID from HK API (1, 2, 4, 6) */

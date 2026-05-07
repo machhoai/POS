@@ -23,6 +23,7 @@ export const SYNC_CATEGORY_IDS = [1, 2, 4, 6] as const;
 export interface SyncProduct {
   goodsId: string;
   goodsName: string;
+  description?: string;
   price: number;
   /** Numeric category ID from HK API (1, 2, 4, 6) */
   category: number;

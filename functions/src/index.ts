@@ -27,7 +27,7 @@ import { SYNC_CATEGORY_IDS } from "./types/product";
 // =============================================================================
 // Iterates through category IDs (1, 2, 4, 6), calls the HK API
 // `setmeal_getsellgoods` for each, then batch-writes all products
-// to the Firestore `products` collection with docId = goodsId.
+// to the Firestore `jpos_products` collection with docId = goodsId.
 // =============================================================================
 
 export const syncProducts = onCall(
@@ -131,6 +131,7 @@ export const syncProducts = onCall(
           allProducts.push({
             goodsId,
             goodsName: item.GoodsName || item.goodsName || "Không rõ tên",
+            description: item.Remark || item.remark || "",
             price: item.Price || item.price || 0,
             category: categoryId,
             subCategory: item.SubCategory || item.subCategory
@@ -153,7 +154,7 @@ export const syncProducts = onCall(
         const batch = db.batch();
 
         for (const product of chunk) {
-          const docRef = db.collection("products").doc(product.goodsId);
+          const docRef = db.collection("jpos_products").doc(product.goodsId);
           batch.set(docRef, product, { merge: true });
         }
 
@@ -202,7 +203,10 @@ function extractGoodsList(
   // Shape 3: { data: [...] }
   if (Array.isArray(data.data)) return data.data as HKGoodsItem[];
 
-  // Shape 4: { items: [...] }
+  // Shape 4: { goodsItems: [...] }
+  if (Array.isArray(data.goodsItems)) return data.goodsItems as HKGoodsItem[];
+
+  // Shape 5: { items: [...] }
   if (Array.isArray(data.items)) return data.items as HKGoodsItem[];
 
   return [];
@@ -220,7 +224,7 @@ function extractGoodsList(
  * the background sync process with the HK remote API.
  */
 export const onOrderLocalPaid = onDocumentUpdated(
-  "pos_orders/{orderId}",
+  { document: "pos_orders/{orderId}", region: "asia-southeast1" },
   async (
     event: FirestoreEvent<
       Change<functions.firestore.QueryDocumentSnapshot> | undefined,
