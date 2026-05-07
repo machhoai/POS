@@ -31,7 +31,7 @@ import { SYNC_CATEGORY_IDS } from "./types/product";
 // =============================================================================
 
 export const syncProducts = onCall(
-  { region: "asia-southeast1" },
+  { region: "asia-southeast1", cors: true },
   async (request) => {
     // Require authentication
     if (!request.auth) {

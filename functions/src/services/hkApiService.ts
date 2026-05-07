@@ -268,7 +268,7 @@ export interface HKGoodsItem {
 export async function fetchGoodsByCategory(
   category: number
 ): Promise<HKApiResponse> {
-  return sendToHKApi("setmeal_getsellgoods", { category });
+  return sendToHKApi("setmeal_getsellgoods", { Category: String(category) });
 }
 
 /**

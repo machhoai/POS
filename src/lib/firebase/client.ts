@@ -64,12 +64,13 @@ if (typeof window !== "undefined") {
     });
 }
 
-const isLocalDevelopmentHost =
-    typeof window !== "undefined" &&
-    ["localhost", "127.0.0.1"].includes(window.location.hostname);
-
-if (isLocalDevelopmentHost) {
-    connectFunctionsEmulator(functions, "127.0.0.1", 4400);
-}
+// ── Emulator Connection (bật khi cần dev local) ────────────────────────
+// const isLocalDevelopmentHost =
+//     typeof window !== "undefined" &&
+//     ["localhost", "127.0.0.1"].includes(window.location.hostname);
+//
+// if (isLocalDevelopmentHost) {
+//     connectFunctionsEmulator(functions, "localhost", 5001);
+// }
 
 export { app, db, auth, functions };
