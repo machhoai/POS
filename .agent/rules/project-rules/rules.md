@@ -39,9 +39,42 @@ trigger: always_on
 3. Bản địa hóa (Localization): Giao diện, log thông báo, placeholder bắt buộc dùng Tiếng Việt. Không dùng tiếng Anh cho UI.
 4. Format: Số tiền phải được định dạng theo chuẩn Việt Nam (ví dụ: 150,000 đ).
 
-# QUY TẮC XỬ LÝ LỖI (ERROR HANDLING)
-- Các thao tác gọi Database hoặc Cloud Functions BẮT BUỘC phải bọc trong khối `try...catch`.
-- Bắt được lỗi phải in ra `console.error` (để dev theo dõi) và trả về một thông báo lỗi Tiếng Việt thân thiện cho người dùng trên UI (ví dụ: "Đã có lỗi xảy ra khi tạo đơn hàng").
+# QUY TẮC TƯƠNG TÁC, XỬ LÝ LỖI & THÔNG BÁO (INTERACTION, ERROR HANDLING & NOTIFICATION)
+1. Phản hồi trực quan bắt buộc (Mandatory Visual Feedback):
+   - MỌI thao tác thay đổi dữ liệu (Thêm món, Thanh toán, Lưu thiết lập...) BẮT BUỘC phải đi kèm hiệu ứng thay đổi trạng thái (ví dụ: `disabled` nút bấm, hiển thị `loading spinner` trong lúc chờ) để thu ngân biết hệ thống đang xử lý.
+   - Luôn có hiệu ứng kết thúc (transition/animation) rõ ràng khi hoàn thành một tiến trình.
+2. Hệ thống Toast thông báo (Gooey Toast):
+   - BẮT BUỘC sử dụng thư viện `goey-toast` để thông báo kết quả cuối cùng cho người dùng (Thành công, Thất bại, hoặc Cảnh báo).
+   - Đảm bảo Root Layout hoặc Provider đã bọc `<GooeyToaster position="top-right" />`.
+   - **Cú pháp chuẩn cho thao tác cơ bản:**
+     ```typescript
+     gooeyToast.success('Đã lưu thay đổi', {
+       description: 'Các thay đổi của bạn đã được lưu và đồng bộ thành công.',
+       preset: 'snappy',
+       timing: { displayDuration: 6000 },
+     })
+     ```
+   - **Cú pháp chuẩn cho thao tác bất đồng bộ (API/Database):** Ưu tiên sử dụng `gooeyToast.promise` để gom chung trạng thái loading và kết quả. BẮT BUỘC cung cấp đầy đủ Title, Description (cho cả success/error) và action Retry nếu lỗi:
+     ```typescript
+     gooeyToast.promise(saveDataAction(), {
+       loading: 'Đang xử lý...',
+       success: 'Thành công',
+       error: 'Đã xảy ra lỗi',
+       description: {
+         success: 'Thao tác của bạn đã được hoàn tất.',
+         error: 'Vui lòng thử lại hoặc kiểm tra kết nối mạng.',
+       },
+       action: {
+         error: {
+           label: 'Thử lại',
+           onClick: () => retryAction(),
+         },
+       },
+     })
+     ```
+3. Xử lý lỗi (Error Handling):
+   - Các thao tác gọi Database, Cloud Functions hoặc API BẮT BUỘC phải bọc trong khối `try...catch`.
+   - Bắt được lỗi phải in ra `console.error` (để dev theo dõi) và gọi `gooeyToast.error(...)` (hoặc thông qua `.promise()`) để hiển thị một thông báo lỗi Tiếng Việt thân thiện cho người dùng trên UI (ví dụ: "Đã có lỗi xảy ra khi tạo đơn hàng").
 
 # QUY TẮC MONOREPO & TAURI
 - Tuyệt đối tuân thủ ranh giới Monorepo (Không import chéo giữa `src/` và `functions/`).
@@ -53,5 +86,5 @@ trigger: always_on
 3. Cập nhật tiến độ (Track Progress): Trong suốt quá trình code, Agent phải liên tục cập nhật trạng thái của Task List (đánh dấu [x] các task đã hoàn thành).
 4. Phân tích tư duy (Walkthrough/Thought Process): Bất cứ khi nào hoàn thành một module hoặc một file code quan trọng, Agent phải cung cấp một đoạn giải thích ngắn gọn về luồng tư duy (throughout) và lý do tại sao lại code như vậy để dev dễ dàng review.
 
-#API từ hệ thống quản lý chính
-- Mọi API sẽ được lấy từ hệ thống chính và có mô tả trong tài liệu API (tài liệu tên là OpenApi.md) nếu trong tài liệu không có API để đáp ứng yêu cầu cần báo ngay lập tức và không thực hiện thêm.
+# API TỪ HỆ THỐNG QUẢN LÝ CHÍNH
+- Mọi API sẽ được lấy từ hệ thống chính và có mô tả trong tài liệu API (tài liệu tên là OpenApi.md). Nếu trong tài liệu không có API để đáp ứng yêu cầu, cần báo ngay lập tức và không thực hiện thêm.
