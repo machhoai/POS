@@ -1,30 +1,28 @@
 // =============================================================================
-// Zustand Product Store — In-memory product catalog with Firestore sync
+// Zustand Product Store — In-memory product catalog
 // =============================================================================
-// Fetches all products from Firestore's `jpos_products` collection into RAM.
-// Categories are derived from the `category` field using CATEGORY_MAP.
-// Provides category filtering and search functionality.
+// Hiện tại dùng mock data vì chưa kết nối HK API.
+// Khi API sẵn sàng, chỉ cần thay MOCK_PRODUCTS bằng Firestore fetch.
 // =============================================================================
 
 import { create } from "zustand";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
 import type { Product } from "@/lib/types/product";
 import { CATEGORY_MAP } from "@/lib/types/product";
+import { MOCK_PRODUCTS } from "@/lib/data/mockProducts";
 
-/** A category entry derived from product data. */
+/** Một entry danh mục đã derive từ danh sách sản phẩm. */
 export interface CategoryEntry {
   id: number;
   label: string;
 }
 
-/** Shape of the product store state. */
+/** Shape của product store. */
 interface ProductState {
   // ── State ──────────────────────────────────────────────────────────────────
   products: Product[];
-  /** Categories that have at least one product (computed on fetch) */
+  /** Danh mục có ít nhất 1 sản phẩm */
   availableCategories: CategoryEntry[];
-  /** Currently selected category filter (null = show all) */
+  /** Lọc theo danh mục (null = tất cả) */
   selectedCategory: number | null;
   searchQuery: string;
   isLoading: boolean;
@@ -32,22 +30,19 @@ interface ProductState {
   error: string | null;
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  /** Fetch all products from Firestore */
+  /** Tải sản phẩm (hiện dùng mock data) */
   fetchProducts: () => Promise<void>;
-  /** Set the active category filter */
+  /** Chọn danh mục lọc */
   setSelectedCategory: (category: number | null) => void;
-  /** Set the search query */
+  /** Tìm kiếm */
   setSearchQuery: (query: string) => void;
-  /** Clear all filters */
+  /** Xóa bộ lọc */
   clearFilters: () => void;
 }
 
-/** Firestore collection name */
-const PRODUCTS_COLLECTION = "jpos_products";
-
 /**
- * Derive unique category entries from the product list.
- * Returns a stable array that only changes when products change.
+ * Derive danh mục có sản phẩm từ danh sách.
+ * Giữ thứ tự ổn định theo CATEGORY_MAP.
  */
 function deriveCategories(products: Product[]): CategoryEntry[] {
   const seen = new Set<number>();
@@ -67,8 +62,7 @@ function deriveCategories(products: Product[]): CategoryEntry[] {
 }
 
 /**
- * Product store — fetches all products into RAM for zero-latency filtering.
- * Categories are derived from product data, not stored separately.
+ * Product store — tải tất cả sản phẩm vào RAM để filter không độ trễ.
  */
 export const useProductStore = create<ProductState>((set) => ({
   // ── Initial State ──────────────────────────────────────────────────────────
@@ -86,36 +80,25 @@ export const useProductStore = create<ProductState>((set) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
+      // TODO: Thay bằng Firestore fetch khi HK API sẵn sàng
+      // const snapshot = await getDocs(collection(db, "jpos_products"));
+      // Hiện tại dùng mock data
+      const products = MOCK_PRODUCTS;
 
-      // 🔍 DEBUG: Log raw Firestore data
-      console.log(`[Product Store] 🔍 Loaded ${snapshot.docs.length} docs from Firestore`);
-      if (snapshot.docs.length > 0) {
-        const firstDoc = snapshot.docs[0];
-        console.log("[Product Store] 🔍 FIRST DOC id:", firstDoc.id);
-        console.log("[Product Store] 🔍 FIRST DOC data:", JSON.stringify(firstDoc.data()));
-      }
+      const categories = deriveCategories(products);
 
-      const products: Product[] = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          goodsId: data.goodsId || doc.id,
-          goodsName: data.goodsName || data.GoodsName || "Không rõ tên",
-          description: data.description || data.remark || data.Remark || "",
-          price: data.price || 0,
-          category: data.category || 0,
-          subCategory: data.subCategory || "",
-          lastSyncAt: data.lastSyncAt,
-        };
-      });
-
-      set({
+      set((state) => ({
         products,
-        availableCategories: deriveCategories(products),
+        availableCategories: categories,
+        // Tự động chọn tab đầu tiên nếu chưa chọn
+        selectedCategory:
+          state.selectedCategory !== null
+            ? state.selectedCategory
+            : categories[0]?.id ?? null,
         isLoading: false,
         lastSyncAt: new Date().toISOString(),
         error: null,
-      });
+      }));
     } catch (error) {
       console.error("[Product Store] Lỗi khi tải sản phẩm:", error);
       set({
@@ -138,24 +121,25 @@ export const useProductStore = create<ProductState>((set) => ({
 // =============================================================================
 
 /**
- * Select filtered products based on category and search query.
- * Performs in-memory filtering for zero latency.
+ * Select sản phẩm đã lọc theo danh mục và tìm kiếm.
  */
 export const selectFilteredProducts = (state: ProductState): Product[] => {
   let filtered = state.products;
 
-  // Filter by category
+  // Lọc theo danh mục
   if (state.selectedCategory !== null) {
     filtered = filtered.filter(
       (p) => p.category === state.selectedCategory
     );
   }
 
-  // Filter by search query (name only)
+  // Lọc theo tìm kiếm (tên + typeName)
   if (state.searchQuery.trim()) {
     const q = state.searchQuery.toLowerCase().trim();
-    filtered = filtered.filter((p) =>
-      p.goodsName.toLowerCase().includes(q)
+    filtered = filtered.filter(
+      (p) =>
+        p.goodsName.toLowerCase().includes(q) ||
+        p.typeName.toLowerCase().includes(q)
     );
   }
 

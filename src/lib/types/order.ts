@@ -57,6 +57,18 @@ export interface PosOrder {
   /** Line items in the order */
   items: OrderItem[];
 
+  /** Tên khách hàng (nếu là thành viên) */
+  customerName?: string;
+
+  /** SĐT khách hàng (nếu là thành viên) */
+  customerPhone?: string;
+
+  /** Mã voucher đã áp dụng */
+  voucherCode?: string;
+
+  /** Số tiền giảm từ voucher */
+  voucherDiscount?: number;
+
   /** Sync metadata for the background worker */
   sync: SyncMetadata;
 

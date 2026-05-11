@@ -7,13 +7,15 @@
 // Auth-guarded: redirects to /login if not authenticated.
 // =============================================================================
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/useCartStore";
-import { useProductStore, selectFilteredProducts } from "@/lib/stores/useProductStore";
-import { syncProducts } from "@/lib/services/productService";
+import { useProductStore } from "@/lib/stores/useProductStore";
+// TODO: Bật lại khi HK API sẵn sàng
+// import { syncProducts } from "@/lib/services/productService";
 import TopNav from "@/components/pos/TopNav";
+import Sidebar from "@/components/layout/Sidebar";
 import ProductGrid from "@/components/pos/ProductGrid";
 import CartPanel from "@/components/pos/CartPanel";
 import StoreSelector from "@/components/pos/StoreSelector";
@@ -24,10 +26,27 @@ export default function CashierPage() {
   const { user, userDoc, effectiveStoreId, isLoading: authLoading, logout, needsStoreSelection, selectStore } = useAuth();
 
   // ── Product Store ──────────────────────────────────────────────────────
-  const products = useProductStore(selectFilteredProducts);
+  const allProducts = useProductStore((s) => s.products);
   const availableCategories = useProductStore((s) => s.availableCategories);
   const selectedCategory = useProductStore((s) => s.selectedCategory);
   const searchQuery = useProductStore((s) => s.searchQuery);
+
+  // Derive filtered products — useMemo tránh tạo array mới mỗi render
+  const products = useMemo(() => {
+    let filtered = allProducts;
+    if (selectedCategory !== null) {
+      filtered = filtered.filter((p) => p.category === selectedCategory);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(
+        (p) =>
+          p.goodsName.toLowerCase().includes(q) ||
+          p.typeName.toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [allProducts, selectedCategory, searchQuery]);
   const isProductsLoading = useProductStore((s) => s.isLoading);
   const fetchProducts = useProductStore((s) => s.fetchProducts);
   const setSelectedCategory = useProductStore((s) => s.setSelectedCategory);
@@ -62,15 +81,12 @@ export default function CashierPage() {
     }
   }, [user, userDoc, fetchProducts]);
 
-  // ── Product Sync (via Cloud Function) ──────────────────────────────────
+  // ── Product Sync (hiện tại refetch mock data) ─────────────────────────
   const handleSyncProducts = useCallback(async () => {
     setIsSyncingProducts(true);
-
     try {
-      const result = await syncProducts();
-      if (result.success) {
-        await fetchProducts();
-      }
+      // TODO: Thay bằng syncProducts() khi HK API sẵn sàng
+      await fetchProducts();
     } catch (error) {
       console.error("[POS] Lỗi đồng bộ sản phẩm:", error);
     } finally {
@@ -81,10 +97,14 @@ export default function CashierPage() {
   // ── Add to Cart ────────────────────────────────────────────────────────
   const handleAddToCart = useCallback(
     (product: Product) => {
+      // Dùng afterTaxPrice (giá sau thuế) cho giỏ hàng
+      const displayPrice = product.afterTaxPrice > 0
+        ? product.afterTaxPrice
+        : product.price;
       addItem({
         goodsId: product.goodsId,
         goodsName: product.goodsName,
-        price: product.price,
+        price: displayPrice,
         quantity: 1,
       });
     },
@@ -127,18 +147,21 @@ export default function CashierPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {/* Top Navigation Bar */}
-      <TopNav
-        storeName={effectiveStoreId || "Cửa hàng"}
-        cashierName={userDoc.name}
-        onLogout={logout}
-        onSyncProducts={handleSyncProducts}
-        isSyncing={isSyncingProducts}
-      />
+    <div className="h-screen flex overflow-hidden">
+      <Sidebar />
 
-      {/* Main Content: Product Grid + Cart */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Navigation Bar */}
+        <TopNav
+          storeName={effectiveStoreId || "Cửa hàng"}
+          cashierName={userDoc.name}
+          onLogout={logout}
+          onSyncProducts={handleSyncProducts}
+          isSyncing={isSyncingProducts}
+        />
+
+        {/* Main Content: Product Grid + Cart */}
+        <div className="flex-1 flex overflow-hidden">
         {/* Left: Product Grid (takes remaining space) */}
         <div className="flex-1 min-w-0 border-r border-[var(--color-border)]">
           <ProductGrid
@@ -169,6 +192,7 @@ export default function CashierPage() {
             onClearCart={clearCart}
           />
         </div>
+      </div>
       </div>
     </div>
   );

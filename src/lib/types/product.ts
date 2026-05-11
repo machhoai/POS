@@ -3,37 +3,72 @@
 // =============================================================================
 
 /**
- * Category mapping from HK API numeric IDs to Vietnamese labels.
- * Shared constant used in UI tabs and product cards.
+ * Nhóm sản phẩm trong hệ thống POS.
+ * Mapping từ numeric ID của HK API sang nhãn tiếng Việt.
  */
 export const CATEGORY_MAP: Record<number, string> = {
-  1: "Gói Xu",
-  2: "Gói Điểm",
-  4: "Vé & Combo",
-  6: "Nạp Thẻ",
+  1: "Gói thành viên",
+  4: "Vé lượt",
+  10: "Sản phẩm lưu niệm",
 };
 
-/** All category IDs in display order. */
-export const CATEGORY_IDS = [1, 2, 4, 6] as const;
+/** Thứ tự hiển thị các nhóm sản phẩm. */
+export const CATEGORY_IDS = [4, 1, 10] as const;
 
 /**
- * A product in the POS catalog.
- * Synced from the HK API via the syncProducts Cloud Function.
- * Stored in Firestore `jpos_products/{goodsId}`.
+ * Nhóm phụ (typeName) bên trong mỗi category.
+ * Dùng để hiển thị sub-tab hoặc badge.
+ */
+export interface ProductType {
+  typeId: string;
+  typeName: string;
+}
+
+/**
+ * Sản phẩm POS — cấu trúc chung cho cả 3 nhóm.
+ * Dữ liệu gốc từ HK API, hiện dùng mock data.
  */
 export interface Product {
-  /** Unique product ID from the HK system */
+  /** ID sản phẩm (setMealId hoặc passticketId hoặc giftId) */
   goodsId: string;
-  /** Display name */
+  /** Tên hiển thị */
   goodsName: string;
-  /** Product description from HK API remark field */
+  /** Mô tả / ghi chú */
   description?: string;
-  /** Selling price in local currency */
+  /** Giá bán chưa thuế (VND) */
   price: number;
-  /** Numeric category ID from HK API (1, 2, 4, 6) */
+  /** Giá sau thuế (VND) — dùng cho hiển thị lên UI */
+  afterTaxPrice: number;
+  /** Giá gạch ngang (giá gốc trước giảm giá) */
+  underlinePrice: number;
+  /** Category chính: 1 = Gói thành viên, 4 = Vé lượt, 10 = Sản phẩm lưu niệm */
   category: number;
-  /** Sub-category name from HK API (if available) */
+  /** Sub-category name */
   subCategory: string;
-  /** ISO 8601 timestamp of last sync */
+  /** Type ID (nhóm phụ) */
+  typeId: string;
+  /** Type name (tên nhóm phụ) */
+  typeName: string;
+  /** Màu chữ (hex) từ HK API — dùng cho card */
+  foreColor: string;
+  /** Màu nền (hex) từ HK API — dùng cho card */
+  backColor: string;
+  /** Thuế suất (%) */
+  taxRate: number;
+  /** Đang mở bán */
+  isOpenSales: boolean;
+  /** Đang kích hoạt */
+  isEnabled: boolean;
+  /** Số lượng tồn kho (nếu áp dụng) */
+  amount: number;
+  /** Badge hiển thị (nếu có) */
+  badge?: string;
+  /** Mô tả giảm giá (nếu có) */
+  discountDesc?: string;
+  /** Mã vạch (cho sản phẩm lưu niệm) */
+  barCode?: string;
+  /** Mã sản phẩm (cho sản phẩm lưu niệm) */
+  giftNo?: string;
+  /** ISO 8601 timestamp đồng bộ lần cuối */
   lastSyncAt?: string;
 }
