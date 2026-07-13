@@ -27,7 +27,6 @@ import type {
   PosOrder,
   OrderStatus,
   CreateOrderInput,
-  SyncMetadata,
 } from "@/lib/types/order";
 
 /** Firestore collection name for POS orders. */

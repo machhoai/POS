@@ -3,7 +3,7 @@
 // =============================================================================
 // Main POS Dashboard — Cashier interface
 // =============================================================================
-// Layout: TopNav | ProductGrid (left) | CartPanel (right)
+// Layout: Sidebar (left) | Product workspace (center) | Cart (right)
 // Auth-guarded: redirects to /login if not authenticated.
 // =============================================================================
 
@@ -147,52 +147,47 @@ export default function CashierPage() {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      <Sidebar />
+    <div className="h-screen flex overflow-hidden bg-[var(--color-background)]">
+      <Sidebar onLogout={logout} />
 
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Navigation Bar */}
+      {/* Center: welcome, search, categories and products */}
+      <main className="flex-1 flex flex-col min-w-0">
         <TopNav
           storeName={effectiveStoreId || "Cửa hàng"}
           cashierName={userDoc.name}
-          onLogout={logout}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
           onSyncProducts={handleSyncProducts}
           isSyncing={isSyncingProducts}
         />
 
-        {/* Main Content: Product Grid + Cart */}
-        <div className="flex-1 flex overflow-hidden">
-        {/* Left: Product Grid (takes remaining space) */}
-        <div className="flex-1 min-w-0 border-r border-[var(--color-border)]">
+        <div className="flex-1 min-h-0">
           <ProductGrid
             products={products}
             availableCategories={availableCategories}
             selectedCategory={selectedCategory}
-            searchQuery={searchQuery}
             isLoading={isProductsLoading}
             onSelectCategory={setSelectedCategory}
-            onSearchChange={setSearchQuery}
             onAddToCart={handleAddToCart}
           />
         </div>
+      </main>
 
-        {/* Right: Cart Panel (fixed width) */}
-        <div className="w-80 xl:w-96 shrink-0">
-          <CartPanel
-            items={cartItems}
-            paymentMethod={paymentMethod}
-            isCheckingOut={isCheckingOut}
-            currentOrderId={currentOrderId}
-            totalAmount={totalAmount}
-            itemCount={itemCount}
-            onUpdateQuantity={updateQuantity}
-            onRemoveItem={removeItem}
-            onSetPaymentMethod={setPaymentMethod}
-            onCheckout={handleCheckout}
-            onClearCart={clearCart}
-          />
-        </div>
-      </div>
+      {/* Right: fixed order panel */}
+      <div className="w-[350px] xl:w-[380px] shrink-0">
+        <CartPanel
+          items={cartItems}
+          paymentMethod={paymentMethod}
+          isCheckingOut={isCheckingOut}
+          currentOrderId={currentOrderId}
+          totalAmount={totalAmount}
+          itemCount={itemCount}
+          onUpdateQuantity={updateQuantity}
+          onRemoveItem={removeItem}
+          onSetPaymentMethod={setPaymentMethod}
+          onCheckout={handleCheckout}
+          onClearCart={clearCart}
+        />
       </div>
     </div>
   );

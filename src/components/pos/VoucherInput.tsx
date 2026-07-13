@@ -48,10 +48,10 @@ export default function VoucherInput({
     // Đã áp dụng voucher → hiển thị badge
     if (appliedVoucher) {
         return (
-            <div className="flex items-center gap-2 p-3 bg-amber-900/20 border border-amber-700/30 rounded-xl">
+            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
                     <svg
-                        className="w-4 h-4 text-amber-400"
+                        className="w-4 h-4 text-amber-600"
                         fill="none"
                         viewBox="0 0 24 24"
                         strokeWidth={2}
@@ -65,16 +65,16 @@ export default function VoucherInput({
                     </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-amber-300 truncate">
+                    <p className="text-xs font-semibold text-amber-800 truncate">
                         {appliedVoucher.code}
                     </p>
-                    <p className="text-[11px] text-amber-400/70 truncate">
+                    <p className="text-[11px] text-amber-700/70 truncate">
                         {appliedVoucher.description}
                     </p>
                 </div>
                 <button
                     onClick={onRemoveVoucher}
-                    className="w-9 h-9 flex items-center justify-center text-amber-400/60 hover:text-red-400 active:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                    className="w-9 h-9 flex items-center justify-center text-amber-600/60 hover:text-red-500 active:bg-red-50 rounded-lg transition-colors shrink-0"
                     aria-label="Xóa voucher"
                 >
                     <svg
@@ -178,7 +178,7 @@ export default function VoucherInput({
                 <button
                     onClick={handleApply}
                     disabled={!code.trim() || isValidating}
-                    className="flex-1 py-2.5 text-xs font-semibold text-amber-900 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-xl transition-colors min-h-[40px] flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2.5 text-xs font-semibold text-white bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] active:bg-[var(--color-accent-muted)] disabled:bg-gray-200 disabled:text-gray-400 rounded-xl transition-colors min-h-[40px] flex items-center justify-center gap-1.5"
                 >
                     {isValidating ? (
                         <>

@@ -17,7 +17,7 @@ import { formatCurrency } from "@/lib/utils/formatCurrency";
 
 export default function OrderHistoryPage() {
     const router = useRouter();
-    const { user, userDoc, isLoading: authLoading } = useAuth();
+    const { user, userDoc, isLoading: authLoading, logout } = useAuth();
     const [filters, setFilters] = useState<OrderFilterState>(DEFAULT_FILTERS);
     const [selectedOrder, setSelectedOrder] = useState<PosOrder | null>(null);
 
@@ -109,7 +109,7 @@ export default function OrderHistoryPage() {
 
     return (
         <div className="flex h-screen bg-[var(--color-background)]">
-            <Sidebar />
+            <Sidebar onLogout={logout} />
 
             <main className="flex-1 flex flex-col min-w-0">
                 {/* Header */}

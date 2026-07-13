@@ -1,22 +1,38 @@
 // =============================================================================
 // Local Test Script — Try multiple auth methods to find working HK API endpoint
 // =============================================================================
-// Usage: npx tsx scripts/test-fetch-products.ts
+// Usage: configure HK_API_APP_ID, HK_API_KEY, HK_API_BASE_URL,
+// HK_DEVICE_KEY, HK_DEVICE_SID and HK_API_CHAIN_URL in .env.local, then run:
+// npx tsx scripts/test-fetch-products.ts
 // =============================================================================
 
 import * as crypto from "crypto";
+import { loadEnvFile } from "node:process";
 
-// ── OpenAPI Credentials (from functions/.env.local) ──────────────────────────
-const OPENAPI_APP_ID = "8c9f2200a1834c6fb306682281e293e3";
-const OPENAPI_KEY = "9DAE66C101D801C51B1C8C5137B1F742";
-const VERSION = "11.7.1";
+// ── Credentials — loaded locally and never committed ────────────────────────
+loadEnvFile(".env.local");
+
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Thiếu biến môi trường bắt buộc: ${name}`);
+  }
+  return value;
+}
+
+const OPENAPI_APP_ID = requireEnv("HK_API_APP_ID");
+const OPENAPI_KEY = requireEnv("HK_API_KEY");
+const VERSION = process.env.HK_API_VERSION?.trim() || "11.7.1";
 
 // ── Device Credentials (from partner system) ─────────────────────────────────
-const DEVICE_KEY = "6qwZ/oUdEYVy8q2h2Qdpwhdb0E6PG9C2dv7jinDZR0B/bf+9O3be1w==";
-const DEVICE_SID = 20692;
-const DEVICE_ICKEY = "uPREBNWpE36yQg+GmQRhsH9t/707dt7X";
-const BASE_DOMAIN = "http://joyworld.jingjianx.vip";
-const CHAIN_URL = "http://jt.jingjianx.vip";
+const DEVICE_KEY = requireEnv("HK_DEVICE_KEY");
+const DEVICE_SID = Number(requireEnv("HK_DEVICE_SID"));
+const BASE_DOMAIN = requireEnv("HK_API_BASE_URL").replace(/\/+$/, "");
+const CHAIN_URL = requireEnv("HK_API_CHAIN_URL").replace(/\/+$/, "");
+
+if (!Number.isFinite(DEVICE_SID)) {
+  throw new Error("HK_DEVICE_SID phải là một số hợp lệ.");
+}
 
 // ── Signature for OpenAPI ────────────────────────────────────────────────────
 function signOpenApi(action: string, bodyObj: Record<string, unknown>) {

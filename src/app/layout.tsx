@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
+
+const inter = Inter({
+  subsets: ["latin", "vietnamese"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Hệ Thống POS",
@@ -13,15 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi">
-      <head>
-        {/* Inter font for modern typography */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="font-sans antialiased">
+    <html lang="vi" data-scroll-behavior="smooth">
+      <body className={`${inter.className} antialiased`}>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

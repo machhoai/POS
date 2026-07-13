@@ -11,11 +11,7 @@
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getFirestore, type Firestore } from "firebase/firestore";
-import {
-    connectFunctionsEmulator,
-    getFunctions,
-    type Functions,
-} from "firebase/functions";
+import { getFunctions, type Functions } from "firebase/functions";
 import {
     getAuth,
     setPersistence,
