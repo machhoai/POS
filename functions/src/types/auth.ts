@@ -33,8 +33,16 @@ export interface RoleRecord {
 
 export type PermissionMap = Record<string, Record<string, unknown>>;
 
+export interface WarehouseInfo {
+  id: string;
+  name: string;
+  code: string;
+  address: string | null;
+}
+
 export interface PosAuthSessionData {
   user: SharedUserRecord;
   permissions: PermissionMap;
   roles: UserWarehouseRoleRecord[];
+  warehouses: WarehouseInfo[];
 }

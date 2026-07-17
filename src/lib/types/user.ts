@@ -42,4 +42,5 @@ export interface AuthSessionData {
   user: UserDoc;
   permissions: PermissionMap;
   roles: UserWarehouseRole[];
+  warehouses: WarehouseInfo[];
 }

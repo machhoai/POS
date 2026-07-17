@@ -19,7 +19,6 @@ import { auth } from "@/lib/firebase/client";
 import {
   AuthServiceError,
   createPosAuthSession,
-  fetchAccessibleWarehouses,
   resolveLoginEmail,
 } from "@/lib/services/authService";
 import type {
@@ -152,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      const warehouses = await fetchAccessibleWarehouses(activeAssignments);
+      const warehouses = session.warehouses;
       if (warehouses.length === 0) {
         throw new AuthServiceError(
           "Tài khoản chưa được gán điểm làm việc đang hoạt động.",

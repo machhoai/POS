@@ -11,6 +11,7 @@ import type {
   SharedUserRecord,
   UserStatus,
   UserWarehouseRoleRecord,
+  WarehouseInfo,
 } from "../types/auth";
 import {
   activeRoleAssignments,
@@ -121,6 +122,56 @@ function mapRole(snapshot: DocumentSnapshot): RoleRecord | null {
   };
 }
 
+function mapWarehouse(snapshot: DocumentSnapshot): WarehouseInfo {
+  const data = snapshot.data() || {};
+
+  return {
+    id: snapshot.id,
+    name: typeof data.name === "string" ? data.name : snapshot.id,
+    code: typeof data.code === "string" ? data.code : "",
+    address: typeof data.address === "string" ? data.address : null,
+  };
+}
+
+async function getAccessibleWarehouses(
+  assignments: UserWarehouseRoleRecord[],
+): Promise<WarehouseInfo[]> {
+  const canAccessAll = assignments.some(
+    (assignment) => assignment.warehouse_id === null,
+  );
+  const allowedWarehouseIds = new Set(
+    assignments
+      .map((assignment) => assignment.warehouse_id)
+      .filter((warehouseId): warehouseId is string => Boolean(warehouseId)),
+  );
+  if (!canAccessAll && allowedWarehouseIds.size === 0) return [];
+
+  const warehousesCollection = db.collection(
+    SHARED_AUTH_COLLECTIONS.warehouses,
+  );
+  const warehouseSnapshots: DocumentSnapshot[] = canAccessAll
+    ? (await warehousesCollection.where("status", "==", "ACTIVE").get()).docs
+    : await Promise.all(
+        Array.from(allowedWarehouseIds).map((warehouseId) =>
+          warehousesCollection.doc(warehouseId).get(),
+        ),
+      );
+
+  return warehouseSnapshots
+    .filter((snapshot) => {
+      const data = snapshot.data();
+      return (
+        snapshot.exists &&
+        data !== undefined &&
+        data.is_deleted !== true &&
+        data.status === "ACTIVE" &&
+        (canAccessAll || allowedWarehouseIds.has(snapshot.id))
+      );
+    })
+    .map(mapWarehouse)
+    .sort((left, right) => left.name.localeCompare(right.name, "vi"));
+}
+
 async function getUserById(userId: string): Promise<SharedUserRecord | null> {
   const snapshot = await db
     .collection(SHARED_AUTH_COLLECTIONS.users)
@@ -199,11 +250,14 @@ export async function getPosAuthSession(
   const roleIds = Array.from(
     new Set(assignments.map((assignment) => assignment.role_id).filter(Boolean)),
   );
-  const roleSnapshots = await Promise.all(
-    roleIds.map((roleId) =>
-      db.collection(SHARED_AUTH_COLLECTIONS.roles).doc(roleId).get(),
+  const [roleSnapshots, warehouses] = await Promise.all([
+    Promise.all(
+      roleIds.map((roleId) =>
+        db.collection(SHARED_AUTH_COLLECTIONS.roles).doc(roleId).get(),
+      ),
     ),
-  );
+    getAccessibleWarehouses(assignments),
+  ]);
   const rolesById = new Map(
     roleSnapshots
       .map(mapRole)
@@ -215,5 +269,6 @@ export async function getPosAuthSession(
     user,
     roles: assignments,
     permissions: buildScopedPermissions(assignments, rolesById),
+    warehouses,
   };
 }

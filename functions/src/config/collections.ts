@@ -7,4 +7,5 @@ export const SHARED_AUTH_COLLECTIONS = {
   employeeProfiles: "employee_profiles",
   roles: "roles",
   userWarehouseRoles: "user_warehouse_roles",
+  warehouses: "warehouses",
 } as const;
