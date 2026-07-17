@@ -1,167 +1,147 @@
-// =============================================================================
-// Auth Service — Firestore-backed user authentication & permission resolution
-// =============================================================================
-// Handles:
-//   1. Phone-to-email conversion (matches ERP's phoneToEmail trick)
-//   2. Fetching UserDoc from Firestore
-//   3. Resolving permissions from CustomRoleDoc
-//   4. Determining the effective store for the POS session
-//
-// This service does NOT call Firebase Auth directly (that's in AuthContext).
-// It only handles Firestore reads and business logic.
-// =============================================================================
+import type { User } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
+import { httpsCallable } from "firebase/functions";
+import { collection, getDocs } from "firebase/firestore";
+import { db, functions } from "@/lib/firebase/client";
+import type {
+  AuthSessionData,
+  UserWarehouseRole,
+  WarehouseInfo,
+} from "@/lib/types/user";
 
-import { doc, getDoc, collection, getDocs, query, where, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
-import type { UserDoc, CustomRoleDoc } from "@/lib/types/user";
-import { ADMIN_ROLES } from "@/lib/types/user";
-
-/**
- * Company email domain used for the phone-to-email conversion trick.
- * Must match the ERP's COMPANY_DOMAIN configuration.
- */
-const COMPANY_DOMAIN =
-  process.env.NEXT_PUBLIC_COMPANY_DOMAIN || "company.com";
-
-/**
- * Convert a phone number to a pseudo-email for Firebase Auth.
- * Mirrors the ERP's `phoneToEmail()` function exactly.
- *
- * @example phoneToEmail("0912345678") → "0912345678@company.com"
- */
-export function phoneToEmail(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  return `${digits}@${COMPANY_DOMAIN}`;
+interface ResolveLoginIdentifierRequest {
+  identifier: string;
 }
 
-/**
- * Fetch a user document from Firestore.
- *
- * @param uid - Firebase Auth UID.
- * @returns The UserDoc or null if not found.
- */
-export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
-  try {
-    const userRef = doc(db, "users", uid);
-    const snapshot = await getDoc(userRef);
+interface ResolveLoginIdentifierResponse {
+  email: string;
+}
 
-    if (!snapshot.exists()) {
-      return null;
+export class AuthServiceError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "invalid-credential"
+      | "invalid-session"
+      | "no-access"
+      | "no-warehouse"
+      | "network",
+  ) {
+    super(message);
+    this.name = "AuthServiceError";
+  }
+}
+
+function isFunctionsError(error: unknown, codes: string[]): boolean {
+  return error instanceof FirebaseError && codes.includes(error.code);
+}
+
+/** Resolve email, username, or employee phone through the POS-owned function. */
+export async function resolveLoginEmail(identifier: string): Promise<string> {
+  const resolveIdentifier = httpsCallable<
+    ResolveLoginIdentifierRequest,
+    ResolveLoginIdentifierResponse
+  >(functions, "resolvePosLoginIdentifier");
+
+  try {
+    const result = await resolveIdentifier({ identifier: identifier.trim() });
+    if (!result.data.email) {
+      throw new AuthServiceError(
+        "Thông tin đăng nhập không chính xác.",
+        "invalid-credential",
+      );
     }
-
-    return snapshot.data() as UserDoc;
-  } catch (error) {
-    console.error("[Auth] Lỗi khi tải thông tin người dùng:", error);
-    return null;
-  }
-}
-
-/**
- * Fetch a custom role document from Firestore.
- *
- * @param roleId - The custom role document ID.
- * @returns The CustomRoleDoc or null if not found.
- */
-export async function fetchCustomRole(
-  roleId: string
-): Promise<CustomRoleDoc | null> {
-  try {
-    const roleRef = doc(db, "custom_roles", roleId);
-    const snapshot = await getDoc(roleRef);
-
-    if (!snapshot.exists()) {
-      return null;
+    return result.data.email;
+  } catch (error: unknown) {
+    if (error instanceof AuthServiceError) throw error;
+    if (
+      isFunctionsError(error, [
+        "functions/not-found",
+        "functions/invalid-argument",
+      ])
+    ) {
+      throw new AuthServiceError(
+        "Thông tin đăng nhập không chính xác.",
+        "invalid-credential",
+      );
     }
-
-    return snapshot.data() as CustomRoleDoc;
-  } catch (error) {
-    console.error("[Auth] Lỗi khi tải vai trò tùy chỉnh:", error);
-    return null;
-  }
-}
-
-/**
- * Resolve the permission set for a user.
- *
- * Resolution order (matches ERP):
- *   1. If userDoc.customRoleId exists → load custom_roles/{customRoleId}
- *   2. Else → load custom_roles/{userDoc.role} (system role fallback)
- *   3. Result → Set<string> of permission keys
- *
- * Admin/super_admin roles get an empty set (they bypass all checks).
- */
-export async function resolvePermissions(
-  userDoc: UserDoc
-): Promise<Set<string>> {
-  // Admins bypass all permission checks — no need to load role doc
-  if (ADMIN_ROLES.has(userDoc.role)) {
-    return new Set<string>();
-  }
-
-  const roleId = userDoc.customRoleId || userDoc.role;
-  const roleDoc = await fetchCustomRole(roleId);
-
-  if (!roleDoc) {
-    console.error(
-      `[Auth] Không tìm thấy vai trò: ${roleId}`
+    throw new AuthServiceError(
+      "Không thể kết nối dịch vụ đăng nhập POS. Vui lòng kiểm tra kết nối mạng.",
+      "network",
     );
-    return new Set<string>();
   }
-
-  return new Set(roleDoc.permissions);
 }
 
-/**
- * Resolve the effective store ID for the POS session.
- *
- * Logic (matches ERP):
- *   - STORE users → use their assigned storeId
- *   - OFFICE/CENTRAL users → use storeId if assigned, otherwise null
- *   - No workplaceType → use storeId if available
- */
-export function resolveEffectiveStoreId(
-  userDoc: UserDoc
-): string | null {
-  // Direct store assignment takes priority
-  if (userDoc.storeId) {
-    return userDoc.storeId;
-  }
+/** Load the authoritative shared user, roles, and permissions from POS Functions. */
+export async function createPosAuthSession(
+  firebaseUser: User,
+): Promise<AuthSessionData> {
+  const getSession = httpsCallable<Record<string, never>, AuthSessionData>(
+    functions,
+    "getPosAuthSession",
+  );
 
-  return null;
-}
-
-// =============================================================================
-// Store Info — for admin store selector
-// =============================================================================
-
-/** Minimal store info for the store selector UI. */
-export interface StoreInfo {
-  id: string;
-  name: string;
-  address?: string;
-}
-
-/**
- * Fetch all active stores from Firestore.
- * Used by the admin store selector when the admin doesn't have a pre-assigned storeId.
- */
-export async function fetchAllActiveStores(): Promise<StoreInfo[]> {
   try {
-    const storesRef = collection(db, "stores");
-    const q = query(
-      storesRef,
-      where("isActive", "==", true),
-      orderBy("name")
+    // Ensure the callable request carries a current Firebase ID token.
+    await firebaseUser.getIdToken();
+    const result = await getSession({});
+    return result.data;
+  } catch (error: unknown) {
+    if (
+      isFunctionsError(error, [
+        "functions/unauthenticated",
+        "functions/permission-denied",
+        "functions/not-found",
+        "functions/failed-precondition",
+      ])
+    ) {
+      throw new AuthServiceError(
+        error instanceof Error
+          ? error.message
+          : "Phiên đăng nhập không hợp lệ hoặc tài khoản đã bị khóa.",
+        "invalid-session",
+      );
+    }
+    throw new AuthServiceError(
+      "Không thể xác minh phiên đăng nhập với dịch vụ POS.",
+      "network",
     );
-    const snapshot = await getDocs(q);
-
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      name: doc.data().name || "Không rõ",
-      address: doc.data().address,
-    }));
-  } catch (error) {
-    console.error("[Auth] Lỗi khi tải danh sách cửa hàng:", error);
-    return [];
   }
+}
+
+function hasGlobalAssignment(assignments: UserWarehouseRole[]): boolean {
+  return assignments.some((assignment) => assignment.warehouse_id === null);
+}
+
+/** Read bduck-system's warehouses and restrict them to approved role scopes. */
+export async function fetchAccessibleWarehouses(
+  assignments: UserWarehouseRole[],
+): Promise<WarehouseInfo[]> {
+  const allowedIds = new Set(
+    assignments
+      .map((assignment) => assignment.warehouse_id)
+      .filter((warehouseId): warehouseId is string => Boolean(warehouseId)),
+  );
+  const canAccessAll = hasGlobalAssignment(assignments);
+  const snapshot = await getDocs(collection(db, "warehouses"));
+
+  return snapshot.docs
+    .filter((warehouseDoc) => {
+      const data = warehouseDoc.data();
+      return (
+        data.is_deleted !== true &&
+        data.status === "ACTIVE" &&
+        (canAccessAll || allowedIds.has(warehouseDoc.id))
+      );
+    })
+    .map((warehouseDoc) => {
+      const data = warehouseDoc.data();
+      return {
+        id: warehouseDoc.id,
+        name: typeof data.name === "string" ? data.name : warehouseDoc.id,
+        code: typeof data.code === "string" ? data.code : "",
+        address: typeof data.address === "string" ? data.address : null,
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name, "vi"));
 }

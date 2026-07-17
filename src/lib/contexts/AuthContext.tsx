@@ -1,332 +1,306 @@
 "use client";
 
-// =============================================================================
-// POS Auth Context — RBAC with 3 Gates of Login
-// =============================================================================
-// Mirrors the ERP's AuthContext but simplified for the POS Tauri environment:
-//   - No session cookies (static app, uses IndexedDB persistence)
-//   - No Edge middleware (no SSR)
-//   - POS-specific permission gate (page.pos.access)
-//
-// Three Gates on Login:
-//   Gate 1: Account must be active (isActive === true)
-//   Gate 2: Must have 'page.pos.access' permission (or be admin)
-//   Gate 3: Must have an assigned store (effectiveStoreId)
-//           → Admin WITHOUT storeId enters "store selection" mode
-// =============================================================================
-
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
-  useCallback,
   type ReactNode,
 } from "react";
 import {
+  onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged,
   type User,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
-import type { UserDoc } from "@/lib/types/user";
-import { ADMIN_ROLES, POS_REQUIRED_PERMISSION } from "@/lib/types/user";
 import {
-  phoneToEmail,
-  fetchUserDoc,
-  resolvePermissions,
-  resolveEffectiveStoreId,
+  AuthServiceError,
+  createPosAuthSession,
+  fetchAccessibleWarehouses,
+  resolveLoginEmail,
 } from "@/lib/services/authService";
+import type {
+  PermissionMap,
+  UserDoc,
+  UserWarehouseRole,
+  WarehouseInfo,
+} from "@/lib/types/user";
 
-// =============================================================================
-// Types
-// =============================================================================
+const SELECTED_WAREHOUSE_KEY = "pos_selected_warehouse_id";
 
 interface AuthState {
-  /** Firebase Auth user object */
   user: User | null;
-  /** Full Firestore user profile */
   userDoc: UserDoc | null;
-  /** Resolved permission keys (empty for admins — they bypass all) */
-  permissions: Set<string>;
-  /** The store this POS session is operating in */
-  effectiveStoreId: string | null;
-  /** Whether the auth state is still being determined */
+  permissions: PermissionMap;
+  roleAssignments: UserWarehouseRole[];
+  availableWarehouses: WarehouseInfo[];
+  effectiveWarehouseId: string | null;
+  effectiveWarehouseName: string | null;
   isLoading: boolean;
-  /** Error message from login (Vietnamese) */
   loginError: string | null;
-  /**
-   * True when admin is authenticated but hasn't selected a store yet.
-   * The dashboard shows a StoreSelector in this state.
-   */
-  needsStoreSelection: boolean;
+  needsWarehouseSelection: boolean;
 }
 
 interface AuthContextValue extends AuthState {
-  /** Login with phone number and password */
-  login: (phone: string, password: string) => Promise<void>;
-  /** Sign out and clear all state */
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  /**
-   * Check if the user has a specific permission.
-   * Admin/super_admin always returns true (bypass).
-   */
-  hasPermission: (key: string) => boolean;
-  /**
-   * Set the effective store ID (used by admin store selector).
-   */
-  selectStore: (storeId: string) => void;
+  hasPermission: (key: string, warehouseId?: string) => boolean;
+  selectWarehouse: (warehouseId: string) => void;
 }
 
-// =============================================================================
-// Context
-// =============================================================================
+const EMPTY_AUTH_STATE: AuthState = {
+  user: null,
+  userDoc: null,
+  permissions: {},
+  roleAssignments: [],
+  availableWarehouses: [],
+  effectiveWarehouseId: null,
+  effectiveWarehouseName: null,
+  isLoading: false,
+  loginError: null,
+  needsWarehouseSelection: false,
+};
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// =============================================================================
-// Provider
-// =============================================================================
+function getStoredWarehouseId(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(SELECTED_WAREHOUSE_KEY);
+}
+
+function getLoginErrorMessage(error: unknown): string {
+  if (error instanceof AuthServiceError) return error.message;
+
+  const firebaseCode =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code?: unknown }).code || "")
+      : "";
+
+  if (
+    [
+      "auth/user-not-found",
+      "auth/wrong-password",
+      "auth/invalid-credential",
+      "auth/invalid-login-credentials",
+    ].includes(firebaseCode)
+  ) {
+    return "Thông tin đăng nhập hoặc mật khẩu không chính xác.";
+  }
+  if (firebaseCode === "auth/too-many-requests") {
+    return "Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau ít phút.";
+  }
+  if (firebaseCode === "auth/network-request-failed") {
+    return "Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối mạng.";
+  }
+
+  return "Đã có lỗi xảy ra khi đăng nhập. Vui lòng thử lại.";
+}
+
+function hasScopedPermission(
+  permissions: PermissionMap,
+  key: string,
+  warehouseId?: string,
+): boolean {
+  const globalPermissions = permissions.global || {};
+  if (globalPermissions["*"] === true || globalPermissions[key] === true) {
+    return true;
+  }
+
+  if (warehouseId) {
+    const warehousePermissions = permissions[warehouseId] || {};
+    return (
+      warehousePermissions["*"] === true || warehousePermissions[key] === true
+    );
+  }
+
+  return Object.entries(permissions).some(
+    ([scope, scopedPermissions]) =>
+      scope !== "global" &&
+      (scopedPermissions["*"] === true || scopedPermissions[key] === true),
+  );
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
-    user: null,
-    userDoc: null,
-    permissions: new Set(),
-    effectiveStoreId: null,
+    ...EMPTY_AUTH_STATE,
     isLoading: true,
-    loginError: null,
-    needsStoreSelection: false,
   });
+  const sessionSyncRef = useRef<Promise<void> | null>(null);
 
-  // ── Permission check with admin bypass ──────────────────────────────────
-  const hasPermission = useCallback(
-    (key: string): boolean => {
-      if (!state.userDoc) return false;
-      // Admin/super_admin bypass all checks
-      if (ADMIN_ROLES.has(state.userDoc.role)) return true;
-      return state.permissions.has(key);
-    },
-    [state.userDoc, state.permissions]
-  );
+  const syncUserSession = useCallback(async (firebaseUser: User) => {
+    if (sessionSyncRef.current) return sessionSyncRef.current;
 
-  // ── Admin store selector ────────────────────────────────────────────────
-  const selectStore = useCallback(
-    (storeId: string) => {
-      setState((prev) => ({
-        ...prev,
-        effectiveStoreId: storeId,
-        needsStoreSelection: false,
-      }));
-    },
-    []
-  );
-
-  // ── Load user profile + permissions + storeId ───────────────────────────
-  const loadUserProfile = useCallback(async (firebaseUser: User) => {
-    try {
-      const userDoc = await fetchUserDoc(firebaseUser.uid);
-
-      if (!userDoc) {
-        // User exists in Auth but not in Firestore — force sign out
-        await signOut(auth);
-        setState((prev) => ({
-          ...prev,
-          user: null,
-          userDoc: null,
-          permissions: new Set(),
-          effectiveStoreId: null,
-          isLoading: false,
-          loginError: "Không tìm thấy thông tin tài khoản trong hệ thống.",
-          needsStoreSelection: false,
-        }));
-        return;
+    const syncPromise = (async () => {
+      const session = await createPosAuthSession(firebaseUser);
+      if (session.user.id !== firebaseUser.uid) {
+        throw new AuthServiceError(
+          "Phiên đăng nhập không khớp với hồ sơ người dùng.",
+          "invalid-session",
+        );
       }
 
-      // Gate 1: Check if account is active
-      if (!userDoc.isActive) {
-        await signOut(auth);
-        setState((prev) => ({
-          ...prev,
-          user: null,
-          userDoc: null,
-          permissions: new Set(),
-          effectiveStoreId: null,
-          isLoading: false,
-          loginError: "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản lý.",
-          needsStoreSelection: false,
-        }));
-        return;
+      const activeAssignments = session.roles.filter(
+        (assignment) => assignment.is_active && assignment.is_deleted !== true,
+      );
+      if (Object.keys(session.permissions).length === 0) {
+        throw new AuthServiceError(
+          "Tài khoản chưa được cấp quyền truy cập hệ thống.",
+          "no-access",
+        );
       }
 
-      // Resolve permissions
-      const permissions = await resolvePermissions(userDoc);
-
-      // Gate 2: Check POS access permission (admin bypasses)
-      const isAdmin = ADMIN_ROLES.has(userDoc.role);
-      if (!isAdmin && !permissions.has(POS_REQUIRED_PERMISSION)) {
-        await signOut(auth);
-        setState((prev) => ({
-          ...prev,
-          user: null,
-          userDoc: null,
-          permissions: new Set(),
-          effectiveStoreId: null,
-          isLoading: false,
-          loginError:
-            "Tài khoản của bạn không có quyền truy cập hệ thống POS. Vui lòng liên hệ quản trị viên.",
-          needsStoreSelection: false,
-        }));
-        return;
+      const warehouses = await fetchAccessibleWarehouses(activeAssignments);
+      if (warehouses.length === 0) {
+        throw new AuthServiceError(
+          "Tài khoản chưa được gán điểm làm việc đang hoạt động.",
+          "no-warehouse",
+        );
       }
 
-      // Resolve effective store ID
-      const effectiveStoreId = resolveEffectiveStoreId(userDoc);
+      const storedWarehouseId = getStoredWarehouseId();
+      const selectedWarehouse =
+        warehouses.find((warehouse) => warehouse.id === storedWarehouseId) ||
+        (warehouses.length === 1 ? warehouses[0] : null);
 
-      // Gate 3: Must have a store assigned
-      if (!effectiveStoreId) {
-        if (isAdmin) {
-          // Admin without storeId → allow login, show store selector
-          setState({
-            user: firebaseUser,
-            userDoc,
-            permissions,
-            effectiveStoreId: null,
-            isLoading: false,
-            loginError: null,
-            needsStoreSelection: true,
-          });
-          return;
-        }
-
-        // Non-admin without store → reject
-        await signOut(auth);
-        setState((prev) => ({
-          ...prev,
-          user: null,
-          userDoc: null,
-          permissions: new Set(),
-          effectiveStoreId: null,
-          isLoading: false,
-          loginError:
-            "Tài khoản chưa được gán cửa hàng. Vui lòng liên hệ quản lý để được phân công.",
-          needsStoreSelection: false,
-        }));
-        return;
+      if (selectedWarehouse && typeof window !== "undefined") {
+        window.localStorage.setItem(
+          SELECTED_WAREHOUSE_KEY,
+          selectedWarehouse.id,
+        );
       }
 
-      // ✅ All gates passed — user is fully authenticated
       setState({
         user: firebaseUser,
-        userDoc,
-        permissions,
-        effectiveStoreId,
+        userDoc: session.user,
+        permissions: session.permissions,
+        roleAssignments: activeAssignments,
+        availableWarehouses: warehouses,
+        effectiveWarehouseId: selectedWarehouse?.id || null,
+        effectiveWarehouseName: selectedWarehouse?.name || null,
         isLoading: false,
         loginError: null,
-        needsStoreSelection: false,
+        needsWarehouseSelection: selectedWarehouse === null,
       });
-    } catch (error) {
-      console.error("[Auth] Lỗi khi tải hồ sơ người dùng:", error);
-      await signOut(auth);
-      setState((prev) => ({
-        ...prev,
-        user: null,
-        userDoc: null,
-        permissions: new Set(),
-        effectiveStoreId: null,
-        isLoading: false,
-        loginError: "Đã có lỗi xảy ra khi xác thực. Vui lòng thử lại.",
-        needsStoreSelection: false,
-      }));
+    })();
+
+    sessionSyncRef.current = syncPromise;
+    try {
+      await syncPromise;
+    } finally {
+      sessionSyncRef.current = null;
     }
   }, []);
 
-  // ── Firebase Auth state observer ────────────────────────────────────────
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        await loadUserProfile(firebaseUser);
-      } else {
-        setState({
-          user: null,
-          userDoc: null,
-          permissions: new Set(),
-          effectiveStoreId: null,
-          isLoading: false,
-          loginError: null,
-          needsStoreSelection: false,
-        });
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (!firebaseUser) {
+        setState((previous) => ({
+          ...EMPTY_AUTH_STATE,
+          loginError: previous.loginError,
+        }));
+        return;
       }
+
+      setState((previous) => ({
+        ...previous,
+        isLoading: true,
+        loginError: null,
+      }));
+
+      void syncUserSession(firebaseUser).catch(async (error: unknown) => {
+        console.error("[Auth] Không thể đồng bộ phiên bduck-system:", error);
+        await signOut(auth).catch(() => undefined);
+        setState({
+          ...EMPTY_AUTH_STATE,
+          loginError: getLoginErrorMessage(error),
+        });
+      });
     });
 
-    return () => unsubscribe();
-  }, [loadUserProfile]);
+    return unsubscribe;
+  }, [syncUserSession]);
 
-  // ── Login action ────────────────────────────────────────────────────────
-  const login = useCallback(async (phone: string, password: string) => {
-    setState((prev) => ({ ...prev, isLoading: true, loginError: null }));
+  const login = useCallback(
+    async (identifier: string, password: string) => {
+      setState((previous) => ({
+        ...previous,
+        isLoading: true,
+        loginError: null,
+      }));
 
-    try {
-      const email = phoneToEmail(phone);
-      await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged will fire → loadUserProfile handles the rest
-    } catch (error: unknown) {
-      const firebaseError = error as { code?: string };
+      try {
+        const email = await resolveLoginEmail(identifier);
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        await syncUserSession(credential.user);
+      } catch (error: unknown) {
+        await signOut(auth).catch(() => undefined);
+        setState({
+          ...EMPTY_AUTH_STATE,
+          loginError: getLoginErrorMessage(error),
+        });
+      }
+    },
+    [syncUserSession],
+  );
 
-      let message = "Đã có lỗi xảy ra khi đăng nhập. Vui lòng thử lại.";
+  const logout = useCallback(async () => {
+    await signOut(auth).catch((error) => {
+      console.error("[Auth] Không thể đăng xuất Firebase:", error);
+    });
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(SELECTED_WAREHOUSE_KEY);
+    }
+    setState(EMPTY_AUTH_STATE);
+  }, []);
 
-      if (
-        firebaseError.code === "auth/user-not-found" ||
-        firebaseError.code === "auth/wrong-password" ||
-        firebaseError.code === "auth/invalid-credential"
-      ) {
-        message = "Số điện thoại hoặc mật khẩu không chính xác.";
-      } else if (firebaseError.code === "auth/too-many-requests") {
-        message =
-          "Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau ít phút.";
-      } else if (firebaseError.code === "auth/network-request-failed") {
-        message = "Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối mạng.";
+  const selectWarehouse = useCallback((warehouseId: string) => {
+    setState((previous) => {
+      const warehouse = previous.availableWarehouses.find(
+        (item) => item.id === warehouseId,
+      );
+      if (!warehouse) return previous;
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(SELECTED_WAREHOUSE_KEY, warehouse.id);
       }
 
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        loginError: message,
-      }));
-    }
+      return {
+        ...previous,
+        effectiveWarehouseId: warehouse.id,
+        effectiveWarehouseName: warehouse.name,
+        needsWarehouseSelection: false,
+      };
+    });
   }, []);
 
-  // ── Logout action ──────────────────────────────────────────────────────
-  const logout = useCallback(async () => {
-    try {
-      await signOut(auth);
-      // onAuthStateChanged will fire → state gets cleared
-    } catch (error) {
-      console.error("[Auth] Lỗi khi đăng xuất:", error);
-    }
-  }, []);
+  const hasPermission = useCallback(
+    (key: string, warehouseId?: string) =>
+      hasScopedPermission(
+        state.permissions,
+        key,
+        warehouseId || state.effectiveWarehouseId || undefined,
+      ),
+    [state.effectiveWarehouseId, state.permissions],
+  );
 
-  // ── Context value ──────────────────────────────────────────────────────
-  const value: AuthContextValue = {
-    ...state,
-    login,
-    logout,
-    hasPermission,
-    selectStore,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        ...state,
+        login,
+        logout,
+        hasPermission,
+        selectWarehouse,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-// =============================================================================
-// Hook
-// =============================================================================
-
-/**
- * Access the POS auth context.
- * Must be used inside <AuthProvider>.
- */
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {

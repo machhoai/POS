@@ -23,7 +23,17 @@ import type { Product } from "@/lib/types/product";
 
 export default function CashierPage() {
   const router = useRouter();
-  const { user, userDoc, effectiveStoreId, isLoading: authLoading, logout, needsStoreSelection, selectStore } = useAuth();
+  const {
+    user,
+    userDoc,
+    availableWarehouses,
+    effectiveWarehouseId,
+    effectiveWarehouseName,
+    isLoading: authLoading,
+    logout,
+    needsWarehouseSelection,
+    selectWarehouse,
+  } = useAuth();
 
   // ── Product Store ──────────────────────────────────────────────────────
   const allProducts = useProductStore((s) => s.products);
@@ -113,15 +123,15 @@ export default function CashierPage() {
 
   // ── Checkout ───────────────────────────────────────────────────────────
   const handleCheckout = useCallback(async () => {
-    if (!effectiveStoreId) return;
+    if (!effectiveWarehouseId) return;
     try {
-      // Use storeId as shopId (numeric) for order creation
-      const shopId = Number(effectiveStoreId) || 1;
+      // JoyWorld shop ID is independent from bduck-system's warehouse UUID.
+      const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
       await checkout(shopId);
     } catch (error) {
       console.error("[POS] Lỗi thanh toán:", error);
     }
-  }, [effectiveStoreId, checkout]);
+  }, [effectiveWarehouseId, checkout]);
 
   // ── Loading / Auth Guard State ─────────────────────────────────────────
   if (authLoading || !user || !userDoc) {
@@ -136,11 +146,12 @@ export default function CashierPage() {
   }
 
   // ── Admin Store Selector ────────────────────────────────────────────────
-  if (needsStoreSelection) {
+  if (needsWarehouseSelection) {
     return (
       <StoreSelector
-        adminName={userDoc.name}
-        onSelectStore={selectStore}
+        userName={userDoc.full_name}
+        warehouses={availableWarehouses}
+        onSelectWarehouse={selectWarehouse}
         onLogout={logout}
       />
     );
@@ -153,8 +164,8 @@ export default function CashierPage() {
       {/* Center: welcome, search, categories and products */}
       <main className="flex-1 flex flex-col min-w-0">
         <TopNav
-          storeName={effectiveStoreId || "Cửa hàng"}
-          cashierName={userDoc.name}
+          storeName={effectiveWarehouseName || "Điểm làm việc"}
+          cashierName={userDoc.full_name}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onSyncProducts={handleSyncProducts}

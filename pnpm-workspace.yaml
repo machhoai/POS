@@ -2,3 +2,8 @@ packages:
   - "."
   # Functions have their own package.json and are deployed independently
   # They are NOT part of the pnpm workspace
+allowBuilds:
+  '@firebase/util': set this to true or false
+  protobufjs: set this to true or false
+  sharp: set this to true or false
+  unrs-resolver: set this to true or false

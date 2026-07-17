@@ -1,9 +1,6 @@
-// Types are intentionally kept as a minimal, read-only mirror of
-// D:\Github\bduck-system\packages\shared-types\src\users.ts.
-
 export type UserStatus = "ACTIVE" | "INACTIVE" | "SUSPENDED";
 
-export interface UserDoc {
+export interface SharedUserRecord {
   id: string;
   username: string;
   email: string;
@@ -15,7 +12,7 @@ export interface UserDoc {
   mfa_enabled?: boolean;
 }
 
-export interface UserWarehouseRole {
+export interface UserWarehouseRoleRecord {
   id: string;
   user_id: string;
   warehouse_id: string | null;
@@ -28,18 +25,16 @@ export interface UserWarehouseRole {
   scope_origin?: "DIRECT" | "LEGACY_DIRECT";
 }
 
-export type ScopedPermissions = Record<string, unknown>;
-export type PermissionMap = Record<string, ScopedPermissions>;
-
-export interface WarehouseInfo {
+export interface RoleRecord {
   id: string;
-  name: string;
-  code: string;
-  address: string | null;
+  permissions: Record<string, unknown>;
+  is_deleted: boolean;
 }
 
-export interface AuthSessionData {
-  user: UserDoc;
+export type PermissionMap = Record<string, Record<string, unknown>>;
+
+export interface PosAuthSessionData {
+  user: SharedUserRecord;
   permissions: PermissionMap;
-  roles: UserWarehouseRole[];
+  roles: UserWarehouseRoleRecord[];
 }

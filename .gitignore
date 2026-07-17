@@ -18,6 +18,7 @@ src-tauri/target/
 .env
 .env.local
 .env.*.local
+!.env.example.local
 functions/.env
 functions/.env.local
 

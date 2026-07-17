@@ -5,8 +5,9 @@
 // variables. It is safe to include in the frontend bundle.
 // NO secrets or Admin credentials should ever be imported here.
 //
-// Auth uses IndexedDB persistence (browserLocalPersistence) because the POS
-// runs as a static Tauri app — there are no server-side cookies/sessions.
+// Firebase Auth uses local persistence because the POS is a static Tauri app.
+// POS-owned Callable Functions validate Firebase identity and read the shared
+// bduck-system user, role-assignment, and permission schemas.
 // =============================================================================
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";

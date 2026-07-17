@@ -4,9 +4,15 @@
 // This is the main entry point for all Cloud Functions in the POS system.
 //
 // Functions:
-//   1. `syncProducts` — onCall function to sync product catalog from HK API
-//   2. `onOrderLocalPaid` — Firestore trigger for order sync to HK API
+//   1. POS authentication callables (independent from the WMS API)
+//   2. `syncProducts` — onCall function to sync product catalog from HK API
+//   3. `onOrderLocalPaid` — Firestore trigger for order sync to HK API
 // =============================================================================
+
+export {
+  getPosAuthSession,
+  resolvePosLoginIdentifier,
+} from "./auth/functions";
 
 import {
   onDocumentUpdated,

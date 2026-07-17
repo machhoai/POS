@@ -3,8 +3,7 @@
 // =============================================================================
 // Login Page — POS Authentication
 // =============================================================================
-// Vietnamese-localized login form using phone number + password.
-// Mirrors the ERP login flow with the phoneToEmail trick.
+// Uses the same identifier resolver and Firebase session flow as bduck-system.
 // =============================================================================
 
 import { useState, type FormEvent } from "react";
@@ -16,7 +15,7 @@ export default function LoginPage() {
   const { login, isLoading, loginError, user, userDoc } = useAuth();
   const router = useRouter();
 
-  const [phone, setPhone] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -29,8 +28,8 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!phone.trim() || !password.trim()) return;
-    await login(phone.trim(), password);
+    if (!identifier.trim() || !password.trim()) return;
+    await login(identifier.trim(), password);
   };
 
   return (
@@ -65,13 +64,13 @@ export default function LoginPage() {
         {/* Form Card */}
         <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-xl shadow-black/20">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Phone Number Field */}
+            {/* Login identifier field */}
             <div>
               <label
-                htmlFor="phone"
+                htmlFor="identifier"
                 className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5"
               >
-                Số điện thoại
+                Email, tên đăng nhập hoặc số điện thoại
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -90,13 +89,13 @@ export default function LoginPage() {
                   </svg>
                 </div>
                 <input
-                  id="phone"
-                  type="tel"
-                  inputMode="numeric"
-                  autoComplete="tel"
-                  placeholder="0912 345 678"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  id="identifier"
+                  name="identifier"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="Email / tên đăng nhập / số điện thoại"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   disabled={isLoading}
                   className="w-full pl-11 pr-4 py-3 bg-[var(--color-background)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] transition-colors disabled:opacity-50"
                 />
@@ -180,7 +179,7 @@ export default function LoginPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading || !phone.trim() || !password.trim()}
+              disabled={isLoading || !identifier.trim() || !password.trim()}
               className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-gray-700 disabled:to-gray-700 disabled:text-gray-500 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 disabled:shadow-none flex items-center justify-center gap-2"
             >
               {isLoading ? (

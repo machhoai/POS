@@ -94,10 +94,10 @@ A desktop Point of Sale application built with **Next.js**, **Tauri**, and **Fir
 
 2. **Configure environment:**
    ```bash
-   cp .env.example .env.local
-   # Fill in your Firebase project credentials
+   cp .env.example.local .env.local
+   # Use the same Firebase client values as bduck-system/.env.local
    
-   cp functions/.env.example functions/.env
+   cp functions/.env.example functions/.env.local
    # Fill in HK API credentials (server-side only)
    ```
 
