@@ -2,8 +2,38 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  mapGroupedGoods,
   mapSellableSouvenirs,
 } = require("../lib/services/productCatalog");
+
+test("maps package products with the HK classification name", () => {
+  const products = mapGroupedGoods(
+    [
+      {
+        goodsId: "TICKET-01",
+        goodsName: "Vé một lượt 100K",
+        price: "100000",
+        subCategory: 1,
+      },
+    ],
+    4,
+    "Vé một lượt",
+    "2026-07-31T00:00:00.000Z"
+  );
+
+  assert.deepEqual(products, [
+    {
+      goodsId: "TICKET-01",
+      goodsName: "Vé một lượt 100K",
+      description: "",
+      price: 100000,
+      category: 4,
+      subCategory: "1",
+      typeName: "Vé một lượt",
+      lastSyncAt: "2026-07-31T00:00:00.000Z",
+    },
+  ]);
+});
 
 test("maps only souvenirs with a positive sale price", () => {
   const products = mapSellableSouvenirs(

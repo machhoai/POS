@@ -45,11 +45,24 @@ export interface PosOrder {
   /** The shop this order belongs to */
   shopId: number;
 
+  /** Warehouse selected in the shared bduck-system session */
+  warehouseId?: string;
+
+  /** Firebase UID of the cashier who created the order */
+  createdBy?: string;
+
+  /** Operator identity recorded from the authenticated bduck-system user */
+  operatorId?: string;
+  operatorFirebaseUid?: string;
+  operatorName?: string;
+
   /** Current status in the order lifecycle */
   status: OrderStatus;
 
   /** How the customer paid */
   paymentMethod: PaymentMethod;
+  paymentMethodId?: string;
+  paymentMethodName?: string;
 
   /** Total amount in the local currency */
   totalAmount: number;
@@ -74,6 +87,12 @@ export interface PosOrder {
 
   /** ISO 8601 timestamp when the order was created */
   createdAt: string;
+
+  /** ISO 8601 timestamp when the order was last updated */
+  updatedAt?: string;
+
+  /** ISO 8601 timestamp when local payment completed */
+  paidAt?: string;
 }
 
 /**

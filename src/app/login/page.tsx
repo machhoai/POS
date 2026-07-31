@@ -54,7 +54,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
-            Hệ Thống POS
+            JPOS
           </h1>
           <p className="text-[var(--color-text-muted)] mt-1 text-sm">
             Đăng nhập để bắt đầu ca làm việc

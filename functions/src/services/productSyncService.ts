@@ -3,17 +3,21 @@ import { db } from "../config/firebase";
 import { POS_COLLECTIONS } from "../config/collections";
 import {
   fetchGoodsByCategory,
+  fetchSetmealTypes,
   fetchSouvenirStock,
   type HKGoodsItem,
+  type HKSetmealType,
   type HKSouvenirStockItem,
 } from "./hkApiService";
-import { mapSellableSouvenirs } from "./productCatalog";
+import {
+  mapGroupedGoods,
+  mapSellableSouvenirs,
+} from "./productCatalog";
 import {
   SOUVENIR_CATEGORY_ID,
   SYNC_CATEGORY_IDS,
   type SyncProduct,
 } from "../types/product";
-
 const BATCH_LIMIT = 500;
 
 export interface ProductSyncResult {
@@ -41,6 +45,32 @@ function extractList<T>(
   }
 
   return [];
+}
+
+interface SetmealTypeOption {
+  typeId: string;
+  typeName: string;
+}
+
+function normalizeSetmealTypes(items: HKSetmealType[]): SetmealTypeOption[] {
+  return items.flatMap((item) => {
+    const typeId = (
+      item.key ||
+      item.Key ||
+      item.typeId ||
+      item.TypeId ||
+      ""
+    ).trim();
+    const typeName = (
+      item.value ||
+      item.Value ||
+      item.typeName ||
+      item.TypeName ||
+      ""
+    ).trim();
+
+    return typeId && typeName ? [{ typeId, typeName }] : [];
+  });
 }
 
 export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
@@ -91,6 +121,20 @@ export async function synchronizePosProducts(
   const now = new Date().toISOString();
   const allProducts: SyncProduct[] = [];
 
+  const typeResponse = await fetchSetmealTypes();
+  if (!typeResponse.success) {
+    throw new Error(
+      `setmeal_type_select failed: [${typeResponse.code}] ${typeResponse.msg}`,
+    );
+  }
+
+  const setmealTypes = normalizeSetmealTypes(
+    extractList<HKSetmealType>(typeResponse.data),
+  );
+  if (setmealTypes.length === 0) {
+    throw new Error("setmeal_type_select returned no product classifications");
+  }
+
   for (const categoryId of SYNC_CATEGORY_IDS) {
     const response = await fetchGoodsByCategory(categoryId);
 
@@ -103,30 +147,61 @@ export async function synchronizePosProducts(
       continue;
     }
 
-    const rawItems = extractList<HKGoodsItem>(
+    const ungroupedItems = extractList<HKGoodsItem>(
       response.data,
       ["goodsItems"],
     );
+    const productsById = new Map<string, SyncProduct>();
 
-    for (const item of rawItems) {
-      const goodsId = item.GoodsId || item.goodsId;
-      if (!goodsId) continue;
+    for (const setmealType of setmealTypes) {
+      const groupedResponse = await fetchGoodsByCategory(
+        categoryId,
+        setmealType.typeId,
+      );
 
-      allProducts.push({
-        goodsId,
-        goodsName: item.GoodsName || item.goodsName || "Không rõ tên",
-        description: item.Remark || item.remark || "",
-        price: Number(item.Price || item.price || 0),
-        category: categoryId,
-        subCategory:
-          item.SubCategory ||
-          item.subCategory ||
-          item.CategoryGroupName ||
-          item.categoryGroupName ||
-          "",
-        lastSyncAt: now,
-      });
+      if (!groupedResponse.success) {
+        throw new Error(
+          `setmeal_getsellgoods failed for category ${categoryId}, ` +
+          `type ${setmealType.typeId}: ` +
+          `[${groupedResponse.code}] ${groupedResponse.msg}`,
+        );
+      }
+
+      const groupedItems = extractList<HKGoodsItem>(
+        groupedResponse.data,
+        ["goodsItems"],
+      );
+      const groupedProducts = mapGroupedGoods(
+        groupedItems,
+        categoryId,
+        setmealType.typeName,
+        now,
+      );
+
+      for (const product of groupedProducts) {
+        productsById.set(product.goodsId, product);
+      }
     }
+
+    // Keep unclassified API products visible instead of dropping them.
+    for (const product of mapGroupedGoods(
+      ungroupedItems,
+      categoryId,
+      "Khác",
+      now,
+    )) {
+      if (!productsById.has(product.goodsId)) {
+        productsById.set(product.goodsId, product);
+      }
+    }
+
+    allProducts.push(...productsById.values());
+
+    logger.info("[productSync] Category grouped", {
+      categoryId,
+      productCount: productsById.size,
+      typeCount: setmealTypes.length,
+    });
   }
 
   const souvenirResponse = await fetchSouvenirStock();

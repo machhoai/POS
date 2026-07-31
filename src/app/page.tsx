@@ -12,7 +12,9 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/useCartStore";
 import { useProductStore } from "@/lib/stores/useProductStore";
+import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { syncProducts } from "@/lib/services/productService";
+import { showError, showPromise } from "@/lib/utils/toast";
 import TopNav from "@/components/pos/TopNav";
 import Sidebar from "@/components/layout/Sidebar";
 import ProductGrid from "@/components/pos/ProductGrid";
@@ -40,7 +42,6 @@ export default function CashierPage() {
   const selectedCategory = useProductStore((s) => s.selectedCategory);
   const searchQuery = useProductStore((s) => s.searchQuery);
 
-  // Derive filtered products — useMemo tránh tạo array mới mỗi render
   const products = useMemo(() => {
     let filtered = allProducts;
     if (selectedCategory !== null) {
@@ -49,13 +50,15 @@ export default function CashierPage() {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(
-        (p) =>
-          p.goodsName.toLowerCase().includes(q) ||
-          p.typeName.toLowerCase().includes(q)
+        (product) =>
+          product.goodsName.toLowerCase().includes(q) ||
+          product.typeName.toLowerCase().includes(q),
       );
     }
     return filtered;
   }, [allProducts, selectedCategory, searchQuery]);
+
+  // Derive filtered products — useMemo tránh tạo array mới mỗi render
   const isProductsLoading = useProductStore((s) => s.isLoading);
   const fetchProducts = useProductStore((s) => s.fetchProducts);
   const setSelectedCategory = useProductStore((s) => s.setSelectedCategory);
@@ -66,6 +69,8 @@ export default function CashierPage() {
   const paymentMethod = useCartStore((s) => s.paymentMethod);
   const isCheckingOut = useCartStore((s) => s.isCheckingOut);
   const currentOrderId = useCartStore((s) => s.currentOrderId);
+  const currentHkOrderNumber = useCartStore((s) => s.currentHkOrderNumber);
+  const currentOrderStatus = useCartStore((s) => s.currentOrderStatus);
   const totalAmount = useCartStore(selectTotalAmount);
   const itemCount = useCartStore(selectItemCount);
   const addItem = useCartStore((s) => s.addItem);
@@ -73,8 +78,12 @@ export default function CashierPage() {
   const removeItem = useCartStore((s) => s.removeItem);
   const setPaymentMethod = useCartStore((s) => s.setPaymentMethod);
   const checkout = useCartStore((s) => s.checkout);
+  const prepareCurrentOrder = useCartStore((s) => s.prepareCurrentOrder);
+  const refreshCurrentOrderStatus = useCartStore((s) => s.refreshCurrentOrderStatus);
   const clearCart = useCartStore((s) => s.clearCart);
+  const paymentMethods = JPOS_PAYMENT_METHODS;
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
+  const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
 
   // ── Auth Guard ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -86,9 +95,21 @@ export default function CashierPage() {
   // ── Load Products on Mount ─────────────────────────────────────────────
   useEffect(() => {
     if (user && userDoc) {
-      fetchProducts();
+      void fetchProducts();
     }
   }, [user, userDoc, fetchProducts]);
+
+  useEffect(() => {
+    if (
+      paymentMethods.length > 0 &&
+      !paymentMethods.some((method) => method.id === paymentMethod)
+    ) {
+      const preferredMethod =
+        paymentMethods.find((method) => method.id === "CASH") ||
+        paymentMethods[0];
+      setPaymentMethod(preferredMethod.id);
+    }
+  }, [paymentMethod, paymentMethods, setPaymentMethod]);
 
   // ── Product Sync ───────────────────────────────────────────────────────
   const handleSyncProducts = useCallback(async () => {
@@ -116,21 +137,69 @@ export default function CashierPage() {
         price: displayPrice,
         quantity: 1,
       });
+      if (cartItems.length === 0 && effectiveWarehouseId) {
+        void prepareCurrentOrder(shopId, effectiveWarehouseId);
+      }
     },
-    [addItem]
+    [
+      addItem,
+      cartItems.length,
+      effectiveWarehouseId,
+      prepareCurrentOrder,
+      shopId,
+    ]
   );
+
+  useEffect(() => {
+    if (
+      !currentOrderId ||
+      !["LOCAL_PAID", "SYNCING"].includes(currentOrderStatus || "")
+    ) {
+      return;
+    }
+
+    void refreshCurrentOrderStatus();
+    const intervalId = window.setInterval(() => {
+      void refreshCurrentOrderStatus();
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [currentOrderId, currentOrderStatus, refreshCurrentOrderStatus]);
 
   // ── Checkout ───────────────────────────────────────────────────────────
   const handleCheckout = useCallback(async () => {
-    if (!effectiveWarehouseId) return;
-    try {
-      // JoyWorld shop ID is independent from bduck-system's warehouse UUID.
-      const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
-      await checkout(shopId);
-    } catch (error) {
-      console.error("[POS] Lỗi thanh toán:", error);
+    if (!effectiveWarehouseId) {
+      const error = new Error("Chưa xác định được điểm bán.");
+      showError(
+        "Không thể thanh toán",
+        "Vui lòng chọn điểm bán trước khi thanh toán.",
+      );
+      throw error;
     }
-  }, [effectiveWarehouseId, checkout]);
+
+    const runCheckout = () => checkout(shopId, effectiveWarehouseId);
+    const notifyCheckout = (): ReturnType<typeof runCheckout> => {
+      return showPromise(runCheckout(), {
+        loading: "Đang ghi nhận thanh toán...",
+        success: "Thanh toán thành công",
+        error: "Không thể thanh toán",
+        successDescription:
+          "Đơn đã được lưu trên Firebase. Hệ thống đang đồng bộ nền.",
+        errorDescription:
+          "Đơn chưa được ghi nhận. Vui lòng kiểm tra kết nối và thử lại.",
+        onRetry: () => {
+          void notifyCheckout();
+        },
+      });
+    };
+
+    try {
+      await notifyCheckout();
+    } catch (error: unknown) {
+      console.error("[POS] Lỗi thanh toán:", error);
+      throw error;
+    }
+  }, [effectiveWarehouseId, checkout, shopId]);
 
   // ── Loading / Auth Guard State ─────────────────────────────────────────
   if (authLoading || !user || !userDoc) {
@@ -188,8 +257,11 @@ export default function CashierPage() {
         <CartPanel
           items={cartItems}
           paymentMethod={paymentMethod}
+          paymentMethods={paymentMethods}
           isCheckingOut={isCheckingOut}
           currentOrderId={currentOrderId}
+          currentHkOrderNumber={currentHkOrderNumber}
+          currentOrderStatus={currentOrderStatus}
           totalAmount={totalAmount}
           itemCount={itemCount}
           onUpdateQuantity={updateQuantity}

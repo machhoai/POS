@@ -9,7 +9,14 @@ import {
   loadPosProductCatalog,
   synchronizePosProducts,
 } from "../services/productSyncService";
-
+import {
+  checkoutPosOrderForUser,
+  getLatestPosOrderForUser,
+  getPosOrderStatusForUser,
+  listPosOrdersForUser,
+  preparePosOrderForUser,
+  retryPosOrderSyncForUser,
+} from "../order/functions";
 const CALLABLE_OPTIONS = {
   region: "asia-southeast1",
   cors: true,
@@ -63,6 +70,63 @@ export const getPosAuthSession = onCall(
     }
 
     const action = request.data?.action;
+    if (
+      action === "prepareOrder" ||
+      action === "checkoutOrder" ||
+      action === "getOrderStatus" ||
+      action === "getOrders" ||
+      action === "getLatestOrder" ||
+      action === "retryOrderSync"
+    ) {
+      try {
+        if (action === "prepareOrder") {
+          return await preparePosOrderForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "checkoutOrder") {
+          return await checkoutPosOrderForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "getOrders") {
+          return await listPosOrdersForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "getLatestOrder") {
+          return await getLatestPosOrderForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "retryOrderSync") {
+          return await retryPosOrderSyncForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        return await getPosOrderStatusForUser(
+          request.auth.uid,
+          request.data?.payload,
+        );
+      } catch (error: unknown) {
+        if (error instanceof HttpsError) throw error;
+        logger.error("[getPosAuthSession] Xử lý đơn hàng thất bại", {
+          uid: request.auth.uid,
+          action,
+          error,
+        });
+        throw new HttpsError(
+          "internal",
+          "Không thể xử lý đơn hàng. Vui lòng thử lại.",
+        );
+      }
+    }
+
     if (action === "getProducts") {
       try {
         return await loadPosProductCatalog();

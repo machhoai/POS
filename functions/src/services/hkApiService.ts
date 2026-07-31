@@ -258,14 +258,26 @@ export interface HKGoodsItem {
   goodsId?: string;
   GoodsName?: string;
   goodsName?: string;
-  Price?: number;
-  price?: number;
+  Price?: number | string;
+  price?: number | string;
   Remark?: string;
   remark?: string;
-  SubCategory?: string;
-  subCategory?: string;
+  SubCategory?: string | number;
+  subCategory?: string | number;
   CategoryGroupName?: string;
   categoryGroupName?: string;
+}
+
+/** Product classification returned by `setmeal_type_select`. */
+export interface HKSetmealType {
+  key?: string;
+  Key?: string;
+  typeId?: string;
+  TypeId?: string;
+  value?: string;
+  Value?: string;
+  typeName?: string;
+  TypeName?: string;
 }
 
 /** Raw physical product returned by `gift_realtime_stock`. */
@@ -292,9 +304,21 @@ export interface HKSouvenirStockItem {
  * @returns Response with goods data for the given category.
  */
 export async function fetchGoodsByCategory(
-  category: number
+  category: number,
+  typeId?: string
 ): Promise<HKApiResponse> {
-  return sendToHKApi("setmeal_getsellgoods", { Category: String(category) });
+  return sendToHKApi("setmeal_getsellgoods", {
+    Category: String(category),
+    ...(typeId ? { TypeId: typeId } : {}),
+  });
+}
+
+/**
+ * Fetch package/ticket classifications from the HK API.
+ * Action: `setmeal_type_select`
+ */
+export async function fetchSetmealTypes(): Promise<HKApiResponse> {
+  return sendToHKApi("setmeal_type_select", {});
 }
 
 /**

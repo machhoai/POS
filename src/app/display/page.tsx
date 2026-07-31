@@ -56,9 +56,9 @@ export default function CustomerDisplayPage() {
           <p className="text-emerald-400/70 text-sm">
             Order: {order.localOrderId}
           </p>
-          {order.paymentMethod === "QR_CODE" && (
-            <p className="text-emerald-400/50 text-sm mt-1">Paid via QR Code</p>
-          )}
+          <p className="text-emerald-400/50 text-sm mt-1">
+            {order.paymentMethodName || order.paymentMethod}
+          </p>
         </div>
       </main>
     );

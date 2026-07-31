@@ -73,8 +73,9 @@ export default function VoucherInput({
                     </p>
                 </div>
                 <button
+                    type="button"
                     onClick={onRemoveVoucher}
-                    className="w-9 h-9 flex items-center justify-center text-amber-600/60 hover:text-red-500 active:bg-red-50 rounded-lg transition-colors shrink-0"
+                    className="w-12 h-12 flex items-center justify-center text-amber-600/60 hover:text-red-500 active:bg-red-50 rounded-xl transition-colors shrink-0 touch-manipulation"
                     aria-label="Xóa voucher"
                 >
                     <svg
@@ -99,8 +100,9 @@ export default function VoucherInput({
     if (!isExpanded) {
         return (
             <button
+                type="button"
                 onClick={() => setIsExpanded(true)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] active:bg-[var(--color-surface-hover)] rounded-xl border border-dashed border-[var(--color-border)] transition-colors min-h-[40px]"
+                className="w-full flex items-center justify-center gap-2 px-4 text-sm font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] active:bg-[var(--color-surface-hover)] rounded-xl border border-dashed border-[var(--color-border)] transition-colors min-h-12 touch-manipulation"
             >
                 <svg
                     className="w-4 h-4"
@@ -139,8 +141,9 @@ export default function VoucherInput({
 
                 {/* Nút quét camera */}
                 <button
+                    type="button"
                     onClick={handleScanCamera}
-                    className="w-12 h-12 flex items-center justify-center bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] active:bg-[var(--color-surface-active)] transition-colors shrink-0"
+                    className="w-12 h-12 flex items-center justify-center bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] active:bg-[var(--color-surface-active)] transition-colors shrink-0 touch-manipulation"
                     aria-label="Quét mã bằng camera"
                 >
                     <svg
@@ -167,18 +170,20 @@ export default function VoucherInput({
             {/* Hàng nút: Hủy + Áp dụng */}
             <div className="flex gap-2">
                 <button
+                    type="button"
                     onClick={() => {
                         setIsExpanded(false);
                         setCode("");
                     }}
-                    className="flex-1 py-2.5 text-xs font-medium text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] rounded-xl active:bg-[var(--color-surface-active)] transition-colors min-h-[40px]"
+                    className="flex-1 px-4 text-sm font-semibold text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] rounded-xl active:bg-[var(--color-surface-active)] transition-colors min-h-12 touch-manipulation"
                 >
                     Hủy
                 </button>
                 <button
+                    type="button"
                     onClick={handleApply}
                     disabled={!code.trim() || isValidating}
-                    className="flex-1 py-2.5 text-xs font-semibold text-white bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] active:bg-[var(--color-accent-muted)] disabled:bg-gray-200 disabled:text-gray-400 rounded-xl transition-colors min-h-[40px] flex items-center justify-center gap-1.5"
+                    className="flex-1 px-4 text-sm font-bold text-white bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] active:bg-[var(--color-accent-muted)] disabled:bg-gray-200 disabled:text-gray-400 rounded-xl transition-colors min-h-12 flex items-center justify-center gap-1.5 touch-manipulation"
                 >
                     {isValidating ? (
                         <>

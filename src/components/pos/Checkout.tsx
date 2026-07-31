@@ -11,11 +11,16 @@ import { useCartStore } from "@/lib/stores/useCartStore";
 import type { PaymentMethod } from "@/lib/types/order";
 
 interface CheckoutProps {
+  warehouseId: string;
   onComplete: (orderId: string) => void;
   onCancel: () => void;
 }
 
-export default function Checkout({ onComplete, onCancel }: CheckoutProps) {
+export default function Checkout({
+  warehouseId,
+  onComplete,
+  onCancel,
+}: CheckoutProps) {
   const paymentMethod = useCartStore((s) => s.paymentMethod);
   const setPaymentMethod = useCartStore((s) => s.setPaymentMethod);
   const isCheckingOut = useCartStore((s) => s.isCheckingOut);
@@ -26,21 +31,21 @@ export default function Checkout({ onComplete, onCancel }: CheckoutProps) {
 
   const handleCheckout = async () => {
     try {
-      const orderId = await checkout(shopId);
-      onComplete(orderId);
+      const result = await checkout(shopId, warehouseId);
+      onComplete(result.localOrderId);
     } catch (err) {
-      console.error("[Checkout] Failed:", err);
+      console.error("[Thanh toán] Thất bại:", err);
     }
   };
 
   const paymentMethods: { value: PaymentMethod; label: string; icon: string }[] = [
-    { value: "CASH", label: "Cash", icon: "💵" },
-    { value: "QR_CODE", label: "QR Code", icon: "📱" },
+    { value: "CASH", label: "Tiền mặt", icon: "💵" },
+    { value: "QR_CODE", label: "Chuyển khoản", icon: "📱" },
   ];
 
   return (
     <div className="p-6">
-      <h2 className="text-xl font-semibold mb-6">Select Payment Method</h2>
+      <h2 className="text-xl font-semibold mb-6">Chọn phương thức thanh toán</h2>
 
       {/* Payment Method Selection */}
       <div className="grid grid-cols-2 gap-4 mb-8">
@@ -66,14 +71,14 @@ export default function Checkout({ onComplete, onCancel }: CheckoutProps) {
           onClick={onCancel}
           className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg font-medium transition-colors"
         >
-          Back
+          Quay lại
         </button>
         <button
           onClick={handleCheckout}
           disabled={isCheckingOut}
           className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 rounded-lg font-bold transition-colors"
         >
-          {isCheckingOut ? "Processing..." : "Confirm Payment"}
+          {isCheckingOut ? "Đang xử lý..." : "Xác nhận thanh toán"}
         </button>
       </div>
     </div>

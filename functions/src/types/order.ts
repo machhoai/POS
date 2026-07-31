@@ -39,12 +39,21 @@ export interface PosOrder {
   localOrderId: string;
   hkOrderNumber: string | null;
   shopId: number;
+  warehouseId: string;
+  createdBy: string;
+  operatorId: string;
+  operatorFirebaseUid: string;
+  operatorName: string;
   /** HK system member UID — required by the 鲸舰 API for order_create */
   uid?: string;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
+  paymentMethodId: string;
+  paymentMethodName: string;
   totalAmount: number;
   items: OrderItem[];
   sync: SyncMetadata;
   createdAt: string;
+  updatedAt: string;
+  paidAt?: string;
 }

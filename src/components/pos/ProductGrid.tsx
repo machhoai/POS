@@ -72,7 +72,7 @@ export default function ProductGrid({
             </div>
 
             <div className="px-4 pb-2 flex items-end justify-between gap-4 shrink-0">
-                <div>
+                <div className="flex flex-col">
                     <h2 className="text-lg font-bold tracking-[-0.02em] text-[var(--color-text-primary)]">Sản phẩm</h2>
                     <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                         {displayProducts.length} lựa chọn đang hiển thị
@@ -80,7 +80,7 @@ export default function ProductGrid({
                 </div>
 
                 {availableTypes.length > 1 && (
-                    <div className="flex items-center gap-1 overflow-x-auto over scrollbar-thin max-w-[65%] pb-1">
+                    <div className="flex flex-1 items-center justify-end gap-1 overflow-x-auto over scrollbar-thin pb-1">
                         <TypeButton active={selectedType === null} label="Tất cả" onClick={() => setSelectedType(null)} />
                         {availableTypes.map((typeName) => (
                             <TypeButton
@@ -163,7 +163,7 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
                             <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICON_PATHS[product.category] ?? CATEGORY_ICON_PATHS[10]} />
                         </svg>
                     </div>
-                    <span className="absolute left-2.5 top-2.5 max-w-[70%] px-2 py-1 rounded-md bg-white/80 backdrop-blur-sm text-[9px] font-bold uppercase tracking-wide text-[var(--color-text-secondary)] truncate">
+                    <span className="absolute left-2.5 top-2.5 max-w-[70%] px-2 py-1 rounded-md bg-white/80 backdrop-blur-sm text-[12px] font-bold uppercase tracking-wide text-[var(--color-text-secondary)] truncate">
                         {product.typeName || "Sản phẩm"}
                     </span>
                     <span className="absolute right-2.5 top-2.5 w-8 h-8 rounded-lg bg-white/90 text-[var(--color-accent)] flex items-center justify-center shadow-sm group-hover:bg-[var(--color-accent)] group-hover:text-white transition-colors">
@@ -174,10 +174,10 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
                 </div>
 
                 <div className="p-3.5 pt-3">
-                    <h3 className="text-[13px] font-bold leading-snug text-[var(--color-text-primary)] line-clamp-2 min-h-[36px]">
+                    <h3 className="text-[16px] font-bold leading-snug text-[var(--color-text-primary)] line-clamp-2">
                         {product.goodsName}
                     </h3>
-                    <p className="mt-1.5 text-[10px] leading-relaxed text-[var(--color-text-muted)] line-clamp-2 min-h-[28px]">
+                    <p className="text-[12px] leading-relaxed text-[var(--color-text-muted)] line-clamp-2">
                         {description}
                     </p>
                     <div className="mt-3 flex items-end justify-between gap-2">

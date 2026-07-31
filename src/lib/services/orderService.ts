@@ -9,31 +9,16 @@
 //   - Querying orders by status
 // =============================================================================
 
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  onSnapshot,
-  getDocs,
-  type Unsubscribe,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "@/lib/firebase/client";
 import type {
   PosOrder,
   OrderStatus,
-  CreateOrderInput,
+  OrderItem,
+  PaymentMethod,
 } from "@/lib/types/order";
 
-/** Firestore collection name for POS orders. */
-const COLLECTION_NAME = "pos_orders";
-
-/** Reference to the pos_orders collection. */
-const ordersRef = collection(db, COLLECTION_NAME);
+type Unsubscribe = () => void;
 
 /**
  * Generate a unique local order ID using timestamp and a random suffix.
@@ -41,138 +26,184 @@ const ordersRef = collection(db, COLLECTION_NAME);
  *
  * @example "ORD-1715420000-042"
  */
-function generateLocalOrderId(): string {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const suffix = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
+export function generateLocalOrderId(): string {
+  const timestamp = Date.now();
+  const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 6).toUpperCase();
   return `ORD-${timestamp}-${suffix}`;
 }
 
-/**
- * Create a new order in Firestore with initial DRAFT status.
- *
- * @param input - The order data (shopId, paymentMethod, totalAmount, items).
- * @returns The generated `localOrderId` for tracking.
- */
-export async function createLocalOrder(input: CreateOrderInput): Promise<string> {
-  const localOrderId = generateLocalOrderId();
+interface OrderRequest {
+  localOrderId: string;
+  shopId: number;
+  warehouseId: string;
+  items: Array<Pick<OrderItem, "goodsId" | "quantity">>;
+}
 
-  const order: PosOrder = {
-    localOrderId,
-    hkOrderNumber: null,
-    shopId: input.shopId,
-    status: "DRAFT",
-    paymentMethod: input.paymentMethod,
-    totalAmount: input.totalAmount,
-    items: input.items,
-    sync: {
-      retryCount: 0,
-      lastError: null,
-      syncedAt: null,
+interface PreparedOrderResult {
+  localOrderId: string;
+  status: OrderStatus;
+  totalAmount: number;
+}
+
+export interface CheckoutOrderResult extends PreparedOrderResult {
+  hkOrderNumber: string | null;
+  paidAt: string | null;
+}
+
+export interface OrderSyncStatusResult {
+  localOrderId: string;
+  hkOrderNumber: string | null;
+  status: OrderStatus;
+  totalAmount: number;
+  lastError: string | null;
+  updatedAt: string;
+}
+
+/** Create a Firebase draft through the authenticated backend. */
+export async function prepareOrder(
+  input: OrderRequest,
+): Promise<PreparedOrderResult> {
+  const callable = httpsCallable<
+    { action: "prepareOrder"; payload: OrderRequest },
+    PreparedOrderResult
+  >(
+    functions,
+    "getPosAuthSession",
+  );
+  const result = await callable({ action: "prepareOrder", payload: input });
+  return result.data;
+}
+
+/** Commit local payment without waiting for the remote China API. */
+export async function checkoutOrder(
+  input: OrderRequest & { paymentMethodId: PaymentMethod },
+): Promise<CheckoutOrderResult> {
+  const callable = httpsCallable<
+    {
+      action: "checkoutOrder";
+      payload: OrderRequest & { paymentMethodId: PaymentMethod };
     },
-    createdAt: new Date().toISOString(),
+    CheckoutOrderResult
+  >(functions, "getPosAuthSession");
+  const result = await callable({ action: "checkoutOrder", payload: input });
+  return result.data;
+}
+
+/** Read background synchronization status without direct Firestore access. */
+export async function fetchOrderSyncStatus(
+  localOrderId: string,
+): Promise<OrderSyncStatusResult> {
+  const callable = httpsCallable<
+    {
+      action: "getOrderStatus";
+      payload: { localOrderId: string };
+    },
+    OrderSyncStatusResult
+  >(functions, "getPosAuthSession");
+  const result = await callable({
+    action: "getOrderStatus",
+    payload: { localOrderId },
+  });
+  return result.data;
+}
+
+export interface OrderHistoryResult {
+  orders: PosOrder[];
+  fetchedAt: string;
+}
+
+export async function fetchOrderHistory(
+  requestedLimit = 500,
+): Promise<OrderHistoryResult> {
+  const callable = httpsCallable<
+    { action: "getOrders"; payload: { limit: number } },
+    OrderHistoryResult
+  >(functions, "getPosAuthSession");
+  const result = await callable({
+    action: "getOrders",
+    payload: { limit: requestedLimit },
+  });
+  return result.data;
+}
+
+async function fetchLatestOrder(
+  shopId: number,
+  status?: "DRAFT",
+): Promise<PosOrder | null> {
+  const callable = httpsCallable<
+    {
+      action: "getLatestOrder";
+      payload: { shopId: number; status?: "DRAFT" };
+    },
+    { order: PosOrder | null }
+  >(functions, "getPosAuthSession");
+  const result = await callable({
+    action: "getLatestOrder",
+    payload: { shopId, ...(status ? { status } : {}) },
+  });
+  return result.data.order;
+}
+
+function subscribeByPolling(
+  shopId: number,
+  callback: (order: PosOrder | null) => void,
+  status?: "DRAFT",
+): Unsubscribe {
+  let isActive = true;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const poll = async () => {
+    try {
+      const order = await fetchLatestOrder(shopId, status);
+      if (isActive) callback(order);
+    } catch (error: unknown) {
+      console.error("[Đơn hàng] Không thể cập nhật màn hình khách:", error);
+    } finally {
+      if (isActive) timeoutId = setTimeout(poll, 2000);
+    }
   };
 
-  // Use the localOrderId as the document ID for easy lookups
-  const docRef = doc(db, COLLECTION_NAME, localOrderId);
-  await setDoc(docRef, order);
-
-  return localOrderId;
+  void poll();
+  return () => {
+    isActive = false;
+    if (timeoutId) clearTimeout(timeoutId);
+  };
 }
 
-/**
- * Update an order's status and optionally merge additional fields.
- *
- * @param localOrderId - The document ID / local order ID.
- * @param status - The new status to set.
- * @param extra - Optional additional fields to merge (e.g., sync metadata).
- */
-export async function updateOrderStatus(
-  localOrderId: string,
-  status: OrderStatus,
-  extra?: Partial<Pick<PosOrder, "hkOrderNumber" | "sync">>
-): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, localOrderId);
-
-  const updateData: Record<string, unknown> = { status };
-
-  if (extra?.hkOrderNumber !== undefined) {
-    updateData.hkOrderNumber = extra.hkOrderNumber;
-  }
-  if (extra?.sync !== undefined) {
-    updateData.sync = extra.sync;
-  }
-
-  await updateDoc(docRef, updateData);
-}
-
-/**
- * Subscribe to the current DRAFT order for a specific shop.
- * Used by the Customer Display to mirror the cashier's cart in real-time.
- *
- * @param shopId - The shop to filter by.
- * @param callback - Fires whenever the draft order changes.
- * @returns An unsubscribe function to stop listening.
- */
 export function subscribeToCurrentDraft(
   shopId: number,
-  callback: (order: PosOrder | null) => void
+  callback: (order: PosOrder | null) => void,
 ): Unsubscribe {
-  const q = query(
-    ordersRef,
-    where("shopId", "==", shopId),
-    where("status", "==", "DRAFT"),
-    orderBy("createdAt", "desc"),
-    limit(1)
-  );
-
-  return onSnapshot(q, (snapshot) => {
-    if (snapshot.empty) {
-      callback(null);
-      return;
-    }
-    const doc = snapshot.docs[0];
-    callback(doc.data() as PosOrder);
-  });
+  return subscribeByPolling(shopId, callback, "DRAFT");
 }
 
-/**
- * Subscribe to the most recent order for a shop (any status).
- * Used by the Customer Display to show success/payment screens.
- *
- * @param shopId - The shop to filter by.
- * @param callback - Fires whenever the latest order changes.
- * @returns An unsubscribe function to stop listening.
- */
 export function subscribeToLatestOrder(
   shopId: number,
-  callback: (order: PosOrder | null) => void
+  callback: (order: PosOrder | null) => void,
 ): Unsubscribe {
-  const q = query(
-    ordersRef,
-    where("shopId", "==", shopId),
-    orderBy("createdAt", "desc"),
-    limit(1)
-  );
-
-  return onSnapshot(q, (snapshot) => {
-    if (snapshot.empty) {
-      callback(null);
-      return;
-    }
-    const doc = snapshot.docs[0];
-    callback(doc.data() as PosOrder);
-  });
+  return subscribeByPolling(shopId, callback);
 }
 
-/**
- * Fetch all orders with a specific status.
- * Primarily used by the sync worker to find LOCAL_PAID orders.
- *
- * @param status - The order status to filter by.
- * @returns Array of matching orders.
- */
-export async function getOrdersByStatus(status: OrderStatus): Promise<PosOrder[]> {
-  const q = query(ordersRef, where("status", "==", status));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => doc.data() as PosOrder);
+export async function retryOrderSync(
+  localOrderId: string,
+): Promise<{ localOrderId: string; status: OrderStatus; queued: boolean }> {
+  const callable = httpsCallable<
+    {
+      action: "retryOrderSync";
+      payload: { localOrderId: string };
+    },
+    { localOrderId: string; status: OrderStatus; queued: boolean }
+  >(functions, "getPosAuthSession");
+  const result = await callable({
+    action: "retryOrderSync",
+    payload: { localOrderId },
+  });
+  return result.data;
+}
+
+export async function getOrdersByStatus(
+  status: OrderStatus,
+): Promise<PosOrder[]> {
+  const result = await fetchOrderHistory();
+  return result.orders.filter((order) => order.status === status);
 }

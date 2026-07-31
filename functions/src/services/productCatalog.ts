@@ -1,4 +1,7 @@
-import type { HKSouvenirStockItem } from "./hkApiService";
+import type {
+  HKGoodsItem,
+  HKSouvenirStockItem,
+} from "./hkApiService";
 import type { SyncProduct } from "../types/product";
 import { SOUVENIR_CATEGORY_ID } from "../types/product";
 
@@ -9,6 +12,44 @@ function toFiniteNumber(value: number | string | undefined): number | null {
 
   const parsedValue = Number(value);
   return Number.isFinite(parsedValue) ? parsedValue : null;
+}
+
+/**
+ * Convert package/ticket records queried through a concrete `TypeId` into
+ * products carrying the classification name used by the POS group filter.
+ */
+export function mapGroupedGoods(
+  items: HKGoodsItem[],
+  category: number,
+  typeName: string,
+  lastSyncAt: string
+): SyncProduct[] {
+  const normalizedTypeName = typeName.trim() || "Khác";
+
+  return items.flatMap((item) => {
+    const goodsId = (item.GoodsId || item.goodsId || "").trim();
+    if (!goodsId) return [];
+
+    const subCategory = String(
+      item.SubCategory ??
+      item.subCategory ??
+      item.CategoryGroupName ??
+      item.categoryGroupName ??
+      ""
+    );
+
+    return [{
+      goodsId,
+      goodsName:
+        (item.GoodsName || item.goodsName || "").trim() || "Không rõ tên",
+      description: item.Remark || item.remark || "",
+      price: toFiniteNumber(item.Price ?? item.price) ?? 0,
+      category,
+      subCategory,
+      typeName: normalizedTypeName,
+      lastSyncAt,
+    }];
+  });
 }
 
 /**

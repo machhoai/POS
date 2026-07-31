@@ -10,6 +10,8 @@ import { formatCurrency } from "@/lib/utils/formatCurrency";
 interface OrderDetailModalProps {
     order: PosOrder;
     onClose: () => void;
+    isRetrying: boolean;
+    onRetrySync: () => void | Promise<void>;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -27,7 +29,12 @@ function formatDateTime(iso: string) {
     });
 }
 
-export default function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
+export default function OrderDetailModal({
+    order,
+    onClose,
+    isRetrying,
+    onRetrySync,
+}: OrderDetailModalProps) {
     const status = STATUS_LABELS[order.status] || STATUS_LABELS.DRAFT;
     const finalAmount = order.totalAmount - (order.voucherDiscount || 0);
 
@@ -60,8 +67,9 @@ export default function OrderDetailModal({ order, onClose }: OrderDetailModalPro
                     <div className="grid grid-cols-2 gap-3">
                         <InfoRow label="Trạng thái" value={status.label} className={status.color} />
                         <InfoRow label="Thời gian" value={formatDateTime(order.createdAt)} />
-                        <InfoRow label="Thanh toán" value={order.paymentMethod === "CASH" ? "💵 Tiền mặt" : "📱 QR Code"} />
+                        <InfoRow label="Thanh toán" value={order.paymentMethodName || order.paymentMethod} />
                         <InfoRow label="Mã HK" value={order.hkOrderNumber || "—"} />
+                        {order.operatorName && <InfoRow label="Nhân viên" value={order.operatorName} />}
                     </div>
 
                     {/* Khách hàng */}
@@ -130,6 +138,16 @@ export default function OrderDetailModal({ order, onClose }: OrderDetailModalPro
                         <span className="text-sm font-bold text-[var(--color-text-primary)]">Tổng cộng</span>
                         <span className="text-xl font-bold text-[var(--color-accent)]">{formatCurrency(finalAmount)}</span>
                     </div>
+                    {order.status === "SYNC_FAILED" && (
+                        <button
+                            type="button"
+                            onClick={onRetrySync}
+                            disabled={isRetrying}
+                            className="mt-3 min-h-12 w-full touch-manipulation rounded-xl bg-[var(--color-accent)] px-4 text-sm font-bold text-white active:scale-[0.98] disabled:opacity-50"
+                        >
+                            {isRetrying ? "Đang xếp lại..." : "Thử đồng bộ lại"}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

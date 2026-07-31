@@ -13,19 +13,16 @@ export {
   getPosAuthSession,
   resolvePosLoginIdentifier,
 } from "./auth/functions";
+export {
+  onOrderLocalPaid,
+  retryFailedOrderSyncs,
+} from "./order/functions";
 
-import {
-  onDocumentUpdated,
-  type Change,
-  type FirestoreEvent,
-} from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as functions from "firebase-functions";
 import { db } from "./config/firebase";
 import { POS_COLLECTIONS } from "./config/collections";
 import {
-  createRemoteOrder,
-  confirmRemotePayment,
   fetchGoodsByCategory,
   fetchSubscribeBaseList,
   fetchSouvenirStock,
@@ -35,7 +32,6 @@ import type {
   HKSouvenirStockItem,
 } from "./services/hkApiService";
 import { mapSellableSouvenirs } from "./services/productCatalog";
-import type { PosOrder } from "./types/order";
 import type { SyncProduct } from "./types/product";
 import {
   SOUVENIR_CATEGORY_ID,
@@ -211,10 +207,15 @@ export const syncProducts = onCall(
             goodsId,
             goodsName: item.GoodsName || item.goodsName || "Không rõ tên",
             description: item.Remark || item.remark || "",
-            price: item.Price || item.price || 0,
+            price: Number(item.Price || item.price || 0),
             category: categoryId,
-            subCategory: item.SubCategory || item.subCategory
-              || item.CategoryGroupName || item.categoryGroupName || "",
+            subCategory: String(
+              item.SubCategory ||
+              item.subCategory ||
+              item.CategoryGroupName ||
+              item.categoryGroupName ||
+              "",
+            ),
             lastSyncAt: now,
           });
         }
@@ -366,151 +367,3 @@ function extractSouvenirList(
 
   return [];
 }
-
-
-// =============================================================================
-// onOrderLocalPaid — Firestore Trigger
-// =============================================================================
-
-/**
- * Firestore Trigger: Fires when any document in `pos_orders` is updated.
- *
- * We check if the status has changed to "LOCAL_PAID" and then kick off
- * the background sync process with the HK remote API.
- */
-export const onOrderLocalPaid = onDocumentUpdated(
-  {
-    document: `${POS_COLLECTIONS.orders}/{orderId}`,
-    region: "asia-southeast1",
-  },
-  async (
-    event: FirestoreEvent<
-      Change<functions.firestore.QueryDocumentSnapshot> | undefined,
-      { orderId: string }
-    >
-  ) => {
-    // Safety: ensure event data exists
-    if (!event.data) {
-      functions.logger.warn("[Sync] Event fired with no data, skipping.");
-      return;
-    }
-
-    const beforeData = event.data.before.data() as PosOrder;
-    const afterData = event.data.after.data() as PosOrder;
-    const orderId = event.params.orderId;
-
-    // ── Guard: Only process transitions TO "LOCAL_PAID" ──────────────────
-    if (beforeData.status === afterData.status) {
-      return; // No status change
-    }
-
-    if (afterData.status !== "LOCAL_PAID") {
-      return; // Not the transition we care about
-    }
-
-    functions.logger.info(
-      `[Sync] Order ${orderId} transitioned to LOCAL_PAID. Starting sync...`
-    );
-
-    const docRef = db.collection(POS_COLLECTIONS.orders).doc(orderId);
-
-    try {
-      // Step 1: Mark as SYNCING
-      await docRef.update({ status: "SYNCING" });
-
-      // Step 2: Create order on HK remote system (order_create)
-      // The HK API expects: Uid (member ID) + GoodsItems[{GoodsId, Quantity}]
-      functions.logger.info(`[Sync] Calling order_create for ${orderId}...`);
-      const createResponse = await createRemoteOrder({
-        uid: afterData.uid || "",
-        goodsItems: afterData.items.map((item) => ({
-          goodsId: item.goodsId,
-          quantity: String(item.quantity),
-        })),
-      });
-
-      if (!createResponse.success) {
-        throw new Error(
-          `order_create failed: [${createResponse.code}] ${createResponse.msg}`
-        );
-      }
-
-      const hkOrderNumber = (createResponse.data?.orderNumber as string) || null;
-      functions.logger.info(
-        `[Sync] order_create success. HK Order: ${hkOrderNumber}`
-      );
-
-      // Step 3: Confirm payment on HK remote system (order_pay)
-      functions.logger.info(`[Sync] Calling order_pay for ${orderId}...`);
-      const payResponse = await confirmRemotePayment({
-        orderNumber: hkOrderNumber || "",
-        payAmount: afterData.totalAmount,
-      });
-
-      if (!payResponse.success) {
-        throw new Error(
-          `order_pay failed: [${payResponse.code}] ${payResponse.msg}`
-        );
-      }
-
-      functions.logger.info(`[Sync] order_pay success for ${orderId}.`);
-
-      // Step 4: Mark as SYNC_SUCCESS
-      await docRef.update({
-        status: "SYNC_SUCCESS",
-        hkOrderNumber,
-        sync: {
-          retryCount: afterData.sync?.retryCount || 0,
-          lastError: null,
-          syncedAt: new Date().toISOString(),
-        },
-      });
-
-      functions.logger.info(
-        `[Sync] ✅ Order ${orderId} synced successfully as ${hkOrderNumber}.`
-      );
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      functions.logger.error(
-        `[Sync] ❌ Order ${orderId} sync failed: ${errorMessage}`
-      );
-
-      // Mark as SYNC_FAILED with error details
-      const currentRetryCount = afterData.sync?.retryCount || 0;
-      await docRef.update({
-        status: "SYNC_FAILED",
-        sync: {
-          retryCount: currentRetryCount + 1,
-          lastError: errorMessage,
-          syncedAt: null,
-        },
-      });
-    }
-  }
-);
-
-/**
- * Scheduled Function: Retry failed syncs.
- * Runs every 5 minutes to pick up SYNC_FAILED orders and retry them.
- *
- * To enable, uncomment and configure in firebase.json:
- * "functions": { "schedule": "every 5 minutes" }
- */
-// export const retryFailedSyncs = onSchedule("every 5 minutes", async () => {
-//   const failedOrders = await db
-//     .collection("pos_orders")
-//     .where("status", "==", "SYNC_FAILED")
-//     .where("sync.retryCount", "<", 5) // Max 5 retries
-//     .get();
-//
-//   functions.logger.info(
-//     `[Retry] Found ${failedOrders.size} failed orders to retry.`
-//   );
-//
-//   for (const doc of failedOrders.docs) {
-//     // Reset to LOCAL_PAID to re-trigger the onOrderLocalPaid function
-//     await doc.ref.update({ status: "LOCAL_PAID" });
-//   }
-// });

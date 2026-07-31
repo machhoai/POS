@@ -4,22 +4,35 @@
 // Trang Lịch sử Đơn hàng — /orders
 // =============================================================================
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { MOCK_ORDERS } from "@/lib/data/mockOrders";
+import { useOrderHistoryStore } from "@/lib/stores/useOrderHistoryStore";
 import type { PosOrder } from "@/lib/types/order";
 import Sidebar from "@/components/layout/Sidebar";
 import OrderFilters, { DEFAULT_FILTERS, type OrderFilterState } from "@/components/orders/OrderFilters";
 import OrderTable from "@/components/orders/OrderTable";
 import OrderDetailModal from "@/components/orders/OrderDetailModal";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import { filterAndSortOrders } from "@/lib/utils/filterOrders";
+import { retryOrderSync } from "@/lib/services/orderService";
+import { showError, showPromise } from "@/lib/utils/toast";
+
+const EMPTY_ORDERS: PosOrder[] = [];
 
 export default function OrderHistoryPage() {
     const router = useRouter();
     const { user, userDoc, isLoading: authLoading, logout } = useAuth();
     const [filters, setFilters] = useState<OrderFilterState>(DEFAULT_FILTERS);
     const [selectedOrder, setSelectedOrder] = useState<PosOrder | null>(null);
+    const [isRetrying, setIsRetrying] = useState(false);
+    // Zustand can preserve the previous store shape during development HMR.
+    const orders = useOrderHistoryStore((state) =>
+        Array.isArray(state.orders) ? state.orders : EMPTY_ORDERS
+    );
+    const isLoadingOrders = useOrderHistoryStore((state) => state.isLoading);
+    const orderError = useOrderHistoryStore((state) => state.error);
+    const fetchOrders = useOrderHistoryStore((state) => state.fetchOrders);
 
     // Auth guard
     useEffect(() => {
@@ -28,72 +41,40 @@ export default function OrderHistoryPage() {
         }
     }, [authLoading, user, userDoc, router]);
 
-    // Filter + Sort logic
-    const filteredOrders = useMemo(() => {
-        let result = [...MOCK_ORDERS];
-
-        // Filter by date range
-        if (filters.dateFrom) {
-            const from = new Date(filters.dateFrom);
-            from.setHours(0, 0, 0, 0);
-            result = result.filter((o) => new Date(o.createdAt) >= from);
-        }
-        if (filters.dateTo) {
-            const to = new Date(filters.dateTo);
-            to.setHours(23, 59, 59, 999);
-            result = result.filter((o) => new Date(o.createdAt) <= to);
-        }
-
-        // Filter by hour range
-        if (filters.hourFrom) {
-            const [h, m] = filters.hourFrom.split(":").map(Number);
-            result = result.filter((o) => {
-                const d = new Date(o.createdAt);
-                return d.getHours() > h || (d.getHours() === h && d.getMinutes() >= m);
-            });
-        }
-        if (filters.hourTo) {
-            const [h, m] = filters.hourTo.split(":").map(Number);
-            result = result.filter((o) => {
-                const d = new Date(o.createdAt);
-                return d.getHours() < h || (d.getHours() === h && d.getMinutes() <= m);
-            });
-        }
-
-        // Filter by status
-        if (filters.statusFilter !== "all") {
-            result = result.filter((o) => o.status === filters.statusFilter);
-        }
-
-        // Search
-        if (filters.searchQuery.trim()) {
-            const q = filters.searchQuery.toLowerCase().trim();
-            result = result.filter((o) =>
-                o.localOrderId.toLowerCase().includes(q) ||
-                o.items.some((i) => i.goodsName.toLowerCase().includes(q)) ||
-                (o.customerName?.toLowerCase().includes(q)) ||
-                (o.customerPhone?.includes(q))
+    useEffect(() => {
+        if (!user || !userDoc) return;
+        void fetchOrders().catch(() => {
+            showError(
+                "Không thể tải lịch sử đơn",
+                "Vui lòng kiểm tra kết nối và thử lại.",
             );
-        }
+        });
+    }, [user, userDoc, fetchOrders]);
 
-        // Sort
-        switch (filters.sortBy) {
-            case "newest":
-                result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                break;
-            case "oldest":
-                result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-                break;
-            case "highest":
-                result.sort((a, b) => b.totalAmount - a.totalAmount);
-                break;
-            case "lowest":
-                result.sort((a, b) => a.totalAmount - b.totalAmount);
-                break;
-        }
+    const filteredOrders = useMemo(
+        () => filterAndSortOrders(orders, filters),
+        [filters, orders],
+    );
 
-        return result;
-    }, [filters]);
+    const handleRetrySync = useCallback(async () => {
+        if (!selectedOrder) return;
+        setIsRetrying(true);
+        try {
+            await showPromise(retryOrderSync(selectedOrder.localOrderId), {
+                loading: "Đang xếp lại đơn...",
+                success: "Đã xếp lại đơn",
+                error: "Không thể đồng bộ lại",
+                successDescription: "Hệ thống sẽ tiếp tục thanh toán đơn ở chế độ nền.",
+                errorDescription: "Vui lòng kiểm tra cấu hình thanh toán và thử lại.",
+            });
+            await fetchOrders();
+            setSelectedOrder(null);
+        } catch (error: unknown) {
+            console.error("[Lịch sử đơn] Không thể đồng bộ lại:", error);
+        } finally {
+            setIsRetrying(false);
+        }
+    }, [selectedOrder, fetchOrders]);
 
     // Stats
     const totalRevenue = filteredOrders.reduce((s, o) => s + o.totalAmount, 0);
@@ -114,13 +95,21 @@ export default function OrderHistoryPage() {
             <main className="flex-1 flex flex-col min-w-0">
                 {/* Header */}
                 <header className="px-6 py-4 border-b border-[var(--color-border)] shrink-0">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-4">
                         <div>
                             <h1 className="text-lg font-bold text-[var(--color-text-primary)]">Lịch sử đơn hàng</h1>
                             <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                                 {filteredOrders.length} đơn · Doanh thu: {formatCurrency(totalRevenue)} · Đã đồng bộ: {successCount}
                             </p>
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => void fetchOrders()}
+                            disabled={isLoadingOrders}
+                            className="min-h-11 touch-manipulation rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm font-bold text-[var(--color-text-primary)] transition-colors hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50"
+                        >
+                            {isLoadingOrders ? "Đang tải..." : "Làm mới"}
+                        </button>
                     </div>
                 </header>
 
@@ -131,13 +120,28 @@ export default function OrderHistoryPage() {
 
                 {/* Table */}
                 <div className="flex-1 overflow-y-auto">
-                    <OrderTable orders={filteredOrders} onSelectOrder={setSelectedOrder} />
+                    {isLoadingOrders && orders.length === 0 ? (
+                        <div className="flex h-48 items-center justify-center text-sm text-[var(--color-text-muted)]">
+                            Đang tải lịch sử đơn hàng...
+                        </div>
+                    ) : orderError && orders.length === 0 ? (
+                        <div className="flex h-48 items-center justify-center text-sm text-red-500">
+                            {orderError}
+                        </div>
+                    ) : (
+                        <OrderTable orders={filteredOrders} onSelectOrder={setSelectedOrder} />
+                    )}
                 </div>
             </main>
 
             {/* Detail Modal */}
             {selectedOrder && (
-                <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
+                <OrderDetailModal
+                    order={selectedOrder}
+                    isRetrying={isRetrying}
+                    onRetrySync={handleRetrySync}
+                    onClose={() => setSelectedOrder(null)}
+                />
             )}
         </div>
     );

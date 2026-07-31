@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import "goey-toast/styles.css";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
+import ToastProvider from "@/components/providers/ToastProvider";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -22,6 +24,7 @@ export default function RootLayout({
     <html lang="vi" data-scroll-behavior="smooth">
       <body className={`${inter.className} antialiased`}>
         <AuthProvider>{children}</AuthProvider>
+        <ToastProvider />
       </body>
     </html>
   );

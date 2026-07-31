@@ -7,15 +7,28 @@
 // =============================================================================
 
 import { create } from "zustand";
-import type { OrderItem, PaymentMethod } from "@/lib/types/order";
-import { createLocalOrder, updateOrderStatus } from "@/lib/services/orderService";
+import type {
+  OrderItem,
+  OrderStatus,
+  PaymentMethod,
+} from "@/lib/types/order";
+import {
+  checkoutOrder,
+  fetchOrderSyncStatus,
+  generateLocalOrderId,
+  prepareOrder,
+  type CheckoutOrderResult,
+} from "@/lib/services/orderService";
 
 /** The shape of the cart store. */
 interface CartState {
   // ── State ──────────────────────────────────────────────────────────────────
   items: OrderItem[];
   paymentMethod: PaymentMethod;
+  draftOrderId: string | null;
   currentOrderId: string | null;
+  currentHkOrderNumber: string | null;
+  currentOrderStatus: OrderStatus | null;
   isCheckingOut: boolean;
 
   // ── Computed (derived in selectors, not stored) ────────────────────────────
@@ -27,6 +40,8 @@ interface CartState {
   updateQuantity: (goodsId: string, quantity: number) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
   clearCart: () => void;
+  prepareCurrentOrder: (shopId: number, warehouseId: string) => Promise<void>;
+  refreshCurrentOrderStatus: () => Promise<void>;
 
   /**
    * Complete the checkout flow:
@@ -37,7 +52,10 @@ interface CartState {
    * @param shopId - The shop this order belongs to.
    * @returns The localOrderId of the completed order.
    */
-  checkout: (shopId: number) => Promise<string>;
+  checkout: (
+    shopId: number,
+    warehouseId: string,
+  ) => Promise<CheckoutOrderResult>;
 }
 
 /** Selector: compute total amount from items. */
@@ -56,7 +74,10 @@ export const useCartStore = create<CartState>((set, get) => ({
   // ── Initial State ──────────────────────────────────────────────────────────
   items: [],
   paymentMethod: "CASH",
+  draftOrderId: null,
   currentOrderId: null,
+  currentHkOrderNumber: null,
+  currentOrderStatus: null,
   isCheckingOut: false,
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -75,7 +96,17 @@ export const useCartStore = create<CartState>((set, get) => ({
         };
       }
       // Add new item to cart
-      return { items: [...state.items, item] };
+      return {
+        items: [...state.items, item],
+        ...(state.items.length === 0
+          ? {
+              draftOrderId: null,
+              currentOrderId: null,
+              currentHkOrderNumber: null,
+              currentOrderStatus: null,
+            }
+          : {}),
+      };
     }),
 
   removeItem: (goodsId) =>
@@ -101,42 +132,96 @@ export const useCartStore = create<CartState>((set, get) => ({
     set({
       items: [],
       paymentMethod: "CASH",
+      draftOrderId: null,
       currentOrderId: null,
+      currentHkOrderNumber: null,
+      currentOrderStatus: null,
       isCheckingOut: false,
     }),
 
-  checkout: async (shopId) => {
+  prepareCurrentOrder: async (shopId, warehouseId) => {
+    const state = get();
+    if (state.items.length === 0 || state.draftOrderId) return;
+
+    const localOrderId = generateLocalOrderId();
+    set({ draftOrderId: localOrderId });
+
+    try {
+      const prepared = await prepareOrder({
+        localOrderId,
+        shopId,
+        warehouseId,
+        items: state.items.map(({ goodsId, quantity }) => ({
+          goodsId,
+          quantity,
+        })),
+      });
+
+      const current = get();
+      if (
+        current.draftOrderId === localOrderId &&
+        current.items.length > 0
+      ) {
+        set({
+          currentOrderId: prepared.localOrderId,
+          currentOrderStatus: prepared.status,
+        });
+      }
+    } catch (error: unknown) {
+      console.error("[Giỏ hàng] Không thể tạo đơn nháp nền:", error);
+    }
+  },
+
+  refreshCurrentOrderStatus: async () => {
+    const localOrderId = get().currentOrderId;
+    if (!localOrderId) return;
+
+    try {
+      const result = await fetchOrderSyncStatus(localOrderId);
+      if (get().currentOrderId !== localOrderId) return;
+      set({
+        currentHkOrderNumber: result.hkOrderNumber,
+        currentOrderStatus: result.status,
+      });
+    } catch (error: unknown) {
+      console.error("[Giỏ hàng] Không thể tải trạng thái đồng bộ đơn:", error);
+    }
+  },
+
+  checkout: async (shopId, warehouseId) => {
     const state = get();
     if (state.items.length === 0) {
-      throw new Error("Cannot checkout with an empty cart.");
+      throw new Error("Không thể thanh toán khi giỏ hàng trống.");
     }
 
     set({ isCheckingOut: true });
 
     try {
-      const totalAmount = selectTotalAmount(state);
-
-      // Step 1: Create order in Firestore as DRAFT
-      const localOrderId = await createLocalOrder({
+      const localOrderId = state.draftOrderId || generateLocalOrderId();
+      const result = await checkoutOrder({
+        localOrderId,
         shopId,
-        paymentMethod: state.paymentMethod,
-        totalAmount,
-        items: state.items,
+        warehouseId,
+        paymentMethodId: state.paymentMethod,
+        items: state.items.map(({ goodsId, quantity }) => ({
+          goodsId,
+          quantity,
+        })),
       });
 
-      // Step 2: Immediately mark as LOCAL_PAID (payment is instant at POS)
-      await updateOrderStatus(localOrderId, "LOCAL_PAID");
-
-      // Step 3: Clear the cart and store the order ID for reference
       set({
         items: [],
         paymentMethod: "CASH",
-        currentOrderId: localOrderId,
+        draftOrderId: null,
+        currentOrderId: result.localOrderId,
+        currentHkOrderNumber: result.hkOrderNumber,
+        currentOrderStatus: result.status,
         isCheckingOut: false,
       });
 
-      return localOrderId;
-    } catch (error) {
+      return result;
+    } catch (error: unknown) {
+      console.error("[Giỏ hàng] Thanh toán Firebase thất bại:", error);
       set({ isCheckingOut: false });
       throw error;
     }

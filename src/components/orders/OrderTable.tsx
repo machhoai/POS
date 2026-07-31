@@ -94,7 +94,7 @@ export default function OrderTable({ orders, onSelectOrder }: OrderTableProps) {
                                 </td>
                                 <td className="px-4 py-3.5">
                                     <span className="text-xs text-[var(--color-text-secondary)]">
-                                        {order.paymentMethod === "CASH" ? "💵 Tiền mặt" : "📱 QR"}
+                                        {order.paymentMethodName || order.paymentMethod}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3.5 text-right">
