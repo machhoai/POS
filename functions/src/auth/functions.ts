@@ -5,11 +5,15 @@ import {
   PosAuthDomainError,
   resolvePosLoginEmail,
 } from "../services/posAuthService";
+import {
+  loadPosProductCatalog,
+  synchronizePosProducts,
+} from "../services/productSyncService";
 
 const CALLABLE_OPTIONS = {
   region: "asia-southeast1",
   cors: true,
-  timeoutSeconds: 15,
+  timeoutSeconds: 120,
   maxInstances: 20,
 } as const;
 
@@ -56,6 +60,37 @@ export const getPosAuthSession = onCall(
         "unauthenticated",
         "Bạn phải đăng nhập để xác minh phiên POS.",
       );
+    }
+
+    const action = request.data?.action;
+    if (action === "getProducts") {
+      try {
+        return await loadPosProductCatalog();
+      } catch (error: unknown) {
+        logger.error("[getPosAuthSession] Product catalog load failed", {
+          uid: request.auth.uid,
+          error,
+        });
+        throw new HttpsError(
+          "internal",
+          "Không thể tải danh sách sản phẩm POS.",
+        );
+      }
+    }
+
+    if (action === "syncProducts") {
+      try {
+        return await synchronizePosProducts(request.auth.uid);
+      } catch (error: unknown) {
+        logger.error("[getPosAuthSession] Product synchronization failed", {
+          uid: request.auth.uid,
+          error,
+        });
+        throw new HttpsError(
+          "internal",
+          "Đồng bộ sản phẩm thất bại. Vui lòng thử lại.",
+        );
+      }
     }
 
     try {

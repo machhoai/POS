@@ -22,6 +22,7 @@ import {
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as functions from "firebase-functions";
 import { db } from "./config/firebase";
+import { POS_COLLECTIONS } from "./config/collections";
 import {
   createRemoteOrder,
   confirmRemotePayment,
@@ -40,6 +41,64 @@ import {
   SOUVENIR_CATEGORY_ID,
   SYNC_CATEGORY_IDS,
 } from "./types/product";
+
+// =============================================================================
+// getPosProducts — authenticated, read-only product catalog
+// =============================================================================
+
+export const getPosProducts = onCall(
+  { region: "asia-southeast1", cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Bạn phải đăng nhập để tải danh sách sản phẩm."
+      );
+    }
+
+    const snapshot = await db.collection(POS_COLLECTIONS.products).get();
+    const products: SyncProduct[] = [];
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data() as Partial<SyncProduct>;
+      const price = Number(data.price);
+      const category = Number(data.category);
+
+      if (
+        !data.goodsName ||
+        !Number.isFinite(price) ||
+        !Number.isFinite(category)
+      ) {
+        continue;
+      }
+
+      // Souvenirs without a sale price are not sellable POS products.
+      if (category === SOUVENIR_CATEGORY_ID && price <= 0) {
+        continue;
+      }
+
+      products.push({
+        goodsId: String(data.goodsId || doc.id),
+        goodsName: String(data.goodsName),
+        description: data.description ? String(data.description) : "",
+        price,
+        category,
+        subCategory: data.subCategory ? String(data.subCategory) : "",
+        amount: Number.isFinite(Number(data.amount))
+          ? Number(data.amount)
+          : undefined,
+        giftNo: data.giftNo ? String(data.giftNo) : undefined,
+        typeName: data.typeName ? String(data.typeName) : undefined,
+        lastSyncAt: data.lastSyncAt ? String(data.lastSyncAt) : "",
+      });
+    }
+
+    return {
+      products,
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+);
 
 // =============================================================================
 // syncProducts — onCall Cloud Function
@@ -172,8 +231,8 @@ export const syncProducts = onCall(
       const souvenirResponse = await fetchSouvenirStock();
 
       if (!souvenirResponse.success) {
-        functions.logger.warn(
-          `[syncProducts] ⚠️ Không tải được sản phẩm lưu niệm: ${souvenirResponse.msg}`
+        throw new Error(
+          `gift_realtime_stock failed: [${souvenirResponse.code}] ${souvenirResponse.msg}`
         );
       } else {
         const rawSouvenirs = extractSouvenirList(souvenirResponse.data);
@@ -204,7 +263,9 @@ export const syncProducts = onCall(
         const batch = db.batch();
 
         for (const product of chunk) {
-          const docRef = db.collection("jpos_products").doc(product.goodsId);
+          const docRef = db
+            .collection(POS_COLLECTIONS.products)
+            .doc(product.goodsId);
           batch.set(docRef, product, { merge: true });
         }
 
@@ -219,7 +280,7 @@ export const syncProducts = onCall(
       let removedSouvenirCount = 0;
       if (synchronizedSouvenirIds) {
         const existingSouvenirs = await db
-          .collection("jpos_products")
+          .collection(POS_COLLECTIONS.products)
           .where("category", "==", SOUVENIR_CATEGORY_ID)
           .get();
         const staleSouvenirDocs = existingSouvenirs.docs.filter(
@@ -318,7 +379,10 @@ function extractSouvenirList(
  * the background sync process with the HK remote API.
  */
 export const onOrderLocalPaid = onDocumentUpdated(
-  { document: "pos_orders/{orderId}", region: "asia-southeast1" },
+  {
+    document: `${POS_COLLECTIONS.orders}/{orderId}`,
+    region: "asia-southeast1",
+  },
   async (
     event: FirestoreEvent<
       Change<functions.firestore.QueryDocumentSnapshot> | undefined,
@@ -348,7 +412,7 @@ export const onOrderLocalPaid = onDocumentUpdated(
       `[Sync] Order ${orderId} transitioned to LOCAL_PAID. Starting sync...`
     );
 
-    const docRef = db.collection("pos_orders").doc(orderId);
+    const docRef = db.collection(POS_COLLECTIONS.orders).doc(orderId);
 
     try {
       // Step 1: Mark as SYNCING

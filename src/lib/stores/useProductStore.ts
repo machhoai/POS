@@ -8,7 +8,10 @@
 import { create } from "zustand";
 import type { Product } from "@/lib/types/product";
 import { CATEGORY_MAP } from "@/lib/types/product";
-import { MOCK_PRODUCTS } from "@/lib/data/mockProducts";
+import {
+  getProducts,
+  type StoredProduct,
+} from "@/lib/services/productService";
 
 /** Một entry danh mục đã derive từ danh sách sản phẩm. */
 export interface CategoryEntry {
@@ -61,6 +64,33 @@ function deriveCategories(products: Product[]): CategoryEntry[] {
   return result;
 }
 
+function toProduct(source: StoredProduct): Product {
+  const price = Number(source.price);
+
+  return {
+    goodsId: String(source.goodsId),
+    goodsName: String(source.goodsName),
+    description: source.description || "",
+    price,
+    afterTaxPrice: price,
+    underlinePrice: 0,
+    category: Number(source.category),
+    subCategory: source.subCategory || "",
+    typeId: "",
+    typeName: source.typeName || source.subCategory || "",
+    foreColor: "#FFFFFF",
+    backColor: "#2563EB",
+    taxRate: 0,
+    isOpenSales: true,
+    isEnabled: true,
+    amount: Number.isFinite(Number(source.amount))
+      ? Number(source.amount)
+      : 0,
+    giftNo: source.giftNo,
+    lastSyncAt: source.lastSyncAt || undefined,
+  };
+}
+
 /**
  * Product store — tải tất cả sản phẩm vào RAM để filter không độ trễ.
  */
@@ -80,23 +110,34 @@ export const useProductStore = create<ProductState>((set) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // TODO: Thay bằng Firestore fetch khi HK API sẵn sàng
-      // const snapshot = await getDocs(collection(db, "jpos_products"));
-      // Hiện tại dùng mock data
-      const products = MOCK_PRODUCTS;
+      const result = await getProducts();
+      const products = result.products
+        .map(toProduct)
+        .filter(
+          (product) =>
+            Boolean(CATEGORY_MAP[product.category]) &&
+            Number.isFinite(product.price) &&
+            (product.category !== 10 || product.price > 0)
+        );
 
       const categories = deriveCategories(products);
+      const lastSyncAt =
+        products
+          .map((product) => product.lastSyncAt)
+          .filter((value): value is string => Boolean(value))
+          .sort()
+          .at(-1) || result.fetchedAt;
 
       set((state) => ({
         products,
         availableCategories: categories,
-        // Tự động chọn tab đầu tiên nếu chưa chọn
         selectedCategory:
-          state.selectedCategory !== null
+          state.selectedCategory !== null &&
+          categories.some((category) => category.id === state.selectedCategory)
             ? state.selectedCategory
             : categories[0]?.id ?? null,
         isLoading: false,
-        lastSyncAt: new Date().toISOString(),
+        lastSyncAt,
         error: null,
       }));
     } catch (error) {

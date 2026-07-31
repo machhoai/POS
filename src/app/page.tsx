@@ -12,8 +12,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/useCartStore";
 import { useProductStore } from "@/lib/stores/useProductStore";
-// TODO: Bật lại khi HK API sẵn sàng
-// import { syncProducts } from "@/lib/services/productService";
+import { syncProducts } from "@/lib/services/productService";
 import TopNav from "@/components/pos/TopNav";
 import Sidebar from "@/components/layout/Sidebar";
 import ProductGrid from "@/components/pos/ProductGrid";
@@ -91,11 +90,11 @@ export default function CashierPage() {
     }
   }, [user, userDoc, fetchProducts]);
 
-  // ── Product Sync (hiện tại refetch mock data) ─────────────────────────
+  // ── Product Sync ───────────────────────────────────────────────────────
   const handleSyncProducts = useCallback(async () => {
     setIsSyncingProducts(true);
     try {
-      // TODO: Thay bằng syncProducts() khi HK API sẵn sàng
+      await syncProducts();
       await fetchProducts();
     } catch (error) {
       console.error("[POS] Lỗi đồng bộ sản phẩm:", error);

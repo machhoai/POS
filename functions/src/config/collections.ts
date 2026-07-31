@@ -9,3 +9,14 @@ export const SHARED_AUTH_COLLECTIONS = {
   userWarehouseRoles: "user_warehouse_roles",
   warehouses: "warehouses",
 } as const;
+
+/**
+ * Collections owned by the POS application.
+ *
+ * `jpos_products` is a legacy collection name already used in production.
+ * New POS-owned collections must use the `pos_` prefix.
+ */
+export const POS_COLLECTIONS = {
+  products: "jpos_products",
+  orders: "pos_orders",
+} as const;
