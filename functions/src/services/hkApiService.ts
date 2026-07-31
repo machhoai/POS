@@ -49,9 +49,10 @@ function isMockMode(): boolean {
  */
 async function sendToHKApi(
   action: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  version?: string
 ): Promise<HKApiResponse> {
-  const signedRequest = generateHkApiRequest({ action, body });
+  const signedRequest = generateHkApiRequest({ action, body, version });
 
   if (isMockMode()) {
     // ── MOCK MODE ──────────────────────────────────────────────────────────
@@ -117,6 +118,15 @@ async function sendToHKApi(
             payStatus: 2,
             payStatusDesc: "已支付",
           },
+          desc: "Mock response",
+        };
+
+      case "gift_realtime_stock":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          data: { items: [] },
           desc: "Mock response",
         };
 
@@ -258,6 +268,22 @@ export interface HKGoodsItem {
   categoryGroupName?: string;
 }
 
+/** Raw physical product returned by `gift_realtime_stock`. */
+export interface HKSouvenirStockItem {
+  GiftName?: string;
+  giftName?: string;
+  GiftNo?: string;
+  giftNo?: string;
+  TypeName?: string;
+  typeName?: string;
+  Amount?: number | string;
+  amount?: number | string;
+  GiftPrice?: number | string;
+  giftPrice?: number | string;
+  Price?: number | string;
+  price?: number | string;
+}
+
 /**
  * Fetch sell-goods by category from the HK API.
  * Action: `setmeal_getsellgoods`
@@ -286,4 +312,19 @@ export async function fetchSubscribeBaseList(
     body.category = category;
   }
   return sendToHKApi("oversea_subscribe_base_list", body);
+}
+
+/**
+ * Fetch physical products with their current stock and sale price.
+ * Action: `gift_realtime_stock`
+ *
+ * The response's `price` is the sale price. `giftPrice` is the purchase unit
+ * price and must not be used as the POS selling price.
+ */
+export async function fetchSouvenirStock(): Promise<HKApiResponse> {
+  return sendToHKApi(
+    "gift_realtime_stock",
+    { isFilterZero: true },
+    "10.11.8"
+  );
 }

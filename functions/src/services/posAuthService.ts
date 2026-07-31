@@ -16,6 +16,7 @@ import type {
 import {
   activeRoleAssignments,
   buildScopedPermissions,
+  isSelectablePosWarehouse,
   isUsableLoginUser,
   normalizePhone,
   normalizeUsername,
@@ -129,6 +130,7 @@ function mapWarehouse(snapshot: DocumentSnapshot): WarehouseInfo {
     id: snapshot.id,
     name: typeof data.name === "string" ? data.name : snapshot.id,
     code: typeof data.code === "string" ? data.code : "",
+    type: "STORE",
     address: typeof data.address === "string" ? data.address : null,
   };
 }
@@ -162,9 +164,7 @@ async function getAccessibleWarehouses(
       const data = snapshot.data();
       return (
         snapshot.exists &&
-        data !== undefined &&
-        data.is_deleted !== true &&
-        data.status === "ACTIVE" &&
+        isSelectablePosWarehouse(data) &&
         (canAccessAll || allowedWarehouseIds.has(snapshot.id))
       );
     })

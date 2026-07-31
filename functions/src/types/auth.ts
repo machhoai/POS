@@ -1,4 +1,5 @@
 export type UserStatus = "ACTIVE" | "INACTIVE" | "SUSPENDED";
+export type WarehouseType = "MAIN" | "STORE" | "OFFICE";
 
 export interface SharedUserRecord {
   id: string;
@@ -37,6 +38,7 @@ export interface WarehouseInfo {
   id: string;
   name: string;
   code: string;
+  type: WarehouseType;
   address: string | null;
 }
 

@@ -25,6 +25,24 @@ export function isUsableLoginUser(
   return user !== null && user.is_deleted === false && user.status === "ACTIVE";
 }
 
+/**
+ * POS sessions may only select active, non-deleted physical stores.
+ * MAIN and OFFICE warehouses remain available to bduck-system, but are not
+ * valid POS selling locations.
+ */
+export function isSelectablePosWarehouse(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const warehouse = value as Record<string, unknown>;
+  return (
+    warehouse.type === "STORE" &&
+    warehouse.status === "ACTIVE" &&
+    warehouse.is_deleted !== true
+  );
+}
+
 function resolveRoleAssignmentScopeKey(
   warehouseId: string | null | undefined,
 ): string | null {

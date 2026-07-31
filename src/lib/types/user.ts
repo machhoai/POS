@@ -2,6 +2,7 @@
 // D:\Github\bduck-system\packages\shared-types\src\users.ts.
 
 export type UserStatus = "ACTIVE" | "INACTIVE" | "SUSPENDED";
+export type WarehouseType = "MAIN" | "STORE" | "OFFICE";
 
 export interface UserDoc {
   id: string;
@@ -35,6 +36,7 @@ export interface WarehouseInfo {
   id: string;
   name: string;
   code: string;
+  type: WarehouseType;
   address: string | null;
 }
 

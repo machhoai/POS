@@ -52,6 +52,8 @@ export interface SignaturePayload {
   action: string;
   /** The business parameters object — will be JSON.stringify'd into the `body` field */
   body: Record<string, unknown>;
+  /** Action-specific API version. Defaults to HK_API_VERSION when omitted. */
+  version?: string;
 }
 
 /**
@@ -142,7 +144,7 @@ export function generateHkApiRequest(
   // Read credentials from environment
   const appId = process.env.HK_API_APP_ID;
   const key = process.env.HK_API_KEY;
-  const version = process.env.HK_API_VERSION || "11.7.1";
+  const version = payload.version || process.env.HK_API_VERSION || "11.7.1";
 
   if (!appId) {
     throw new Error(

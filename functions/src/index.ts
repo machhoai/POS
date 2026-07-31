@@ -22,18 +22,31 @@ import {
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as functions from "firebase-functions";
 import { db } from "./config/firebase";
-import { createRemoteOrder, confirmRemotePayment, fetchGoodsByCategory, fetchSubscribeBaseList } from "./services/hkApiService";
-import type { HKGoodsItem } from "./services/hkApiService";
+import {
+  createRemoteOrder,
+  confirmRemotePayment,
+  fetchGoodsByCategory,
+  fetchSubscribeBaseList,
+  fetchSouvenirStock,
+} from "./services/hkApiService";
+import type {
+  HKGoodsItem,
+  HKSouvenirStockItem,
+} from "./services/hkApiService";
+import { mapSellableSouvenirs } from "./services/productCatalog";
 import type { PosOrder } from "./types/order";
 import type { SyncProduct } from "./types/product";
-import { SYNC_CATEGORY_IDS } from "./types/product";
+import {
+  SOUVENIR_CATEGORY_ID,
+  SYNC_CATEGORY_IDS,
+} from "./types/product";
 
 // =============================================================================
 // syncProducts — onCall Cloud Function
 // =============================================================================
-// Iterates through category IDs (1, 2, 4, 6), calls the HK API
-// `setmeal_getsellgoods` for each, then batch-writes all products
-// to the Firestore `jpos_products` collection with docId = goodsId.
+// Fetches package categories through `setmeal_getsellgoods` and physical
+// souvenirs through `gift_realtime_stock`, then batch-writes all products to
+// the Firestore `jpos_products` collection with docId = goodsId.
 // =============================================================================
 
 export const syncProducts = onCall(
@@ -53,6 +66,7 @@ export const syncProducts = onCall(
 
     try {
       const allProducts: SyncProduct[] = [];
+      let synchronizedSouvenirIds: Set<string> | null = null;
       const now = new Date().toISOString();
 
       // ── Step 1: Fetch tickets/packages from oversea_subscribe_base_list ──
@@ -151,6 +165,36 @@ export const syncProducts = onCall(
         );
       }
 
+      // ── Step 3: Fetch sellable physical souvenirs ─────────────────────
+      functions.logger.info(
+        "[syncProducts] Đang tải sản phẩm lưu niệm từ gift_realtime_stock..."
+      );
+      const souvenirResponse = await fetchSouvenirStock();
+
+      if (!souvenirResponse.success) {
+        functions.logger.warn(
+          `[syncProducts] ⚠️ Không tải được sản phẩm lưu niệm: ${souvenirResponse.msg}`
+        );
+      } else {
+        const rawSouvenirs = extractSouvenirList(souvenirResponse.data);
+        const sellableSouvenirs = mapSellableSouvenirs(rawSouvenirs, now);
+        allProducts.push(...sellableSouvenirs);
+
+        if (rawSouvenirs.length > 0) {
+          synchronizedSouvenirIds = new Set(
+            sellableSouvenirs.map((product) => product.goodsId)
+          );
+        } else {
+          functions.logger.warn(
+            "[syncProducts] ⚠️ API trả về danh sách lưu niệm rỗng; bỏ qua dọn dữ liệu cũ để tránh xóa nhầm."
+          );
+        }
+
+        functions.logger.info(
+          `[syncProducts] Sản phẩm lưu niệm: ${sellableSouvenirs.length}/${rawSouvenirs.length} sản phẩm có giá bán`
+        );
+      }
+
       // Batch write to Firestore (max 500 per batch)
       const BATCH_LIMIT = 500;
       let totalWritten = 0;
@@ -168,13 +212,41 @@ export const syncProducts = onCall(
         totalWritten += chunk.length;
       }
 
+      // Remove legacy category-10 records that are no longer part of the
+      // authoritative sellable souvenir result. Only clean up after a
+      // successful, non-empty stock response to avoid destructive syncs when
+      // the remote API unexpectedly returns an empty payload.
+      let removedSouvenirCount = 0;
+      if (synchronizedSouvenirIds) {
+        const existingSouvenirs = await db
+          .collection("jpos_products")
+          .where("category", "==", SOUVENIR_CATEGORY_ID)
+          .get();
+        const staleSouvenirDocs = existingSouvenirs.docs.filter(
+          (doc) => !synchronizedSouvenirIds.has(doc.id)
+        );
+
+        for (let i = 0; i < staleSouvenirDocs.length; i += BATCH_LIMIT) {
+          const batch = db.batch();
+          const chunk = staleSouvenirDocs.slice(i, i + BATCH_LIMIT);
+
+          for (const doc of chunk) {
+            batch.delete(doc.ref);
+          }
+
+          await batch.commit();
+          removedSouvenirCount += chunk.length;
+        }
+      }
+
       functions.logger.info(
-        `[syncProducts] ✅ Đồng bộ thành công ${totalWritten} sản phẩm`
+        `[syncProducts] ✅ Đồng bộ thành công ${totalWritten} sản phẩm; đã xóa ${removedSouvenirCount} sản phẩm lưu niệm cũ`
       );
 
       return {
         success: true,
         productCount: totalWritten,
+        removedSouvenirCount,
         syncedAt: now,
       };
     } catch (error: unknown) {
@@ -214,6 +286,22 @@ function extractGoodsList(
 
   // Shape 5: { items: [...] }
   if (Array.isArray(data.items)) return data.items as HKGoodsItem[];
+
+  return [];
+}
+
+/**
+ * Extract the physical-stock list returned by `gift_realtime_stock`.
+ */
+function extractSouvenirList(
+  data: Record<string, unknown> | null
+): HKSouvenirStockItem[] {
+  if (!data) return [];
+
+  if (Array.isArray(data)) return data as HKSouvenirStockItem[];
+  if (Array.isArray(data.list)) return data.list as HKSouvenirStockItem[];
+  if (Array.isArray(data.data)) return data.data as HKSouvenirStockItem[];
+  if (Array.isArray(data.items)) return data.items as HKSouvenirStockItem[];
 
   return [];
 }

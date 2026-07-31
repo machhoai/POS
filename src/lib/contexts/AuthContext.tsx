@@ -151,10 +151,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      const warehouses = session.warehouses;
+      // Keep the selection boundary defensive even if an older or malformed
+      // backend response includes MAIN/OFFICE warehouse records.
+      const warehouses = session.warehouses.filter(
+        (warehouse) => warehouse.type === "STORE",
+      );
       if (warehouses.length === 0) {
         throw new AuthServiceError(
-          "Tài khoản chưa được gán điểm làm việc đang hoạt động.",
+          "Tài khoản chưa được gán cửa hàng đang hoạt động.",
           "no-warehouse",
         );
       }

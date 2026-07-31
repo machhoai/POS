@@ -35,14 +35,14 @@ export default function StoreSelector({
             </svg>
           </div>
           <h1 className="text-xl font-bold text-[var(--color-text-primary)]">
-            Chọn điểm làm việc
+            Chọn cửa hàng
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
             Xin chào{" "}
             <span className="text-[var(--color-accent)] font-medium">
               {userName}
             </span>
-            , vui lòng chọn điểm làm việc cho phiên POS.
+            , vui lòng chọn cửa hàng cho phiên POS.
           </p>
         </div>
 

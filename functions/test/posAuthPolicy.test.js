@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   buildScopedPermissions,
   isRoleAssignmentActive,
+  isSelectablePosWarehouse,
   isUsableLoginUser,
   normalizePhone,
   normalizeUsername,
@@ -37,6 +39,32 @@ test("only ACTIVE, non-deleted users can create a POS session", () => {
     false,
   );
   assert.equal(isUsableLoginUser({ ...activeUser, is_deleted: true }), false);
+});
+
+test("only active STORE warehouses are selectable in POS", () => {
+  const activeStore = {
+    type: "STORE",
+    status: "ACTIVE",
+    is_deleted: false,
+  };
+
+  assert.equal(isSelectablePosWarehouse(activeStore), true);
+  assert.equal(
+    isSelectablePosWarehouse({ ...activeStore, type: "MAIN" }),
+    false,
+  );
+  assert.equal(
+    isSelectablePosWarehouse({ ...activeStore, type: "OFFICE" }),
+    false,
+  );
+  assert.equal(
+    isSelectablePosWarehouse({ ...activeStore, status: "INACTIVE" }),
+    false,
+  );
+  assert.equal(
+    isSelectablePosWarehouse({ ...activeStore, is_deleted: true }),
+    false,
+  );
 });
 
 test("role validity uses the full Asia/Ho_Chi_Minh calendar day", () => {
