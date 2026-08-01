@@ -4,11 +4,10 @@ import { POS_COLLECTIONS } from "../config/collections";
 import {
   fetchGoodsByCategory,
   fetchSetmealTypes,
-  fetchSouvenirStock,
   type HKGoodsItem,
   type HKSetmealType,
-  type HKSouvenirStockItem,
 } from "./hkApiService";
+import { fetchSouvenirCatalog } from "./joyworldCatalogService";
 import {
   mapGroupedGoods,
   mapSellableSouvenirs,
@@ -80,13 +79,18 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
   for (const doc of snapshot.docs) {
     const data = doc.data() as Partial<SyncProduct>;
     const price = Number(data.price);
+    const storedAfterTaxPrice = Number(data.afterTaxPrice);
+    const afterTaxPrice = Number.isFinite(storedAfterTaxPrice)
+      ? storedAfterTaxPrice
+      : price;
     const category = Number(data.category);
 
     if (
       !data.goodsName ||
       !Number.isFinite(price) ||
+      !Number.isFinite(afterTaxPrice) ||
       !Number.isFinite(category) ||
-      (category === SOUVENIR_CATEGORY_ID && price <= 0)
+      (category === SOUVENIR_CATEGORY_ID && afterTaxPrice <= 0)
     ) {
       continue;
     }
@@ -96,6 +100,7 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       goodsName: String(data.goodsName),
       description: data.description ? String(data.description) : "",
       price,
+      afterTaxPrice,
       category,
       subCategory: data.subCategory ? String(data.subCategory) : "",
       ...(Number.isFinite(Number(data.amount))
@@ -204,16 +209,7 @@ export async function synchronizePosProducts(
     });
   }
 
-  const souvenirResponse = await fetchSouvenirStock();
-  if (!souvenirResponse.success) {
-    throw new Error(
-      `gift_realtime_stock failed: [${souvenirResponse.code}] ${souvenirResponse.msg}`,
-    );
-  }
-
-  const rawSouvenirs = extractList<HKSouvenirStockItem>(
-    souvenirResponse.data,
-  );
+  const rawSouvenirs = await fetchSouvenirCatalog();
   const sellableSouvenirs = mapSellableSouvenirs(rawSouvenirs, now);
   allProducts.push(...sellableSouvenirs);
 

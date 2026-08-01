@@ -165,7 +165,11 @@ async function loadAuthoritativeItems(
     }
 
     const product = snapshot.data();
-    const price = Number(product?.price);
+    const basePrice = Number(product?.price);
+    const storedAfterTaxPrice = Number(product?.afterTaxPrice);
+    const price = Number.isFinite(storedAfterTaxPrice) && storedAfterTaxPrice > 0
+      ? storedAfterTaxPrice
+      : basePrice;
     const goodsName = product?.goodsName;
     if (
       typeof goodsName !== "string" ||

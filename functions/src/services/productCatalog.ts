@@ -1,7 +1,7 @@
 import type {
   HKGoodsItem,
-  HKSouvenirStockItem,
 } from "./hkApiService";
+import type { JoyworldGiftCatalogItem } from "./joyworldCatalogService";
 import type { SyncProduct } from "../types/product";
 import { SOUVENIR_CATEGORY_ID } from "../types/product";
 
@@ -38,12 +38,16 @@ export function mapGroupedGoods(
       ""
     );
 
+    const price = toFiniteNumber(item.Price ?? item.price) ?? 0;
+
     return [{
       goodsId,
       goodsName:
         (item.GoodsName || item.goodsName || "").trim() || "Không rõ tên",
       description: item.Remark || item.remark || "",
-      price: toFiniteNumber(item.Price ?? item.price) ?? 0,
+      price,
+      afterTaxPrice:
+        toFiniteNumber(item.AfterTaxPrice ?? item.afterTaxPrice) ?? price,
       category,
       subCategory,
       typeName: normalizedTypeName,
@@ -53,42 +57,53 @@ export function mapGroupedGoods(
 }
 
 /**
- * Convert HK physical-stock records into POS souvenir products.
+ * Convert JoyWorld master-catalog records into POS souvenir products.
  *
- * Only records with a positive `price` are sellable. The similarly named
- * `giftPrice` field is the purchase unit price and is intentionally ignored.
+ * `afterTaxPrice` is the authoritative consumer price. The OpenAPI
+ * `gift_realtime_stock.price` field is intentionally not used because it is
+ * the before-tax value and that endpoint does not expose `afterTaxPrice`.
  */
 export function mapSellableSouvenirs(
-  items: HKSouvenirStockItem[],
+  items: JoyworldGiftCatalogItem[],
   lastSyncAt: string
 ): SyncProduct[] {
-  const productsByGiftNo = new Map<string, SyncProduct>();
+  const productsById = new Map<string, SyncProduct>();
 
   for (const item of items) {
-    const giftNo = (item.GiftNo || item.giftNo || "").trim();
-    const salePrice = toFiniteNumber(item.Price ?? item.price);
+    const goodsId = (item.goodsId || item.id || "").trim();
+    const giftNo = (item.giftNo || "").trim();
+    const price = toFiniteNumber(item.price) ?? 0;
+    const afterTaxPrice = toFiniteNumber(item.afterTaxPrice);
 
-    if (!giftNo || salePrice === null || salePrice <= 0) {
+    if (
+      !goodsId ||
+      !giftNo ||
+      afterTaxPrice === null ||
+      afterTaxPrice <= 0 ||
+      item.isEnabled === false ||
+      item.isOpenSales === false
+    ) {
       continue;
     }
 
     const amount = Math.max(
       0,
-      toFiniteNumber(item.Amount ?? item.amount) ?? 0
+      toFiniteNumber(item.stockAmount) ?? 0
     );
-    const typeName = (item.TypeName || item.typeName || "").trim();
-    const goodsName = (item.GiftName || item.giftName || "").trim() || giftNo;
-    const existingProduct = productsByGiftNo.get(giftNo);
+    const typeName = (item.typeName || "").trim();
+    const goodsName = (item.giftName || item.goodsName || "").trim() || giftNo;
+    const existingProduct = productsById.get(goodsId);
 
     if (existingProduct) {
       existingProduct.amount = (existingProduct.amount ?? 0) + amount;
       continue;
     }
 
-    productsByGiftNo.set(giftNo, {
-      goodsId: giftNo,
+    productsById.set(goodsId, {
+      goodsId,
       goodsName,
-      price: salePrice,
+      price,
+      afterTaxPrice,
       category: SOUVENIR_CATEGORY_ID,
       subCategory: typeName,
       typeName,
@@ -98,5 +113,5 @@ export function mapSellableSouvenirs(
     });
   }
 
-  return Array.from(productsByGiftNo.values());
+  return Array.from(productsById.values());
 }

@@ -15,6 +15,7 @@ import { useProductStore } from "@/lib/stores/useProductStore";
 import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { syncProducts } from "@/lib/services/productService";
 import { showError, showPromise } from "@/lib/utils/toast";
+import { filterProducts } from "@/lib/utils/productSearch";
 import TopNav from "@/components/pos/TopNav";
 import Sidebar from "@/components/layout/Sidebar";
 import ProductGrid from "@/components/pos/ProductGrid";
@@ -38,25 +39,13 @@ export default function CashierPage() {
 
   // ── Product Store ──────────────────────────────────────────────────────
   const allProducts = useProductStore((s) => s.products);
-  const availableCategories = useProductStore((s) => s.availableCategories);
   const selectedCategory = useProductStore((s) => s.selectedCategory);
   const searchQuery = useProductStore((s) => s.searchQuery);
 
-  const products = useMemo(() => {
-    let filtered = allProducts;
-    if (selectedCategory !== null) {
-      filtered = filtered.filter((p) => p.category === selectedCategory);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(
-        (product) =>
-          product.goodsName.toLowerCase().includes(q) ||
-          product.typeName.toLowerCase().includes(q),
-      );
-    }
-    return filtered;
-  }, [allProducts, selectedCategory, searchQuery]);
+  const products = useMemo(
+    () => filterProducts(allProducts, selectedCategory, searchQuery),
+    [allProducts, selectedCategory, searchQuery],
+  );
 
   // Derive filtered products — useMemo tránh tạo array mới mỗi render
   const isProductsLoading = useProductStore((s) => s.isLoading);
@@ -235,18 +224,18 @@ export default function CashierPage() {
           storeName={effectiveWarehouseName || "Điểm làm việc"}
           cashierName={userDoc.full_name}
           searchQuery={searchQuery}
+          selectedCategory={selectedCategory}
           onSearchChange={setSearchQuery}
+          onSelectCategory={setSelectedCategory}
           onSyncProducts={handleSyncProducts}
           isSyncing={isSyncingProducts}
         />
 
         <div className="flex-1 min-h-0">
           <ProductGrid
+            key={selectedCategory ?? "all"}
             products={products}
-            availableCategories={availableCategories}
-            selectedCategory={selectedCategory}
             isLoading={isProductsLoading}
-            onSelectCategory={setSelectedCategory}
             onAddToCart={handleAddToCart}
           />
         </div>

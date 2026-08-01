@@ -1,37 +1,36 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, useRef, useEffect, type CSSProperties } from "react";
 import type { Product } from "@/lib/types/product";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import { ShoppingCart } from "lucide-react";
+import { IoGift, IoTicket, IoChevronDown, IoFilterOutline } from "react-icons/io5";
 
 interface ProductGridProps {
     products: Product[];
-    availableCategories: { id: number; label: string }[];
-    selectedCategory: number | null;
     isLoading: boolean;
-    onSelectCategory: (category: number | null) => void;
     onAddToCart: (product: Product) => void;
 }
 
-const CATEGORY_ICON_PATHS: Record<number, string> = {
-    1: "M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.1a7.5 7.5 0 0 1 15 0A17.9 17.9 0 0 1 12 21.75c-2.68 0-5.22-.58-7.5-1.65Z",
-    4: "M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.38 5.25c-.62 0-1.13.5-1.13 1.13V9.4a3 3 0 0 1 0 5.2v3.03c0 .62.5 1.12 1.13 1.12h17.25c.62 0 1.12-.5 1.12-1.12V14.6a3 3 0 0 1 0-5.2V6.38c0-.62-.5-1.13-1.12-1.13H3.38Z",
-    10: "M21 8.25v10.5A2.25 2.25 0 0 1 18.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25m18 0A2.25 2.25 0 0 0 18.75 6H5.25A2.25 2.25 0 0 0 3 8.25m18 0V9A2.25 2.25 0 0 1 18.75 11.25H5.25A2.25 2.25 0 0 1 3 9v-.75m9-2.25v15m0-15H9.88a2.63 2.63 0 1 1 0-5.25C11.34.75 12 3 12 3s.66-2.25 2.13-2.25a2.63 2.63 0 1 1 0 5.25H12Z",
-};
-
 export default function ProductGrid({
     products,
-    availableCategories,
-    selectedCategory,
     isLoading,
-    onSelectCategory,
     onAddToCart,
 }: ProductGridProps) {
     const [selectedType, setSelectedType] = useState<string | null>(null);
 
+    const typeCounts = useMemo(() => {
+        const map = new Map<string, number>();
+        products.forEach((p) => {
+            const typeName = p.typeName || "Khác";
+            map.set(typeName, (map.get(typeName) || 0) + 1);
+        });
+        return map;
+    }, [products]);
+
     const availableTypes = useMemo(
-        () => Array.from(new Set(products.map((product) => product.typeName || "Khác"))),
-        [products],
+        () => Array.from(typeCounts.keys()).sort((a, b) => (typeCounts.get(b) || 0) - (typeCounts.get(a) || 0)),
+        [typeCounts],
     );
 
     const displayProducts = useMemo(() => {
@@ -39,58 +38,17 @@ export default function ProductGrid({
         return products.filter((product) => (product.typeName || "Khác") === selectedType);
     }, [availableTypes, products, selectedType]);
 
-    const handleSelectCategory = (categoryId: number) => {
-        setSelectedType(null);
-        onSelectCategory(categoryId);
-    };
-
     return (
         <section className="flex flex-col h-full min-h-0 bg-[var(--color-background)]">
-            <div className="px-4 pb-3 shrink-0">
-                <div className="flex items-center gap-2.5 overflow-x-auto scrollbar-thin pb-1">
-                    {availableCategories.map((category) => {
-                        const isActive = selectedCategory === category.id;
-
-                        return (
-                            <button
-                                type="button"
-                                key={category.id}
-                                onClick={() => handleSelectCategory(category.id)}
-                                className={`h-11 px-4 flex items-center gap-2 rounded-xl whitespace-nowrap text-xs font-semibold border transition-all ${isActive
-                                    ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-white"
-                                    : "bg-white border-transparent text-[var(--color-text-secondary)] hover:border-orange-200 hover:text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]"
-                                    }`}
-                            >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden="true">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICON_PATHS[category.id] ?? CATEGORY_ICON_PATHS[10]} />
-                                </svg>
-                                {category.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            <div className="px-4 pb-2 flex items-end justify-between gap-4 shrink-0">
-                <div className="flex flex-col">
-                    <h2 className="text-lg font-bold tracking-[-0.02em] text-[var(--color-text-primary)]">Sản phẩm</h2>
-                    <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                        {displayProducts.length} lựa chọn đang hiển thị
-                    </p>
-                </div>
-
+            <div className="px-4 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0 border-b border-gray-100/50">
                 {availableTypes.length > 1 && (
-                    <div className="flex flex-1 items-center justify-end gap-1 overflow-x-auto over scrollbar-thin pb-1">
-                        <TypeButton active={selectedType === null} label="Tất cả" onClick={() => setSelectedType(null)} />
-                        {availableTypes.map((typeName) => (
-                            <TypeButton
-                                key={typeName}
-                                active={selectedType === typeName}
-                                label={typeName}
-                                onClick={() => setSelectedType(typeName)}
-                            />
-                        ))}
-                    </div>
+                    <TypeFilterSelector
+                        availableTypes={availableTypes}
+                        typeCounts={typeCounts}
+                        selectedType={selectedType}
+                        onSelectType={setSelectedType}
+                        totalCount={products.length}
+                    />
                 )}
             </div>
 
@@ -115,18 +73,160 @@ export default function ProductGrid({
     );
 }
 
-function TypeButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+function TypeFilterSelector({
+    availableTypes,
+    typeCounts,
+    selectedType,
+    onSelectType,
+    totalCount,
+}: {
+    availableTypes: string[];
+    typeCounts: Map<string, number>;
+    selectedType: string | null;
+    onSelectType: (type: string | null) => void;
+    totalCount: number;
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        }
+        if (isOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [isOpen]);
+
+    const MAX_VISIBLE_PILLS = 4;
+    const visibleTypes = availableTypes.slice(0, MAX_VISIBLE_PILLS);
+    const hiddenTypes = availableTypes.slice(MAX_VISIBLE_PILLS);
+
+    const isSelectedInHidden = selectedType !== null && hiddenTypes.includes(selectedType);
+
+    const filteredHiddenTypes = useMemo(() => {
+        if (!searchQuery.trim()) return hiddenTypes;
+        return hiddenTypes.filter((t) =>
+            t.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [hiddenTypes, searchQuery]);
+
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap text-[11px] font-semibold border transition-colors ${active
-                ? "bg-[#242629] border-[#242629] text-white"
-                : "bg-transparent border-transparent text-[var(--color-text-muted)] hover:bg-white hover:text-[var(--color-text-primary)]"
-                }`}
-        >
-            {label}
-        </button>
+        <div className="relative flex items-center gap-1.5 flex-wrap justify-end" ref={dropdownRef}>
+            {/* Pill: Tất cả */}
+            <button
+                type="button"
+                onClick={() => onSelectType(null)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${selectedType === null
+                    ? "bg-[#242629] border-[#242629] text-white shadow-sm"
+                    : "bg-white border-transparent text-[var(--color-text-secondary)] hover:bg-gray-100 hover:text-[var(--color-text-primary)] shadow-sm"
+                    }`}
+            >
+                <span>Tất cả</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedType === null ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"
+                    }`}>
+                    {totalCount}
+                </span>
+            </button>
+
+            {/* Visible Pills (Top 3 most popular) */}
+            {visibleTypes.map((type) => {
+                const count = typeCounts.get(type) || 0;
+                const isActive = selectedType === type;
+                return (
+                    <button
+                        key={type}
+                        type="button"
+                        onClick={() => onSelectType(type)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${isActive
+                            ? "bg-[#242629] border-[#242629] text-white shadow-sm"
+                            : "bg-white border-transparent text-[var(--color-text-secondary)] hover:bg-gray-100 hover:text-[var(--color-text-primary)] shadow-sm"
+                            }`}
+                    >
+                        <span>{type}</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"
+                            }`}>
+                            {count}
+                        </span>
+                    </button>
+                );
+            })}
+
+            {/* Dropdown for remaining types */}
+            {hiddenTypes.length > 0 && (
+                <div className="relative">
+                    <button
+                        type="button"
+                        onClick={() => setIsOpen(!isOpen)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${isSelectedInHidden
+                            ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-white shadow-sm"
+                            : isOpen
+                                ? "bg-gray-200 border-gray-300 text-gray-900"
+                                : "bg-white border-transparent text-[var(--color-text-secondary)] hover:bg-gray-100 hover:text-[var(--color-text-primary)] shadow-sm"
+                            }`}
+                    >
+                        <IoFilterOutline className="w-3.5 h-3.5" />
+                        <span className="max-w-[120px] truncate">
+                            {isSelectedInHidden ? selectedType : `+${hiddenTypes.length} loại khác`}
+                        </span>
+                        <IoChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {/* Popover Menu */}
+                    {isOpen && (
+                        <div className="absolute right-0 top-full mt-2 w-64 bg-white/95 backdrop-blur-md rounded-2xl border border-gray-200/80 shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                            {hiddenTypes.length > 5 && (
+                                <div className="p-1 mb-1 border-b border-gray-100">
+                                    <input
+                                        type="text"
+                                        placeholder="Tìm phân loại..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-orange-400 focus:bg-white"
+                                        autoFocus
+                                    />
+                                </div>
+                            )}
+
+                            <div className="max-h-60 overflow-y-auto space-y-0.5 scrollbar-thin pr-1">
+                                {filteredHiddenTypes.map((type) => {
+                                    const count = typeCounts.get(type) || 0;
+                                    const isActive = selectedType === type;
+                                    return (
+                                        <button
+                                            key={type}
+                                            type="button"
+                                            onClick={() => {
+                                                onSelectType(type);
+                                                setIsOpen(false);
+                                            }}
+                                            className={`w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive
+                                                ? "bg-[var(--color-accent)] text-white"
+                                                : "text-gray-700 hover:bg-gray-100"
+                                                }`}
+                                        >
+                                            <span className="truncate pr-2">{type}</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isActive ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"
+                                                }`}>
+                                                {count}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+
+                                {filteredHiddenTypes.length === 0 && (
+                                    <p className="text-xs text-gray-400 text-center py-3">Không tìm thấy loại phù hợp</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -144,7 +244,7 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
     const description =
         product.description ||
         (product.category === 4
-            ? `${product.typeName} · Sẵn sàng sử dụng tại quầy`
+            ? `${product.typeName}`
             : product.category === 1
                 ? `${product.typeName} · Quyền lợi thành viên`
                 : `${product.subCategory || product.typeName} · Mã ${product.giftNo || product.goodsId.slice(0, 6)}`);
@@ -156,25 +256,21 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
                     <div className="absolute -right-8 -top-10 w-28 h-28 rounded-full bg-white/35" />
                     <div className="absolute -left-7 -bottom-10 w-24 h-24 rounded-full bg-white/30" />
                     <div
-                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[74px] h-[74px] rounded-[24px] rotate-[-5deg] flex items-center justify-center shadow-[0_14px_28px_rgba(24,24,27,0.12)]"
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 p-5 -translate-y-1/2 w-[74px] h-[74px] rounded-[24px] rotate-[-5deg] flex items-center justify-center shadow-[0_14px_28px_rgba(24,24,27,0.12)]"
                         style={{ backgroundColor: iconColor }}
                     >
-                        <svg className="w-9 h-9 text-white drop-shadow-sm rotate-[5deg]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
-                            <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICON_PATHS[product.category] ?? CATEGORY_ICON_PATHS[10]} />
-                        </svg>
+                        {product.category == 4 ? <IoTicket className="size-full text-white rotate-45" /> : <IoGift className="size-full text-white -rotate-2" />}
                     </div>
                     <span className="absolute left-2.5 top-2.5 max-w-[70%] px-2 py-1 rounded-md bg-white/80 backdrop-blur-sm text-[12px] font-bold uppercase tracking-wide text-[var(--color-text-secondary)] truncate">
                         {product.typeName || "Sản phẩm"}
                     </span>
-                    <span className="absolute right-2.5 top-2.5 w-8 h-8 rounded-lg bg-white/90 text-[var(--color-accent)] flex items-center justify-center shadow-sm group-hover:bg-[var(--color-accent)] group-hover:text-white transition-colors">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.39c.51 0 .95.34 1.09.84l.38 1.43M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.22a60.1 60.1 0 0 0 2.92-7.14 60.1 60.1 0 0 0-16.53-1.84L7.5 14.25Z" />
-                        </svg>
+                    <span className="absolute right-2.5 top-2.5 w-8 h-8 p-1 rounded-lg bg-white/90 text-[var(--color-accent)] flex items-center justify-center shadow-sm group-hover:bg-[var(--color-accent)] group-hover:text-white transition-colors">
+                        <ShoppingCart className="size-4" />
                     </span>
                 </div>
 
                 <div className="p-3.5 pt-3">
-                    <h3 className="text-[16px] font-bold leading-snug text-[var(--color-text-primary)] line-clamp-2">
+                    <h3 className="text-[14px] font-bold leading-snug text-[var(--color-text-primary)] line-clamp-2">
                         {product.goodsName}
                     </h3>
                     <p className="text-[12px] leading-relaxed text-[var(--color-text-muted)] line-clamp-2">

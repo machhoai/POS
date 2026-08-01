@@ -20,6 +20,7 @@ export interface StoredProduct {
   goodsName: string;
   description?: string;
   price: number;
+  afterTaxPrice?: number;
   category: number;
   subCategory: string;
   amount?: number;

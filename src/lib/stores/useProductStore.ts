@@ -8,6 +8,7 @@
 import { create } from "zustand";
 import type { Product } from "@/lib/types/product";
 import { CATEGORY_MAP } from "@/lib/types/product";
+import { filterProducts } from "@/lib/utils/productSearch";
 import {
   getProducts,
   type StoredProduct,
@@ -66,13 +67,17 @@ function deriveCategories(products: Product[]): CategoryEntry[] {
 
 function toProduct(source: StoredProduct): Product {
   const price = Number(source.price);
+  const storedAfterTaxPrice = Number(source.afterTaxPrice);
+  const afterTaxPrice = Number.isFinite(storedAfterTaxPrice)
+    ? storedAfterTaxPrice
+    : price;
 
   return {
     goodsId: String(source.goodsId),
     goodsName: String(source.goodsName),
     description: source.description || "",
     price,
-    afterTaxPrice: price,
+    afterTaxPrice,
     underlinePrice: 0,
     category: Number(source.category),
     subCategory: source.subCategory || "",
@@ -117,7 +122,8 @@ export const useProductStore = create<ProductState>((set) => ({
           (product) =>
             Boolean(CATEGORY_MAP[product.category]) &&
             Number.isFinite(product.price) &&
-            (product.category !== 10 || product.price > 0)
+            Number.isFinite(product.afterTaxPrice) &&
+            (product.category !== 10 || product.afterTaxPrice > 0)
         );
 
       const categories = deriveCategories(products);
@@ -165,24 +171,9 @@ export const useProductStore = create<ProductState>((set) => ({
  * Select sản phẩm đã lọc theo danh mục và tìm kiếm.
  */
 export const selectFilteredProducts = (state: ProductState): Product[] => {
-  let filtered = state.products;
-
-  // Lọc theo danh mục
-  if (state.selectedCategory !== null) {
-    filtered = filtered.filter(
-      (p) => p.category === state.selectedCategory
-    );
-  }
-
-  // Lọc theo tìm kiếm (tên + typeName)
-  if (state.searchQuery.trim()) {
-    const q = state.searchQuery.toLowerCase().trim();
-    filtered = filtered.filter(
-      (p) =>
-        p.goodsName.toLowerCase().includes(q) ||
-        p.typeName.toLowerCase().includes(q)
-    );
-  }
-
-  return filtered;
+  return filterProducts(
+    state.products,
+    state.selectedCategory,
+    state.searchQuery,
+  );
 };

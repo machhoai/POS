@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import "goey-toast/styles.css";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
@@ -25,6 +26,16 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         <AuthProvider>{children}</AuthProvider>
         <ToastProvider />
+        <Script
+          type="module"
+          src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"
+          strategy="lazyOnload"
+        />
+        <Script
+          noModule
+          src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"
+          strategy="lazyOnload"
+        />
       </body>
     </html>
   );

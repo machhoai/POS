@@ -25,12 +25,13 @@ import { POS_COLLECTIONS } from "./config/collections";
 import {
   fetchGoodsByCategory,
   fetchSubscribeBaseList,
-  fetchSouvenirStock,
 } from "./services/hkApiService";
-import type {
-  HKGoodsItem,
-  HKSouvenirStockItem,
-} from "./services/hkApiService";
+import type { HKGoodsItem } from "./services/hkApiService";
+import {
+  fetchSouvenirCatalog,
+  joyworldPassSecret,
+  joyworldUserSecret,
+} from "./services/joyworldCatalogService";
 import { mapSellableSouvenirs } from "./services/productCatalog";
 import type { SyncProduct } from "./types/product";
 import {
@@ -58,18 +59,23 @@ export const getPosProducts = onCall(
     for (const doc of snapshot.docs) {
       const data = doc.data() as Partial<SyncProduct>;
       const price = Number(data.price);
+      const storedAfterTaxPrice = Number(data.afterTaxPrice);
+      const afterTaxPrice = Number.isFinite(storedAfterTaxPrice)
+        ? storedAfterTaxPrice
+        : price;
       const category = Number(data.category);
 
       if (
         !data.goodsName ||
         !Number.isFinite(price) ||
+        !Number.isFinite(afterTaxPrice) ||
         !Number.isFinite(category)
       ) {
         continue;
       }
 
       // Souvenirs without a sale price are not sellable POS products.
-      if (category === SOUVENIR_CATEGORY_ID && price <= 0) {
+      if (category === SOUVENIR_CATEGORY_ID && afterTaxPrice <= 0) {
         continue;
       }
 
@@ -78,6 +84,7 @@ export const getPosProducts = onCall(
         goodsName: String(data.goodsName),
         description: data.description ? String(data.description) : "",
         price,
+        afterTaxPrice,
         category,
         subCategory: data.subCategory ? String(data.subCategory) : "",
         amount: Number.isFinite(Number(data.amount))
@@ -100,12 +107,16 @@ export const getPosProducts = onCall(
 // syncProducts — onCall Cloud Function
 // =============================================================================
 // Fetches package categories through `setmeal_getsellgoods` and physical
-// souvenirs through `gift_realtime_stock`, then batch-writes all products to
+// souvenirs through the JoyWorld manager catalog, then batch-writes products to
 // the Firestore `jpos_products` collection with docId = goodsId.
 // =============================================================================
 
 export const syncProducts = onCall(
-  { region: "asia-southeast1", cors: true },
+  {
+    region: "asia-southeast1",
+    cors: true,
+    secrets: [joyworldUserSecret, joyworldPassSecret],
+  },
   async (request) => {
     // Require authentication
     if (!request.auth) {
@@ -207,7 +218,14 @@ export const syncProducts = onCall(
             goodsId,
             goodsName: item.GoodsName || item.goodsName || "Không rõ tên",
             description: item.Remark || item.remark || "",
-            price: Number(item.Price || item.price || 0),
+            price: Number(item.Price ?? item.price ?? 0),
+            afterTaxPrice: Number(
+              item.AfterTaxPrice ??
+              item.afterTaxPrice ??
+              item.Price ??
+              item.price ??
+              0,
+            ),
             category: categoryId,
             subCategory: String(
               item.SubCategory ||
@@ -227,16 +245,10 @@ export const syncProducts = onCall(
 
       // ── Step 3: Fetch sellable physical souvenirs ─────────────────────
       functions.logger.info(
-        "[syncProducts] Đang tải sản phẩm lưu niệm từ gift_realtime_stock..."
+        "[syncProducts] Đang tải sản phẩm lưu niệm từ JoyWorld manager catalog..."
       );
-      const souvenirResponse = await fetchSouvenirStock();
-
-      if (!souvenirResponse.success) {
-        throw new Error(
-          `gift_realtime_stock failed: [${souvenirResponse.code}] ${souvenirResponse.msg}`
-        );
-      } else {
-        const rawSouvenirs = extractSouvenirList(souvenirResponse.data);
+      {
+        const rawSouvenirs = await fetchSouvenirCatalog();
         const sellableSouvenirs = mapSellableSouvenirs(rawSouvenirs, now);
         allProducts.push(...sellableSouvenirs);
 
@@ -276,7 +288,7 @@ export const syncProducts = onCall(
 
       // Remove legacy category-10 records that are no longer part of the
       // authoritative sellable souvenir result. Only clean up after a
-      // successful, non-empty stock response to avoid destructive syncs when
+      // successful, non-empty catalog response to avoid destructive syncs when
       // the remote API unexpectedly returns an empty payload.
       let removedSouvenirCount = 0;
       if (synchronizedSouvenirIds) {
@@ -348,22 +360,6 @@ function extractGoodsList(
 
   // Shape 5: { items: [...] }
   if (Array.isArray(data.items)) return data.items as HKGoodsItem[];
-
-  return [];
-}
-
-/**
- * Extract the physical-stock list returned by `gift_realtime_stock`.
- */
-function extractSouvenirList(
-  data: Record<string, unknown> | null
-): HKSouvenirStockItem[] {
-  if (!data) return [];
-
-  if (Array.isArray(data)) return data as HKSouvenirStockItem[];
-  if (Array.isArray(data.list)) return data.list as HKSouvenirStockItem[];
-  if (Array.isArray(data.data)) return data.data as HKSouvenirStockItem[];
-  if (Array.isArray(data.items)) return data.items as HKSouvenirStockItem[];
 
   return [];
 }

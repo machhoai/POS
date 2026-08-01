@@ -260,6 +260,8 @@ export interface HKGoodsItem {
   goodsName?: string;
   Price?: number | string;
   price?: number | string;
+  AfterTaxPrice?: number | string;
+  afterTaxPrice?: number | string;
   Remark?: string;
   remark?: string;
   SubCategory?: string | number;

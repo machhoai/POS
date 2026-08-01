@@ -10,6 +10,10 @@ import {
   synchronizePosProducts,
 } from "../services/productSyncService";
 import {
+  joyworldPassSecret,
+  joyworldUserSecret,
+} from "../services/joyworldCatalogService";
+import {
   checkoutPosOrderForUser,
   getLatestPosOrderForUser,
   getPosOrderStatusForUser,
@@ -22,7 +26,8 @@ const CALLABLE_OPTIONS = {
   cors: true,
   timeoutSeconds: 120,
   maxInstances: 20,
-} as const;
+  secrets: [joyworldUserSecret, joyworldPassSecret],
+};
 
 export const resolvePosLoginIdentifier = onCall(
   CALLABLE_OPTIONS,

@@ -28,7 +28,10 @@ export interface SyncProduct {
   goodsId: string;
   goodsName: string;
   description?: string;
+  /** Selling price before tax. */
   price: number;
+  /** Authoritative consumer price after tax. */
+  afterTaxPrice: number;
   /** Numeric POS category ID (1, 2, 4, 6, or 10 for souvenirs). */
   category: number;
   /** Sub-category name from HK API (if available) */
