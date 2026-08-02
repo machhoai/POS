@@ -7,7 +7,7 @@
 //   2. The app builder with the shell plugin for OS integration.
 // =============================================================================
 
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Open the customer-facing display window.
 ///
