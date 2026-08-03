@@ -233,11 +233,17 @@ async function reservePaymentAttempt(
 
     const now = new Date();
     const orderCode = generatePayOSOrderCode();
+    const cleanWarehouseId = (order.warehouseId || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    const storePrefix = cleanWarehouseId
+      ? (cleanWarehouseId.startsWith("J") ? cleanWarehouseId : `J${cleanWarehouseId}`)
+      : "JPOS";
+    const description = `${storePrefix} ${order.localOrderId.slice(-12)}`;
+
     const attempt: PayOSPaymentAttempt = {
       orderCode,
       status: "CREATING",
       amount: order.totalAmount,
-      description: `JPOS ${order.localOrderId.slice(-12)}`,
+      description,
       createdAt: now.toISOString(),
       linkExpiresAt: new Date(
         now.getTime() + PAYMENT_LINK_LIFETIME_SECONDS * 1000,
