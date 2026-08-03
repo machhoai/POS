@@ -11,6 +11,7 @@ import type {
     PaymentMethod,
 } from "@/lib/types/order";
 import type { PaymentMethodOption } from "@/lib/types/payment";
+import type { PayOSCheckoutController } from "@/lib/types/payment";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { showWarning } from "@/lib/utils/toast";
 
@@ -18,7 +19,9 @@ interface CartPanelProps {
     items: OrderItem[];
     paymentMethod: PaymentMethod;
     paymentMethods: PaymentMethodOption[];
+    payOSPayment: PayOSCheckoutController;
     isCheckingOut: boolean;
+    isPaymentLocked: boolean;
     currentOrderId: string | null;
     currentHkOrderNumber: string | null;
     currentOrderStatus: OrderStatus | null;
@@ -35,7 +38,9 @@ export default function CartPanel({
     items,
     paymentMethod,
     paymentMethods,
+    payOSPayment,
     isCheckingOut,
+    isPaymentLocked,
     currentOrderId,
     currentHkOrderNumber,
     currentOrderStatus,
@@ -47,7 +52,7 @@ export default function CartPanel({
     onCheckout,
     onClearCart,
 }: CartPanelProps) {
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalCartKey, setModalCartKey] = useState<string | null>(null);
     const [appliedVoucher, setAppliedVoucher] =
         useState<AppliedVoucher | null>(null);
     const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
@@ -63,17 +68,17 @@ export default function CartPanel({
     }, []);
 
     const closeModal = useCallback(() => {
-        if (!isCheckingOut) setIsModalOpen(false);
+        if (!isCheckingOut) setModalCartKey(null);
     }, [isCheckingOut]);
 
     const confirmCheckout = useCallback(async () => {
         await onCheckout();
-        setIsModalOpen(false);
+        setModalCartKey(null);
         setAppliedVoucher(null);
     }, [onCheckout]);
 
     const clearCart = useCallback(() => {
-        setIsModalOpen(false);
+        setModalCartKey(null);
         setAppliedVoucher(null);
         onClearCart();
     }, [onClearCart]);
@@ -81,6 +86,10 @@ export default function CartPanel({
     const finalAmount = appliedVoucher
         ? Math.max(0, totalAmount - appliedVoucher.discountAmount)
         : totalAmount;
+    const currentCartKey = items
+        .map((item) => `${item.goodsId}:${item.quantity}`)
+        .join("|");
+    const isModalOpen = items.length > 0 && modalCartKey === currentCartKey;
 
     return (
         <aside className="flex h-full min-h-0 flex-col py-2 gap-2">
@@ -106,7 +115,8 @@ export default function CartPanel({
                     <button
                         type="button"
                         onClick={clearCart}
-                        className="flex size-12 items-center justify-center rounded-lg bg-red-500 text-white transition-colors"
+                        disabled={isPaymentLocked}
+                        className="flex size-12 items-center justify-center rounded-lg bg-red-500 text-white transition-colors disabled:cursor-not-allowed disabled:bg-slate-300"
                         aria-label="Xóa toàn bộ giỏ hàng"
                         title="Xóa toàn bộ"
                     >
@@ -126,6 +136,7 @@ export default function CartPanel({
                             <CartItem
                                 key={item.goodsId}
                                 item={item}
+                                disabled={isPaymentLocked}
                                 onUpdateQuantity={(quantity) =>
                                     onUpdateQuantity(item.goodsId, quantity)
                                 }
@@ -136,7 +147,7 @@ export default function CartPanel({
                 )}
             </div>
 
-            <div className="shrink-0 space-y-3 border-t border-[var(--color-border)] bg-[#fdfdfc] px-5 pb-5 pt-3">
+            <div className="shrink-0 space-y-3 border border-[var(--color-border)] rounded-xl bg-[#fdfdfc] px-5 p-3">
                 <div className="flex items-end justify-between gap-3">
                     <span className="text-sm font-bold text-[var(--color-text-primary)]">
                         Tổng cộng
@@ -147,11 +158,11 @@ export default function CartPanel({
                 </div>
                 <button
                     type="button"
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={() => setModalCartKey(currentCartKey)}
                     disabled={items.length === 0 || isCheckingOut}
                     className="flex min-h-14 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] text-sm font-bold text-white shadow-[var(--shadow-glow)] transition-all hover:bg-[var(--color-accent-hover)] active:scale-[0.99] disabled:bg-[#dededb] disabled:text-[#a4a49f] disabled:shadow-none"
                 >
-                    Tiếp tục thanh toán
+                    {isPaymentLocked ? "Tiếp tục thanh toán" : "Thanh toán"}
                     <svg className="size-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" />
                     </svg>
@@ -162,6 +173,7 @@ export default function CartPanel({
                 <CheckoutModal
                     paymentMethod={paymentMethod}
                     paymentMethods={paymentMethods}
+                    payOSPayment={payOSPayment}
                     totalAmount={totalAmount}
                     finalAmount={finalAmount}
                     itemCount={itemCount}

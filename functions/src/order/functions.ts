@@ -15,6 +15,7 @@ import {
   queryPaymentStatus,
 } from "../services/hkApiService";
 import { getPosAuthSession } from "../services/posAuthService";
+import { shouldSynchronizeRemoteOrder } from "./orderLifecycle";
 import type {
   OrderItem,
   PosOrder,
@@ -230,6 +231,91 @@ function createDraftOrder(
   };
 }
 
+/**
+ * Validate prices and stage an order for PayOS without marking it as paid.
+ * The caller must create the PayOS link and wait for a verified payment before
+ * transitioning the order from DRAFT to LOCAL_PAID.
+ */
+export async function stagePosOrderForPayOS(
+  userId: string,
+  data: unknown,
+): Promise<PosOrder> {
+  const input = validateOrderInput(data);
+  const [operator, items] = await Promise.all([
+    assertWarehouseAccess(userId, input.warehouseId),
+    loadAuthoritativeItems(input.items),
+  ]);
+  const totalAmount = calculateTotal(items);
+  if (!Number.isSafeInteger(totalAmount) || totalAmount <= 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Tổng tiền thanh toán PayOS phải là số nguyên dương.",
+    );
+  }
+
+  const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    const now = new Date().toISOString();
+
+    if (!snapshot.exists) {
+      const draft: PosOrder = {
+        ...createDraftOrder(input, items, operator),
+        paymentMethod: "QR_CODE",
+        paymentMethodId: "QR_CODE",
+        paymentMethodName: "Chuyển khoản",
+        totalAmount,
+        updatedAt: now,
+      };
+      transaction.create(docRef, draft);
+      return draft;
+    }
+
+    const existing = snapshot.data() as PosOrder;
+    if (existing.createdBy !== userId) {
+      throw new HttpsError(
+        "permission-denied",
+        "Bạn không có quyền tạo thanh toán cho đơn hàng này.",
+      );
+    }
+    if (existing.status !== "DRAFT") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Đơn hàng không còn ở trạng thái chờ thanh toán.",
+      );
+    }
+
+    const stagedOrder: PosOrder = {
+      ...existing,
+      shopId: input.shopId,
+      warehouseId: input.warehouseId,
+      operatorId: operator.employeeId,
+      operatorFirebaseUid: operator.firebaseUid,
+      operatorName: operator.name,
+      paymentMethod: "QR_CODE",
+      paymentMethodId: "QR_CODE",
+      paymentMethodName: "Chuyển khoản",
+      totalAmount,
+      items,
+      updatedAt: now,
+    };
+    transaction.update(docRef, {
+      shopId: stagedOrder.shopId,
+      warehouseId: stagedOrder.warehouseId,
+      operatorId: stagedOrder.operatorId,
+      operatorFirebaseUid: stagedOrder.operatorFirebaseUid,
+      operatorName: stagedOrder.operatorName,
+      paymentMethod: stagedOrder.paymentMethod,
+      paymentMethodId: stagedOrder.paymentMethodId,
+      paymentMethodName: stagedOrder.paymentMethodName,
+      totalAmount: stagedOrder.totalAmount,
+      items: stagedOrder.items,
+      updatedAt: stagedOrder.updatedAt,
+    });
+    return stagedOrder;
+  });
+}
+
 export async function preparePosOrderForUser(
   userId: string,
   data: unknown,
@@ -294,13 +380,19 @@ export async function checkoutPosOrderForUser(
     );
   }
 
+  const selectedPaymentMethod = resolveJposPaymentMethod(
+    paymentMethodId.trim(),
+  );
+  if (selectedPaymentMethod.id === "QR_CODE") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Thanh toán chuyển khoản phải được xác nhận qua PayOS.",
+    );
+  }
   const [operator, items] = await Promise.all([
     assertWarehouseAccess(userId, input.warehouseId),
     loadAuthoritativeItems(input.items),
   ]);
-  const selectedPaymentMethod = resolveJposPaymentMethod(
-    paymentMethodId.trim(),
-  );
   const totalAmount = calculateTotal(items);
   const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
 
@@ -599,7 +691,6 @@ async function synchronizeRemoteOrder(
     if (!statusResponse || !isRemotePaymentConfirmed(statusResponse)) {
       const payResponse = await confirmRemotePayment({
         orderNumber: hkOrderNumber,
-        payAmount: null,
       });
       statusResponse = await queryPaymentStatus({
         orderNumber: hkOrderNumber,
@@ -671,7 +762,7 @@ export const onOrderLocalPaid = onDocumentUpdated(
 
     const before = event.data.before.data() as PosOrder;
     const after = event.data.after.data() as PosOrder;
-    if (before.status === after.status || after.status !== "LOCAL_PAID") {
+    if (!shouldSynchronizeRemoteOrder(before.status, after.status)) {
       return;
     }
 

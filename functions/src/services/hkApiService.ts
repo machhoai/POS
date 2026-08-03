@@ -27,6 +27,46 @@ interface HKApiResponse {
   desc?: string;
 }
 
+export interface RemoteOrderItemInput {
+  goodsId: string;
+  quantity: string;
+}
+
+export type RemoteOrderCreateBody = {
+  Uid: string;
+  GoodsItems: Array<{ GoodsId: string; Quantity: string }>;
+};
+
+export type RemoteOrderPayBody = {
+  OrderNumber: string;
+  PayAmount: null;
+};
+
+/**
+ * Build the exact order_create body documented by the HK OpenAPI.
+ * JPOS payment fields intentionally never cross this integration boundary.
+ */
+export function buildRemoteOrderCreateBody(params: {
+  uid: string;
+  goodsItems: RemoteOrderItemInput[];
+}): RemoteOrderCreateBody {
+  return {
+    Uid: params.uid,
+    GoodsItems: params.goodsItems.map((item) => ({
+      GoodsId: item.goodsId,
+      Quantity: item.quantity,
+    })),
+  };
+}
+
+/**
+ * The HK system uses its one default payment method. PayAmount=null asks it to
+ * settle the full remote order and no JPOS/PayOS payment method is transmitted.
+ */
+export function buildRemoteOrderPayBody(orderNumber: string): RemoteOrderPayBody {
+  return { OrderNumber: orderNumber, PayAmount: null };
+}
+
 // =============================================================================
 // Internal: Send signed request
 // =============================================================================
@@ -205,32 +245,25 @@ export async function precalculateOrder(params: {
  */
 export async function createRemoteOrder(params: {
   uid: string;
-  goodsItems: Array<{ goodsId: string; quantity: string }>;
+  goodsItems: RemoteOrderItemInput[];
 }): Promise<HKApiResponse> {
-  return sendToHKApi("order_create", {
-    Uid: params.uid,
-    GoodsItems: params.goodsItems.map((item) => ({
-      GoodsId: item.goodsId,
-      Quantity: item.quantity,
-    })),
-  });
+  return sendToHKApi("order_create", buildRemoteOrderCreateBody(params));
 }
 
 /**
  * Confirm payment for an order on the HK remote system.
  * Action: `order_pay`
  *
- * @param params - Order number and optional payment amount.
+ * @param params - Order number only; the HK default payment method is used.
  * @returns Response confirming payment.
  */
 export async function confirmRemotePayment(params: {
   orderNumber: string;
-  payAmount?: number | null;
 }): Promise<HKApiResponse> {
-  return sendToHKApi("order_pay", {
-    OrderNumber: params.orderNumber,
-    PayAmount: params.payAmount ?? null,
-  });
+  return sendToHKApi(
+    "order_pay",
+    buildRemoteOrderPayBody(params.orderNumber),
+  );
 }
 
 /**

@@ -28,6 +28,60 @@ export interface SyncMetadata {
   syncedAt: string | null; // ISO 8601 string
 }
 
+/** PayOS status stored locally for each generated payment link. */
+export type PayOSPaymentStatus =
+  | "CREATING"
+  | "PENDING"
+  | "PROCESSING"
+  | "UNDERPAID"
+  | "PAID"
+  | "CANCELLED"
+  | "EXPIRED"
+  | "FAILED";
+
+/** One PayOS QR attempt. Old attempts remain available for delayed webhooks. */
+export interface PayOSPaymentAttempt {
+  orderCode: number;
+  status: PayOSPaymentStatus;
+  amount: number;
+  description: string;
+  createdAt: string;
+  linkExpiresAt: string;
+  displayExpiresAt: string;
+  paymentLinkId?: string;
+  checkoutUrl?: string;
+  qrCode?: string;
+  bin?: string;
+  accountNumber?: string;
+  accountName?: string;
+  currency?: string;
+  updatedAt?: string;
+  paidAt?: string;
+  paidAmount?: number;
+  reference?: string;
+  transactionDateTime?: string;
+  error?: string;
+}
+
+export interface PayOSPaymentDetails {
+  provider: "payos";
+  currentOrderCode: number;
+  attempts: PayOSPaymentAttempt[];
+  lastCheckedAt?: string;
+  lastError?: string | null;
+  lastConnectionErrorAt?: string;
+  manualConfirmation?: PayOSManualConfirmation;
+}
+
+export interface PayOSManualConfirmation {
+  confirmedAt: string;
+  confirmedByUid: string;
+  confirmedByName: string;
+  reason: "PAYOS_UNAVAILABLE";
+  note: string;
+  previousPaymentStatus: PayOSPaymentStatus;
+}
+
 /**
  * The primary order document stored in Firestore `pos_orders` collection.
  *
@@ -69,6 +123,12 @@ export interface PosOrder {
 
   /** Line items in the order */
   items: OrderItem[];
+
+  /** All PayOS order codes generated for webhook lookup. */
+  payosOrderCodes?: number[];
+
+  /** PayOS QR session data. Present only for transfer payments. */
+  paymentDetails?: PayOSPaymentDetails;
 
   /** Tên khách hàng (nếu là thành viên) */
   customerName?: string;

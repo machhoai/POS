@@ -30,6 +30,8 @@ interface CartState {
   currentHkOrderNumber: string | null;
   currentOrderStatus: OrderStatus | null;
   isCheckingOut: boolean;
+  isPaymentLocked: boolean;
+  paymentLockOrderId: string | null;
 
   // ── Computed (derived in selectors, not stored) ────────────────────────────
   // Use `useCartStore(selectTotalAmount)` to get the total.
@@ -42,6 +44,12 @@ interface CartState {
   clearCart: () => void;
   prepareCurrentOrder: (shopId: number, warehouseId: string) => Promise<void>;
   refreshCurrentOrderStatus: () => Promise<void>;
+  completePayOSCheckout: (
+    localOrderId: string,
+    status: OrderStatus,
+  ) => void;
+  lockCartForPayOS: (localOrderId: string) => boolean;
+  unlockCartAfterPayOSCancellation: (localOrderId: string) => void;
 
   /**
    * Complete the checkout flow:
@@ -79,11 +87,14 @@ export const useCartStore = create<CartState>((set, get) => ({
   currentHkOrderNumber: null,
   currentOrderStatus: null,
   isCheckingOut: false,
+  isPaymentLocked: false,
+  paymentLockOrderId: null,
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
   addItem: (item) =>
     set((state) => {
+      if (state.isPaymentLocked) return {};
       const existing = state.items.find((i) => i.goodsId === item.goodsId);
       if (existing) {
         // Increment quantity if item already in cart
@@ -110,12 +121,13 @@ export const useCartStore = create<CartState>((set, get) => ({
     }),
 
   removeItem: (goodsId) =>
-    set((state) => ({
-      items: state.items.filter((i) => i.goodsId !== goodsId),
-    })),
+    set((state) => state.isPaymentLocked
+      ? {}
+      : { items: state.items.filter((i) => i.goodsId !== goodsId) }),
 
   updateQuantity: (goodsId, quantity) =>
     set((state) => {
+      if (state.isPaymentLocked) return {};
       if (quantity <= 0) {
         return { items: state.items.filter((i) => i.goodsId !== goodsId) };
       }
@@ -126,9 +138,13 @@ export const useCartStore = create<CartState>((set, get) => ({
       };
     }),
 
-  setPaymentMethod: (method) => set({ paymentMethod: method }),
+  setPaymentMethod: (method) => {
+    if (get().isPaymentLocked) return;
+    set({ paymentMethod: method });
+  },
 
-  clearCart: () =>
+  clearCart: () => {
+    if (get().isPaymentLocked) return;
     set({
       items: [],
       paymentMethod: "CASH",
@@ -137,11 +153,14 @@ export const useCartStore = create<CartState>((set, get) => ({
       currentHkOrderNumber: null,
       currentOrderStatus: null,
       isCheckingOut: false,
-    }),
+    });
+  },
 
   prepareCurrentOrder: async (shopId, warehouseId) => {
     const state = get();
-    if (state.items.length === 0 || state.draftOrderId) return;
+    if (state.isPaymentLocked || state.items.length === 0 || state.draftOrderId) {
+      return;
+    }
 
     const localOrderId = generateLocalOrderId();
     set({ draftOrderId: localOrderId });
@@ -188,8 +207,45 @@ export const useCartStore = create<CartState>((set, get) => ({
     }
   },
 
+  completePayOSCheckout: (localOrderId, status) =>
+    set({
+      items: [],
+      paymentMethod: "CASH",
+      draftOrderId: null,
+      currentOrderId: localOrderId,
+      currentHkOrderNumber: null,
+      currentOrderStatus: status,
+      isCheckingOut: false,
+      isPaymentLocked: false,
+      paymentLockOrderId: null,
+    }),
+
+  lockCartForPayOS: (localOrderId) => {
+    const state = get();
+    if (
+      state.items.length === 0 ||
+      (state.isPaymentLocked && state.paymentLockOrderId !== localOrderId)
+    ) {
+      return false;
+    }
+    set({
+      isPaymentLocked: true,
+      paymentLockOrderId: localOrderId,
+      draftOrderId: localOrderId,
+    });
+    return true;
+  },
+
+  unlockCartAfterPayOSCancellation: (localOrderId) => {
+    if (get().paymentLockOrderId !== localOrderId) return;
+    set({ isPaymentLocked: false, paymentLockOrderId: null });
+  },
+
   checkout: async (shopId, warehouseId) => {
     const state = get();
+    if (state.isPaymentLocked) {
+      throw new Error("Phải hủy mã chuyển khoản trước khi sửa hoặc thanh toán lại đơn.");
+    }
     if (state.items.length === 0) {
       throw new Error("Không thể thanh toán khi giỏ hàng trống.");
     }
