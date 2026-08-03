@@ -14,8 +14,11 @@ import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/u
 import { useProductStore } from "@/lib/stores/useProductStore";
 import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { syncProducts } from "@/lib/services/productService";
-import { showError, showPromise } from "@/lib/utils/toast";
+import { showError, showPromise, showWarning } from "@/lib/utils/toast";
 import { filterProducts } from "@/lib/utils/productSearch";
+import { usePayOSCheckoutController } from "@/lib/hooks/usePayOSCheckoutController";
+import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
+import { useCustomerDisplayPublisher } from "@/lib/hooks/useCustomerDisplayPublisher";
 import TopNav from "@/components/pos/TopNav";
 import Sidebar from "@/components/layout/Sidebar";
 import ProductGrid from "@/components/pos/ProductGrid";
@@ -24,6 +27,7 @@ import StoreSelector from "@/components/pos/StoreSelector";
 import type { Product } from "@/lib/types/product";
 
 export default function CashierPage() {
+  useCustomerDisplayWindow();
   const router = useRouter();
   const {
     user,
@@ -57,7 +61,9 @@ export default function CashierPage() {
   const cartItems = useCartStore((s) => s.items);
   const paymentMethod = useCartStore((s) => s.paymentMethod);
   const isCheckingOut = useCartStore((s) => s.isCheckingOut);
+  const isPaymentLocked = useCartStore((s) => s.isPaymentLocked);
   const currentOrderId = useCartStore((s) => s.currentOrderId);
+  const draftOrderId = useCartStore((s) => s.draftOrderId);
   const currentHkOrderNumber = useCartStore((s) => s.currentHkOrderNumber);
   const currentOrderStatus = useCartStore((s) => s.currentOrderStatus);
   const totalAmount = useCartStore(selectTotalAmount);
@@ -70,9 +76,18 @@ export default function CashierPage() {
   const prepareCurrentOrder = useCartStore((s) => s.prepareCurrentOrder);
   const refreshCurrentOrderStatus = useCartStore((s) => s.refreshCurrentOrderStatus);
   const clearCart = useCartStore((s) => s.clearCart);
+  const completePayOSCheckout = useCartStore((s) => s.completePayOSCheckout);
   const paymentMethods = JPOS_PAYMENT_METHODS;
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
   const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
+  const payOSPayment = usePayOSCheckoutController({
+    shopId,
+    warehouseId: effectiveWarehouseId,
+    draftOrderId,
+    items: cartItems,
+    onCompleted: completePayOSCheckout,
+  });
+  useCustomerDisplayPublisher(payOSPayment);
 
   // ── Auth Guard ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -116,6 +131,13 @@ export default function CashierPage() {
   // ── Add to Cart ────────────────────────────────────────────────────────
   const handleAddToCart = useCallback(
     (product: Product) => {
+      if (isPaymentLocked) {
+        showWarning(
+          "Giỏ hàng đang được khóa",
+          "Hãy hoàn tất hoặc hủy mã chuyển khoản trên PayOS trước khi sửa đơn.",
+        );
+        return;
+      }
       // Dùng afterTaxPrice (giá sau thuế) cho giỏ hàng
       const displayPrice = product.afterTaxPrice > 0
         ? product.afterTaxPrice
@@ -134,6 +156,7 @@ export default function CashierPage() {
       addItem,
       cartItems.length,
       effectiveWarehouseId,
+      isPaymentLocked,
       prepareCurrentOrder,
       shopId,
     ]
@@ -247,7 +270,9 @@ export default function CashierPage() {
           items={cartItems}
           paymentMethod={paymentMethod}
           paymentMethods={paymentMethods}
+          payOSPayment={payOSPayment}
           isCheckingOut={isCheckingOut}
+          isPaymentLocked={isPaymentLocked}
           currentOrderId={currentOrderId}
           currentHkOrderNumber={currentHkOrderNumber}
           currentOrderStatus={currentOrderStatus}

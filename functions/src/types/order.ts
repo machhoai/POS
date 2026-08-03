@@ -34,6 +34,58 @@ export interface SyncMetadata {
   syncedAt: string | null;
 }
 
+export type PayOSPaymentStatus =
+  | "CREATING"
+  | "PENDING"
+  | "PROCESSING"
+  | "UNDERPAID"
+  | "PAID"
+  | "CANCELLED"
+  | "EXPIRED"
+  | "FAILED";
+
+export interface PayOSPaymentAttempt {
+  orderCode: number;
+  status: PayOSPaymentStatus;
+  amount: number;
+  description: string;
+  createdAt: string;
+  linkExpiresAt: string;
+  displayExpiresAt: string;
+  paymentLinkId?: string;
+  checkoutUrl?: string;
+  qrCode?: string;
+  bin?: string;
+  accountNumber?: string;
+  accountName?: string;
+  currency?: string;
+  updatedAt?: string;
+  paidAt?: string;
+  paidAmount?: number;
+  reference?: string;
+  transactionDateTime?: string;
+  error?: string;
+}
+
+export interface PayOSPaymentDetails {
+  provider: "payos";
+  currentOrderCode: number;
+  attempts: PayOSPaymentAttempt[];
+  lastCheckedAt?: string;
+  lastError?: string | null;
+  lastConnectionErrorAt?: string;
+  manualConfirmation?: PayOSManualConfirmation;
+}
+
+export interface PayOSManualConfirmation {
+  confirmedAt: string;
+  confirmedByUid: string;
+  confirmedByName: string;
+  reason: "PAYOS_UNAVAILABLE";
+  note: string;
+  previousPaymentStatus: PayOSPaymentStatus;
+}
+
 /** The POS order document in Firestore. */
 export interface PosOrder {
   localOrderId: string;
@@ -52,6 +104,9 @@ export interface PosOrder {
   paymentMethodName: string;
   totalAmount: number;
   items: OrderItem[];
+  /** Every PayOS order code ever created for this order, used by the webhook. */
+  payosOrderCodes?: number[];
+  paymentDetails?: PayOSPaymentDetails;
   sync: SyncMetadata;
   createdAt: string;
   updatedAt: string;

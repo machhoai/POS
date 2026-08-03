@@ -1,28 +1,21 @@
 import type { ReactNode } from "react";
 import type { OrderItem } from "@/lib/types/order";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
-import { Ticket } from "lucide-react";
 import { IoShapes } from "react-icons/io5";
 
 interface CartItemProps {
     item: OrderItem;
+    disabled?: boolean;
     onUpdateQuantity: (quantity: number) => void;
     onRemove: () => void;
 }
 
 export default function CartItem({
     item,
+    disabled = false,
     onUpdateQuantity,
     onRemove,
 }: CartItemProps) {
-    const initials = item.goodsName
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((word) => word[0])
-        .join("")
-        .toUpperCase();
-
     return (
         <li className="rounded-2xl border border-gray-100/80 bg-white p-2 shadow-[0_2px_8px_rgba(0,0,0,0.03)] transition-all duration-200 hover:border-orange-200 hover:shadow-md">
             <div className="flex flex-col gap-3">
@@ -46,7 +39,8 @@ export default function CartItem({
                     <button
                         type="button"
                         onClick={onRemove}
-                        className="flex size-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-red-100/60 bg-red-50/80 text-red-500 shadow-xs transition-all hover:bg-red-500 hover:text-white active:scale-90"
+                        disabled={disabled}
+                        className="flex size-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-red-100/60 bg-red-50/80 text-red-500 shadow-xs transition-all hover:bg-red-500 hover:text-white active:scale-90 disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label={`Xóa ${item.goodsName}`}
                         title="Xóa sản phẩm"
                     >
@@ -58,7 +52,7 @@ export default function CartItem({
 
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1 rounded-xl border border-gray-200/50 bg-gray-100/80 p-1">
-                        <QuantityButton label="Giảm số lượng" onClick={() => onUpdateQuantity(item.quantity - 1)}>
+                        <QuantityButton label="Giảm số lượng" disabled={disabled} onClick={() => onUpdateQuantity(item.quantity - 1)}>
                             <svg className="size-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
                             </svg>
@@ -66,7 +60,7 @@ export default function CartItem({
                         <span className="min-w-9 select-none text-center text-sm font-extrabold tabular-nums text-gray-800">
                             {item.quantity}
                         </span>
-                        <QuantityButton label="Tăng số lượng" onClick={() => onUpdateQuantity(item.quantity + 1)}>
+                        <QuantityButton label="Tăng số lượng" disabled={disabled} onClick={() => onUpdateQuantity(item.quantity + 1)}>
                             <svg className="size-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                             </svg>
@@ -89,18 +83,21 @@ export default function CartItem({
 function QuantityButton({
     children,
     label,
+    disabled,
     onClick,
 }: {
     children: ReactNode;
     label: string;
+    disabled: boolean;
     onClick: () => void;
 }) {
     return (
         <button
             type="button"
             onClick={onClick}
+            disabled={disabled}
             aria-label={label}
-            className="flex size-11 touch-manipulation items-center justify-center rounded-lg border border-gray-200/80 bg-white text-gray-700 shadow-xs transition-all hover:border-orange-200 hover:bg-orange-50 hover:text-[var(--color-accent)] active:scale-95"
+            className="flex size-11 touch-manipulation items-center justify-center rounded-lg border border-gray-200/80 bg-white text-gray-700 shadow-xs transition-all hover:border-orange-200 hover:bg-orange-50 hover:text-[var(--color-accent)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
             {children}
         </button>

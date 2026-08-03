@@ -1,12 +1,7 @@
 // =============================================================================
-// Firestore Order Service — Client-side CRUD & Real-time Subscriptions
+// Order Service — Giao tiếp với Firebase Cloud Functions
 // =============================================================================
-// This service operates on the `pos_orders` Firestore collection using the
-// Firebase Client SDK. It provides:
-//   - Order creation with auto-generated IDs and timestamps
-//   - Real-time subscription for the customer display (onSnapshot)
-//   - Status updates for the order lifecycle
-//   - Querying orders by status
+// Màn hình khách đồng bộ local-first giữa hai cửa sổ và không truy vấn tại đây.
 // =============================================================================
 
 import { httpsCallable } from "firebase/functions";
@@ -17,8 +12,6 @@ import type {
   OrderItem,
   PaymentMethod,
 } from "@/lib/types/order";
-
-type Unsubscribe = () => void;
 
 /**
  * Generate a unique local order ID using timestamp and a random suffix.
@@ -124,64 +117,6 @@ export async function fetchOrderHistory(
     payload: { limit: requestedLimit },
   });
   return result.data;
-}
-
-async function fetchLatestOrder(
-  shopId: number,
-  status?: "DRAFT",
-): Promise<PosOrder | null> {
-  const callable = httpsCallable<
-    {
-      action: "getLatestOrder";
-      payload: { shopId: number; status?: "DRAFT" };
-    },
-    { order: PosOrder | null }
-  >(functions, "getPosAuthSession");
-  const result = await callable({
-    action: "getLatestOrder",
-    payload: { shopId, ...(status ? { status } : {}) },
-  });
-  return result.data.order;
-}
-
-function subscribeByPolling(
-  shopId: number,
-  callback: (order: PosOrder | null) => void,
-  status?: "DRAFT",
-): Unsubscribe {
-  let isActive = true;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  const poll = async () => {
-    try {
-      const order = await fetchLatestOrder(shopId, status);
-      if (isActive) callback(order);
-    } catch (error: unknown) {
-      console.error("[Đơn hàng] Không thể cập nhật màn hình khách:", error);
-    } finally {
-      if (isActive) timeoutId = setTimeout(poll, 2000);
-    }
-  };
-
-  void poll();
-  return () => {
-    isActive = false;
-    if (timeoutId) clearTimeout(timeoutId);
-  };
-}
-
-export function subscribeToCurrentDraft(
-  shopId: number,
-  callback: (order: PosOrder | null) => void,
-): Unsubscribe {
-  return subscribeByPolling(shopId, callback, "DRAFT");
-}
-
-export function subscribeToLatestOrder(
-  shopId: number,
-  callback: (order: PosOrder | null) => void,
-): Unsubscribe {
-  return subscribeByPolling(shopId, callback);
 }
 
 export async function retryOrderSync(
