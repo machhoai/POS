@@ -579,7 +579,40 @@ export async function getPosOrderForUser(
     );
   }
 
-  return { order };
+  if (isInvoiceRequestToken(order.invoiceRequestToken)) {
+    return { order };
+  }
+
+  const orderWithInvoiceToken = await db.runTransaction(async (transaction) => {
+    const latestSnapshot = await transaction.get(snapshot.ref);
+    if (!latestSnapshot.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy đơn hàng.");
+    }
+
+    const latestOrder = latestSnapshot.data() as PosOrder;
+    if (isInvoiceRequestToken(latestOrder.invoiceRequestToken)) {
+      return latestOrder;
+    }
+
+    const invoiceRequestToken = createInvoiceRequestToken();
+    const invoiceRequestCreatedAt = new Date().toISOString();
+    transaction.update(latestSnapshot.ref, {
+      invoiceRequestToken,
+      invoiceRequestCreatedAt,
+    });
+
+    return {
+      ...latestOrder,
+      invoiceRequestToken,
+      invoiceRequestCreatedAt,
+    };
+  });
+
+  logger.info("[Biên lai] Đã bổ sung mã yêu cầu hóa đơn cho đơn cũ", {
+    localOrderId,
+    requestedBy: userId,
+  });
+  return { order: orderWithInvoiceToken };
 }
 
 async function loadAccessibleOrders(

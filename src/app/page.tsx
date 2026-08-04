@@ -16,7 +16,10 @@ import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { syncProducts } from "@/lib/services/productService";
 import { fetchOrderForReceipt } from "@/lib/services/orderService";
 import { showError, showPromise, showWarning } from "@/lib/utils/toast";
-import { printReceiptSilently } from "@/features/receipt/components/ReceiptPrintButton";
+import {
+  describeReceiptPrintError,
+  printReceiptSilently,
+} from "@/features/receipt/components/ReceiptPrintButton";
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
 import { filterProducts } from "@/lib/utils/productSearch";
 import { usePayOSCheckoutController } from "@/lib/hooks/usePayOSCheckoutController";
@@ -87,14 +90,28 @@ export default function CashierPage() {
 
   const handleAutoPrint = useCallback(async (localOrderId: string) => {
     console.info("[Biên lai] Bắt đầu in tự động", { localOrderId });
+    let order: Awaited<ReturnType<typeof fetchOrderForReceipt>>;
     try {
-      const order = await fetchOrderForReceipt(localOrderId);
+      order = await fetchOrderForReceipt(localOrderId);
+    } catch (error: unknown) {
+      console.error("[Biên lai] Không thể tải đơn để in tự động:", error);
+      showError(
+        "Thanh toán thành công nhưng chưa tải được biên lai",
+        "Dịch vụ đơn hàng chưa sẵn sàng. Vui lòng in lại từ lịch sử đơn hàng.",
+      );
+      return;
+    }
+
+    try {
       await printReceiptSilently(order, receiptSettings);
     } catch (error: unknown) {
       console.error("[Biên lai] In tự động thất bại:", error);
       showError(
         "Thanh toán thành công nhưng chưa in được biên lai",
-        "Vui lòng kiểm tra máy in mặc định của Windows, sau đó in lại từ lịch sử đơn hàng.",
+        describeReceiptPrintError(
+          error,
+          "Không thể gửi biên lai tới máy in mặc định của Windows.",
+        ),
       );
     }
   }, [receiptSettings]);

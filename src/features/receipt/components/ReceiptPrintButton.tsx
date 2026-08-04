@@ -4,8 +4,10 @@ import { useCallback, useState } from "react";
 import { Printer } from "lucide-react";
 import ReceiptDocument from "@/features/receipt/components/ReceiptDocument";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
+import { buildInvoiceRequestUrl } from "@/features/receipt/helpers/invoiceRequestUrl";
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
 import type { ReceiptSettings } from "@/features/receipt/types/receipt";
+import { fetchOrderForReceipt } from "@/lib/services/orderService";
 import type { PosOrder } from "@/lib/types/order";
 import { showError } from "@/lib/utils/toast";
 
@@ -34,14 +36,58 @@ async function waitForImages(container: ParentNode): Promise<void> {
 }
 
 async function waitForReceiptAssets(container: ParentNode): Promise<void> {
-  const ownerDocument = container instanceof Document
-    ? container
-    : (container as Element).ownerDocument;
+  const ownerDocument = container.nodeType === 9
+    ? (container as Document)
+    : (container as Node).ownerDocument;
+  if (!ownerDocument) {
+    throw new Error("Không thể xác định tài liệu chứa biên lai.");
+  }
+
   await new Promise((resolve) => window.setTimeout(resolve, 120));
   await Promise.all([ownerDocument.fonts?.ready, waitForImages(container)]);
   await new Promise<void>((resolve) => {
-    window.requestAnimationFrame(() => resolve());
+    (ownerDocument.defaultView ?? window).requestAnimationFrame(() => resolve());
   });
+}
+
+async function resolveOrderForPrint(
+  order: PosOrder,
+  settings: ReceiptSettings,
+  invoiceRequestUrlOverride?: string,
+): Promise<PosOrder> {
+  if (
+    invoiceRequestUrlOverride ||
+    !settings.showInvoiceRequestQr ||
+    buildInvoiceRequestUrl(order)
+  ) {
+    return order;
+  }
+
+  let refreshedOrder: PosOrder;
+  try {
+    refreshedOrder = await fetchOrderForReceipt(order.localOrderId);
+  } catch (error: unknown) {
+    console.error("[Biên lai] Không thể tải lại đơn để tạo mã QR:", error);
+    throw new Error(
+      "Không thể tải mã QR yêu cầu xuất hóa đơn. Vui lòng kiểm tra kết nối và thử lại.",
+    );
+  }
+
+  if (!buildInvoiceRequestUrl(refreshedOrder)) {
+    throw new Error(
+      "Đơn hàng chưa có mã QR yêu cầu xuất hóa đơn hợp lệ.",
+    );
+  }
+  return refreshedOrder;
+}
+
+export function describeReceiptPrintError(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error && error.message.trim()
+    ? error.message
+    : fallback;
 }
 
 /** Open the operating-system print dialog. Reserved for receipt test printing. */
@@ -88,13 +134,17 @@ export async function printReceiptWithDialog(
   );
 
   await waitForReceiptAssets(printDocument);
-  printWindow.focus();
-  printWindow.print();
-
-  window.setTimeout(() => {
+  let isCleanedUp = false;
+  const cleanup = () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
     root.unmount();
     frame.remove();
-  }, 1_000);
+  };
+  printWindow.addEventListener("afterprint", cleanup, { once: true });
+  printWindow.focus();
+  printWindow.print();
+  window.setTimeout(cleanup, 300_000);
 }
 
 /** Print directly to the Windows default printer without opening print UI. */
@@ -204,18 +254,34 @@ const ReceiptPrintButton: React.FC<ReceiptPrintButtonProps> = ({
   const handlePrint = useCallback(async () => {
     setIsPrinting(true);
     try {
+      const printableOrder = await resolveOrderForPrint(
+        order,
+        settings,
+        invoiceRequestUrlOverride,
+      );
       if (printMode === "dialog") {
-        await printReceiptWithDialog(order, settings, invoiceRequestUrlOverride);
+        await printReceiptWithDialog(
+          printableOrder,
+          settings,
+          invoiceRequestUrlOverride,
+        );
       } else {
-        await printReceiptSilently(order, settings, invoiceRequestUrlOverride);
+        await printReceiptSilently(
+          printableOrder,
+          settings,
+          invoiceRequestUrlOverride,
+        );
       }
     } catch (error: unknown) {
       console.error("[Biên lai] Không thể in:", error);
       showError(
         printMode === "dialog" ? "Không thể mở bản in thử" : "Không thể in biên lai",
-        printMode === "dialog"
-          ? "Vui lòng kiểm tra trình in của Windows và thử lại."
-          : "Vui lòng kiểm tra máy in mặc định của Windows và thử lại.",
+        describeReceiptPrintError(
+          error,
+          printMode === "dialog"
+            ? "Không thể chuẩn bị bản in thử. Vui lòng thử lại."
+            : "Không thể gửi biên lai tới máy in. Vui lòng thử lại.",
+        ),
       );
     } finally {
       setIsPrinting(false);
