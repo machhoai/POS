@@ -16,6 +16,10 @@ import {
 } from "../services/hkApiService";
 import { getPosAuthSession } from "../services/posAuthService";
 import { shouldSynchronizeRemoteOrder } from "./orderLifecycle";
+import {
+  createInvoiceRequestToken,
+  isInvoiceRequestToken,
+} from "./invoiceRequestToken";
 import type {
   OrderItem,
   PosOrder,
@@ -184,11 +188,22 @@ async function loadAuthoritativeItems(
       );
     }
 
+    const unitPriceBeforeTax = Number.isFinite(basePrice) && basePrice >= 0
+      ? basePrice
+      : price;
+    const unitTaxAmount = Math.max(0, price - unitPriceBeforeTax);
+    const taxRate = unitPriceBeforeTax > 0
+      ? Number(((unitTaxAmount / unitPriceBeforeTax) * 100).toFixed(2))
+      : 0;
+
     return {
       goodsId: snapshot.id,
       goodsName,
       price,
       quantity: itemInputs[index].quantity,
+      unitPriceBeforeTax,
+      taxRate,
+      taxAmount: Math.round(unitTaxAmount * itemInputs[index].quantity),
     };
   });
 }
@@ -209,6 +224,8 @@ function createDraftOrder(
   return {
     localOrderId: input.localOrderId,
     hkOrderNumber: null,
+    invoiceRequestToken: createInvoiceRequestToken(),
+    invoiceRequestCreatedAt: now,
     shopId: input.shopId,
     warehouseId: input.warehouseId,
     createdBy: operator.firebaseUid,
@@ -287,6 +304,11 @@ export async function stagePosOrderForPayOS(
 
     const stagedOrder: PosOrder = {
       ...existing,
+      invoiceRequestToken: isInvoiceRequestToken(existing.invoiceRequestToken)
+        ? existing.invoiceRequestToken
+        : createInvoiceRequestToken(),
+      invoiceRequestCreatedAt:
+        existing.invoiceRequestCreatedAt ?? now,
       shopId: input.shopId,
       warehouseId: input.warehouseId,
       operatorId: operator.employeeId,
@@ -305,6 +327,8 @@ export async function stagePosOrderForPayOS(
       operatorId: stagedOrder.operatorId,
       operatorFirebaseUid: stagedOrder.operatorFirebaseUid,
       operatorName: stagedOrder.operatorName,
+      invoiceRequestToken: stagedOrder.invoiceRequestToken,
+      invoiceRequestCreatedAt: stagedOrder.invoiceRequestCreatedAt,
       paymentMethod: stagedOrder.paymentMethod,
       paymentMethodId: stagedOrder.paymentMethodId,
       paymentMethodName: stagedOrder.paymentMethodName,
@@ -430,6 +454,11 @@ export async function checkoutPosOrderForUser(
         operatorId: operator.employeeId,
         operatorFirebaseUid: operator.firebaseUid,
         operatorName: operator.name,
+        invoiceRequestToken: isInvoiceRequestToken(existing.invoiceRequestToken)
+          ? existing.invoiceRequestToken
+          : createInvoiceRequestToken(),
+        invoiceRequestCreatedAt:
+          existing.invoiceRequestCreatedAt ?? now,
         paymentMethod: selectedPaymentMethod.id,
         paymentMethodId: selectedPaymentMethod.id,
         paymentMethodName: selectedPaymentMethod.methodName,
@@ -511,6 +540,46 @@ export async function getPosOrderStatusForUser(
     lastError: order.sync?.lastError ?? null,
     updatedAt: order.updatedAt,
   };
+}
+
+export async function getPosOrderForUser(
+  userId: string,
+  data: unknown,
+) {
+  const localOrderId =
+    data && typeof data === "object"
+      ? (data as { localOrderId?: unknown }).localOrderId
+      : undefined;
+  if (
+    typeof localOrderId !== "string" ||
+    !/^ORD-\d{10,13}-[A-Z0-9]{6}$/.test(localOrderId)
+  ) {
+    throw new HttpsError("invalid-argument", "Mã đơn hàng không hợp lệ.");
+  }
+
+  const [session, snapshot] = await Promise.all([
+    getPosAuthSession(userId),
+    db.collection(POS_COLLECTIONS.orders).doc(localOrderId).get(),
+  ]);
+  if (!snapshot.exists) {
+    throw new HttpsError("not-found", "Không tìm thấy đơn hàng.");
+  }
+
+  const order = snapshot.data() as PosOrder;
+  const warehouseIds = new Set(
+    session.warehouses.map((warehouse) => warehouse.id),
+  );
+  if (
+    order.createdBy !== userId &&
+    !warehouseIds.has(order.warehouseId)
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Bạn không có quyền xem đơn hàng này.",
+    );
+  }
+
+  return { order };
 }
 
 async function loadAccessibleOrders(

@@ -3,10 +3,21 @@
 // =============================================================================
 
 use serde::Serialize;
+#[cfg(windows)]
+use std::{sync::mpsc, time::Duration};
 use tauri::{
-    window::Monitor, AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl,
-    WebviewWindowBuilder,
+    window::Monitor, AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindowBuilder,
 };
+#[cfg(windows)]
+use webview2_com::{
+    Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Environment6, ICoreWebView2_16, COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT,
+        COREWEBVIEW2_PRINT_STATUS_PRINTER_UNAVAILABLE, COREWEBVIEW2_PRINT_STATUS_SUCCEEDED,
+    },
+    PrintCompletedHandler,
+};
+#[cfg(windows)]
+use windows::core::Interface;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const CUSTOMER_DISPLAY_LABEL: &str = "customer-display";
@@ -35,7 +46,9 @@ fn is_same_monitor(left: &Monitor, right: &Monitor) -> bool {
 }
 
 fn find_secondary_monitor(app: &AppHandle) -> Result<Option<Monitor>, String> {
-    let monitors = app.available_monitors().map_err(|error| error.to_string())?;
+    let monitors = app
+        .available_monitors()
+        .map_err(|error| error.to_string())?;
     if monitors.len() < 2 {
         return Ok(None);
     }
@@ -77,11 +90,7 @@ fn focus_main_window(app: &AppHandle) -> Result<(), String> {
 
 fn notify_main_window(app: &AppHandle, message: &str) {
     eprintln!("[Màn hình khách] {message}");
-    if let Err(error) = app.emit_to(
-        MAIN_WINDOW_LABEL,
-        CUSTOMER_DISPLAY_WARNING_EVENT,
-        message,
-    ) {
+    if let Err(error) = app.emit_to(MAIN_WINDOW_LABEL, CUSTOMER_DISPLAY_WARNING_EVENT, message) {
         eprintln!("[Màn hình khách] Không thể gửi cảnh báo tới cửa sổ chính: {error}");
     }
 }
@@ -97,9 +106,7 @@ fn position_existing_window(
         .as_ref()
         .map(|current| is_same_monitor(current, monitor))
         .unwrap_or(false);
-    let is_fullscreen = window
-        .is_fullscreen()
-        .map_err(|error| error.to_string())?;
+    let is_fullscreen = window.is_fullscreen().map_err(|error| error.to_string())?;
 
     window
         .set_decorations(false)
@@ -170,9 +177,7 @@ fn ensure_customer_display(app: &AppHandle) -> Result<CustomerDisplayOpenStatus,
 
 /// Mở hoặc khôi phục màn hình khách trên monitor phụ theo hướng idempotent.
 #[tauri::command]
-async fn open_customer_display(
-    app: AppHandle,
-) -> Result<CustomerDisplayOpenStatus, String> {
+async fn open_customer_display(app: AppHandle) -> Result<CustomerDisplayOpenStatus, String> {
     let status = ensure_customer_display(&app)?;
     if matches!(status, CustomerDisplayOpenStatus::NoSecondaryMonitor) {
         notify_main_window(&app, NO_SECONDARY_MONITOR_WARNING);
@@ -180,10 +185,154 @@ async fn open_customer_display(
     Ok(status)
 }
 
+/// In nội dung hiện tại của WebView thẳng tới máy in mặc định, không mở hộp thoại Windows.
+#[tauri::command]
+async fn print_receipt_silent(
+    webview: tauri::WebviewWindow,
+    page_width_mm: f64,
+    page_height_mm: f64,
+) -> Result<(), String> {
+    if !(40.0..=100.0).contains(&page_width_mm) {
+        return Err("Khổ giấy in không hợp lệ.".to_string());
+    }
+    if !(20.0..=2_000.0).contains(&page_height_mm) {
+        return Err("Chiều dài biên lai không hợp lệ.".to_string());
+    }
+
+    #[cfg(windows)]
+    {
+        let (result_sender, result_receiver) = mpsc::channel::<Result<(), String>>();
+        let setup_sender = result_sender.clone();
+        let page_width_inches = page_width_mm / 25.4;
+        let page_height_inches = page_height_mm / 25.4;
+
+        webview
+            .with_webview(move |platform_webview| {
+                let setup_result = (|| -> Result<(), String> {
+                    let controller = platform_webview.controller();
+                    let core_webview = unsafe { controller.CoreWebView2() }
+                        .map_err(|error| format!("Không thể truy cập WebView2: {error}"))?;
+                    let printable_webview: ICoreWebView2_16 = core_webview
+                        .cast()
+                        .map_err(|error| format!("WebView2 chưa hỗ trợ in trực tiếp: {error}"))?;
+                    let print_environment: ICoreWebView2Environment6 = platform_webview
+                        .environment()
+                        .cast()
+                        .map_err(|error| format!("Không thể khởi tạo cấu hình in: {error}"))?;
+                    let print_settings = unsafe { print_environment.CreatePrintSettings() }
+                        .map_err(|error| format!("Không thể tạo cấu hình in: {error}"))?;
+
+                    unsafe {
+                        print_settings
+                            .SetOrientation(COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetScaleFactor(1.0)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetPageWidth(page_width_inches)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetPageHeight(page_height_inches)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetMarginTop(0.0)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetMarginBottom(0.0)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetMarginLeft(0.0)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetMarginRight(0.0)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetShouldPrintBackgrounds(true)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetShouldPrintSelectionOnly(false)
+                            .map_err(|error| error.to_string())?;
+                        print_settings
+                            .SetShouldPrintHeaderAndFooter(false)
+                            .map_err(|error| error.to_string())?;
+                    }
+
+                    let callback_sender = result_sender.clone();
+                    let handler =
+                        PrintCompletedHandler::create(Box::new(move |error_code, print_status| {
+                            let outcome = match error_code {
+                                Err(error) => Err(format!("Lệnh in WebView2 thất bại: {error}")),
+                                Ok(()) if print_status == COREWEBVIEW2_PRINT_STATUS_SUCCEEDED => {
+                                    Ok(())
+                                }
+                                Ok(())
+                                    if print_status
+                                        == COREWEBVIEW2_PRINT_STATUS_PRINTER_UNAVAILABLE =>
+                                {
+                                    Err("Máy in mặc định không khả dụng.".to_string())
+                                }
+                                Ok(()) => Err("Windows không thể hoàn tất lệnh in.".to_string()),
+                            };
+                            let _ = callback_sender.send(outcome);
+                            Ok(())
+                        }));
+
+                    unsafe { printable_webview.Print(&print_settings, &handler) }
+                        .map_err(|error| format!("Không thể gửi lệnh tới máy in: {error}"))?;
+                    Ok(())
+                })();
+
+                if let Err(error) = setup_result {
+                    let _ = setup_sender.send(Err(error));
+                }
+            })
+            .map_err(|error| format!("Không thể truy cập cửa sổ in: {error}"))?;
+
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            result_receiver.recv_timeout(Duration::from_secs(30))
+        })
+        .await
+        .map_err(|error| format!("Tiến trình in bị gián đoạn: {error}"))?
+        .map_err(|_| "Máy in không phản hồi sau 30 giây.".to_string())?;
+
+        match &result {
+            Ok(()) => eprintln!("[Biên lai] Đã gửi biên lai tới máy in mặc định."),
+            Err(error) => eprintln!("[Biên lai] In trực tiếp thất bại: {error}"),
+        }
+        result
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = webview;
+        Err("In trực tiếp hiện chỉ hỗ trợ ứng dụng POS trên Windows.".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .on_window_event(|window, event| {
+            if window.label() != MAIN_WINDOW_LABEL
+                || !matches!(event, tauri::WindowEvent::CloseRequested { .. })
+            {
+                return;
+            }
+
+            let app = window.app_handle();
+            if let Some(customer_display) = app.get_webview_window(CUSTOMER_DISPLAY_LABEL) {
+                if let Err(error) = customer_display.close() {
+                    eprintln!(
+                        "[Màn hình khách] Không thể đóng cửa sổ phụ trước khi thoát: {error}"
+                    );
+                }
+            }
+
+            // Kết thúc toàn bộ tiến trình để mọi WebView và tác vụ nền cùng được dọn dẹp.
+            app.exit(0);
+        })
         .setup(|app| {
             match ensure_customer_display(app.handle()) {
                 Ok(CustomerDisplayOpenStatus::NoSecondaryMonitor) => {
@@ -200,7 +349,10 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_customer_display])
+        .invoke_handler(tauri::generate_handler![
+            open_customer_display,
+            print_receipt_silent
+        ])
         .run(tauri::generate_context!())
         .expect("Không thể khởi chạy ứng dụng Tauri");
 }

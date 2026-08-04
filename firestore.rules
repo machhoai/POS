@@ -2,10 +2,11 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // POS Orders — Allow read/write from authenticated clients
-    // TODO: Add proper authentication rules before production
+    // POS order reads and writes go through authenticated callable Functions.
+    // The documents contain opaque invoice-request capability tokens, so direct
+    // client access must stay disabled even for authenticated users.
     match /pos_orders/{orderId} {
-      allow read, write: if true; // ⚠️ DEV ONLY — lock down before production
+      allow read, write: if false;
     }
   }
 }

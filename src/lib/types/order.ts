@@ -17,8 +17,15 @@ export type PaymentMethod = "CASH" | "QR_CODE";
 export interface OrderItem {
   goodsId: string;
   goodsName: string;
+  /** Giá bán một đơn vị đã bao gồm thuế. */
   price: number;
   quantity: number;
+  /** Giá một đơn vị trước thuế, được chốt tại thời điểm tạo đơn. */
+  unitPriceBeforeTax?: number;
+  /** Thuế suất phần trăm được chốt tại thời điểm tạo đơn. */
+  taxRate?: number;
+  /** Tổng tiền thuế của dòng hàng. */
+  taxAmount?: number;
 }
 
 /** Metadata tracking the sync process with the remote HK API. */
@@ -95,6 +102,12 @@ export interface PosOrder {
 
   /** Order number returned by the HK API after successful sync */
   hkOrderNumber: string | null;
+
+  /** Opaque bearer token encoded in the public invoice-request QR. */
+  invoiceRequestToken?: string;
+
+  /** ISO timestamp when the public invoice-request capability was created. */
+  invoiceRequestCreatedAt?: string;
 
   /** The shop this order belongs to */
   shopId: number;

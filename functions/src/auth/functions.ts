@@ -16,6 +16,7 @@ import {
 import {
   checkoutPosOrderForUser,
   getLatestPosOrderForUser,
+  getPosOrderForUser,
   getPosOrderStatusForUser,
   listPosOrdersForUser,
   preparePosOrderForUser,
@@ -78,6 +79,7 @@ export const getPosAuthSession = onCall(
     if (
       action === "prepareOrder" ||
       action === "checkoutOrder" ||
+      action === "getOrder" ||
       action === "getOrderStatus" ||
       action === "getOrders" ||
       action === "getLatestOrder" ||
@@ -110,6 +112,12 @@ export const getPosAuthSession = onCall(
         }
         if (action === "retryOrderSync") {
           return await retryPosOrderSyncForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "getOrder") {
+          return await getPosOrderForUser(
             request.auth.uid,
             request.data?.payload,
           );
