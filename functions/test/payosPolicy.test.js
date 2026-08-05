@@ -2,17 +2,44 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  buildPayOSPaymentDescription,
   canManuallyConfirmPayOSPayment,
   decidePayOSWebhookPayment,
   inferPayOSNextAction,
   isPayOSPaymentAmountValid,
+  PAYOS_DESCRIPTION_MAX_LENGTH,
   PAYOS_DISPLAY_WINDOW_MS,
+  PAYOS_STORE_CODE_MAX_LENGTH,
 } = require("../lib/payment/payosPolicy");
 
 const NOW = Date.parse("2026-08-03T02:00:00.000Z");
 
 test("uses an exact five-minute QR display window", () => {
   assert.equal(PAYOS_DISPLAY_WINDOW_MS, 300000);
+});
+
+test("builds the PayOS description from the warehouse business code", () => {
+  const localOrderId = "ORD-1750000000000-ABC123";
+  const paymentReference = localOrderId.slice(-12);
+
+  assert.equal(
+    buildPayOSPaymentDescription("JWC01", localOrderId),
+    `JWC01 ${paymentReference}`,
+  );
+});
+
+test("limits the warehouse code without truncating the payment reference", () => {
+  const localOrderId = "ORD-1750000000000-ABC123";
+  const paymentReference = localOrderId.slice(-12);
+  const description = buildPayOSPaymentDescription(
+    "WAREHOUSE-CODE-TOO-LONG",
+    localOrderId,
+  );
+
+  assert.equal(description, `WAREHO ${paymentReference}`);
+  assert.equal(description.split(" ")[0].length, PAYOS_STORE_CODE_MAX_LENGTH);
+  assert.ok(description.endsWith(paymentReference));
+  assert.ok(description.length <= PAYOS_DESCRIPTION_MAX_LENGTH);
 });
 
 test("keeps waiting while both the QR link and display window are active", () => {
