@@ -1,0 +1,211 @@
+import {
+  MEMBER_ACCOUNT_ATTRIBUTES,
+  MEMBER_BALANCE_CATEGORIES,
+  type HKAccountDto,
+  type HKMemberLookupDataDto,
+  type HKMemberPackageDetailDto,
+  type HKMemberPackageListItemDto,
+  type HKNumberish,
+  type HKOrderPrecalculationDto,
+  type HKStoredValueDto,
+  type MemberAccountDefinition,
+  type MemberBalanceBucket,
+  type MemberBalances,
+  type MemberGender,
+  type MemberLookupContext,
+  type MemberPointPackage,
+  type MemberProfile,
+} from "../types/member";
+
+export class MemberMappingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MemberMappingError";
+  }
+}
+
+function toOptionalString(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function toFiniteNumber(value: HKNumberish): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function toRequiredNumber(value: HKNumberish, fieldName: string): number {
+  const numberValue = toFiniteNumber(value);
+  if (numberValue === null) {
+    throw new MemberMappingError(`Response thiếu giá trị hợp lệ cho ${fieldName}.`);
+  }
+  return numberValue;
+}
+
+function normalizeGender(value: string | number | null | undefined): MemberGender {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (["male", "m", "1", "nam", "男"].includes(normalized)) return "MALE";
+  if (["female", "f", "2", "nữ", "nu", "女"].includes(normalized)) {
+    return "FEMALE";
+  }
+  if (normalized) return "OTHER";
+  return "UNKNOWN";
+}
+
+function accountBucket(extendAttr: number): MemberBalanceBucket {
+  switch (extendAttr) {
+    case MEMBER_ACCOUNT_ATTRIBUTES.PRINCIPAL_VND:
+      return "PRINCIPAL_VND";
+    case MEMBER_ACCOUNT_ATTRIBUTES.BONUS:
+      return "BONUS";
+    case MEMBER_ACCOUNT_ATTRIBUTES.INTEGRAL:
+      return "INTEGRAL";
+    case MEMBER_ACCOUNT_ATTRIBUTES.LOTTERY:
+      return "LOTTERY";
+    default:
+      return "OTHER";
+  }
+}
+
+export function mapMemberBalances(values: HKStoredValueDto[] | null | undefined): MemberBalances {
+  const valuesByCategory = new Map<number, number>();
+
+  for (const item of values ?? []) {
+    const category = toFiniteNumber(item.category);
+    const value = toFiniteNumber(item.value);
+    if (category !== null && value !== null) valuesByCategory.set(category, value);
+  }
+
+  const principalVnd = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.PRINCIPAL_VND) ?? 0;
+  const bonus = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.BONUS) ?? 0;
+  const integral = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.INTEGRAL) ?? 0;
+  const lottery = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.LOTTERY) ?? 0;
+  const knownCategories = new Set<number>(Object.values(MEMBER_BALANCE_CATEGORIES));
+  const other = Object.fromEntries(
+    [...valuesByCategory].filter(([category]) => !knownCategories.has(category)),
+  );
+
+  return {
+    principalVnd,
+    bonus,
+    totalAvailable: principalVnd + bonus,
+    integral,
+    lottery,
+    other,
+  };
+}
+
+export function mapMemberLookup(
+  data: HKMemberLookupDataDto,
+  context: MemberLookupContext = {},
+): MemberProfile {
+  const { shopId, memberCode } = context;
+  const hasShopItems = Array.isArray(data.items);
+  const selectedShop = hasShopItems
+    ? data.items?.find((item) => toFiniteNumber(item.shopId) === shopId)
+    : undefined;
+
+  if (hasShopItems && !selectedShop) {
+    throw new MemberMappingError("Không tìm thấy tài khoản thành viên tại cửa hàng hiện tại.");
+  }
+
+  const uid = toOptionalString(selectedShop?.uid ?? data.uid);
+  if (!uid) throw new MemberMappingError("Response thành viên không có UID hợp lệ.");
+
+  const storedValues =
+    selectedShop?.storedValues ??
+    selectedShop?.storedValue ??
+    data.storedValues ??
+    data.storedValue;
+
+  return {
+    uid,
+    mid: toOptionalString(data.mid) || null,
+    memberCode: toOptionalString(data.memberCode ?? memberCode) || null,
+    phone: toOptionalString(data.phone),
+    fullName: toOptionalString(data.realName),
+    gender: normalizeGender(data.sex),
+    birthDate: null,
+    email: null,
+    levelName: toOptionalString(selectedShop?.levelName ?? data.levelName),
+    shopId: selectedShop ? toFiniteNumber(selectedShop.shopId) : shopId ?? null,
+    shopName: toOptionalString(selectedShop?.shopName) || null,
+    balances: mapMemberBalances(storedValues),
+  };
+}
+
+export function mapMemberAccounts(accounts: HKAccountDto[]): MemberAccountDefinition[] {
+  return accounts.flatMap((account) => {
+    const accountId = toOptionalString(account.key ?? account.shopAcctId ?? account.id);
+    const extendAttr = toFiniteNumber(account.extendAttr);
+    if (!accountId || extendAttr === null) return [];
+
+    return [{
+      accountId,
+      name: toOptionalString(account.value ?? account.name),
+      extendAttr,
+      unit: toOptionalString(account.unit),
+      bucket: accountBucket(extendAttr),
+    }];
+  });
+}
+
+export function mapMemberPointPackage(input: {
+  listItem: HKMemberPackageListItemDto;
+  detail: HKMemberPackageDetailDto;
+  precalculation: HKOrderPrecalculationDto;
+  accounts: MemberAccountDefinition[];
+}): MemberPointPackage | null {
+  const goodsId = toOptionalString(input.listItem.goodsId ?? input.detail.setMealId);
+  if (!goodsId) throw new MemberMappingError("Gói thành viên không có goodsId hợp lệ.");
+
+  const accountsById = new Map(
+    input.accounts.map((account) => [account.accountId, account]),
+  );
+  const credits = (input.detail.giveConfigs ?? []).flatMap((config) => {
+    const accountId = toOptionalString(config.shopAcctId);
+    const amount = toFiniteNumber(config.giveAmount);
+    if (!accountId || amount === null || amount <= 0) return [];
+
+    const account = accountsById.get(accountId);
+    return [{
+      accountId,
+      accountName: account?.name ?? "",
+      bucket: account?.bucket ?? "OTHER" as const,
+      amount,
+      effectiveMode: toFiniteNumber(config.effectiveMode),
+      effectiveDays: toFiniteNumber(config.effectiveDays),
+    }];
+  });
+
+  const principalPoints = credits
+    .filter((credit) => credit.bucket === "PRINCIPAL_VND")
+    .reduce((total, credit) => total + credit.amount, 0);
+  const bonusBucketPoints = credits
+    .filter((credit) => credit.bucket === "BONUS")
+    .reduce((total, credit) => total + credit.amount, 0);
+  const totalPoints = principalPoints + bonusBucketPoints;
+
+  if (totalPoints <= 0) return null;
+
+  return {
+    goodsId,
+    name: toOptionalString(input.listItem.goodsName ?? input.detail.setMealName),
+    description: toOptionalString(input.listItem.remark),
+    badge: toOptionalString(input.listItem.badge),
+    paymentAmountVnd: toRequiredNumber(
+      input.precalculation.totalMoney,
+      "order_precalculate.data.totalMoney",
+    ),
+    originalAmountVnd:
+      toFiniteNumber(input.precalculation.totalOriginalMoney) ??
+      toRequiredNumber(input.precalculation.totalMoney, "totalMoney"),
+    discountAmountVnd: toFiniteNumber(input.precalculation.totalDiscountMoney) ?? 0,
+    priceBeforeTaxVnd: toFiniteNumber(input.detail.price) ?? 0,
+    principalPoints,
+    bonusBucketPoints,
+    totalPoints,
+    extraBonusPoints: null,
+    credits,
+  };
+}

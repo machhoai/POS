@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock, Heart } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { CheckCircle2, Heart } from "lucide-react";
 import type { CustomerDisplayOrderSnapshot } from "@/lib/types/customerDisplay";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 
@@ -29,7 +29,6 @@ const PaymentSuccessView: React.FC<PaymentSuccessViewProps> = ({
     durationSeconds = DEFAULT_DURATION_SECONDS,
 }) => {
     const displayOrder = order ?? MOCK_ORDER;
-    const [secondsLeft, setSecondsLeft] = useState(durationSeconds);
     const itemCount = displayOrder.items.reduce((total, item) => total + item.quantity, 0);
 
     const onTimeoutRef = useRef(onTimeout);
@@ -38,22 +37,17 @@ const PaymentSuccessView: React.FC<PaymentSuccessViewProps> = ({
     }, [onTimeout]);
 
     useEffect(() => {
-        setSecondsLeft(durationSeconds);
+        let secondsLeft = durationSeconds;
         const interval = setInterval(() => {
-            setSecondsLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(interval);
-                    onTimeoutRef.current?.();
-                    return 0;
-                }
-                return prev - 1;
-            });
+            secondsLeft -= 1;
+            if (secondsLeft <= 0) {
+                clearInterval(interval);
+                onTimeoutRef.current?.();
+            }
         }, 1000);
 
         return () => clearInterval(interval);
     }, [durationSeconds]);
-
-    const progressPercentage = (secondsLeft / durationSeconds) * 100;
 
     return (
         <main className="relative flex h-screen items-center justify-center overflow-hidden bg-emerald-50 p-8 text-center select-none">

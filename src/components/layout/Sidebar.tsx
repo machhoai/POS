@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IoDesktop, IoDocument, IoHome } from "react-icons/io5";
+import { IoDesktop, IoDocument, IoHome, IoPeople } from "react-icons/io5";
 
 interface SidebarProps {
     onLogout: () => void;
@@ -18,6 +18,11 @@ const NAV_ITEMS = [
         href: "/orders",
         label: "Đơn hàng",
         icon: <IoDocument />
+    },
+    {
+        href: "/members",
+        label: "Thành viên",
+        icon: <IoPeople />
     },
     {
         href: "/display",

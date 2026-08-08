@@ -1,0 +1,118 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const {
+  mapMemberAccounts,
+  mapMemberBalances,
+  mapMemberLookup,
+  mapMemberPointPackage,
+} = require("../lib/services/memberMapper");
+
+test("maps the confirmed member balance categories", () => {
+  assert.deepEqual(
+    mapMemberBalances([
+      { category: 101, value: "693" },
+      { category: 102, value: 50 },
+      { category: 105, value: 7 },
+      { category: 106, value: 3 },
+      { category: 112, value: 9 },
+    ]),
+    {
+      principalVnd: 693,
+      bonus: 50,
+      totalAvailable: 743,
+      integral: 7,
+      lottery: 3,
+      other: { 112: 9 },
+    },
+  );
+});
+
+test("selects the current shop when mapping a phone lookup", () => {
+  const member = mapMemberLookup(
+    {
+      mid: "member-id",
+      phone: "0900000000",
+      realName: "Khách thử nghiệm",
+      sex: "female",
+      items: [
+        { shopId: 10, uid: "other-shop" },
+        {
+          shopId: "20",
+          shopName: "Joy World",
+          uid: "current-shop",
+          levelName: "Gold",
+          storedValues: [
+            { category: 101, value: 100 },
+            { category: 102, value: 20 },
+          ],
+        },
+      ],
+    },
+    { shopId: 20 },
+  );
+
+  assert.equal(member.uid, "current-shop");
+  assert.equal(member.gender, "FEMALE");
+  assert.equal(member.balances.totalAvailable, 120);
+});
+
+test("preserves the queried card number when the card response omits it", () => {
+  const member = mapMemberLookup(
+    {
+      uid: "card-member",
+      phone: "0900000000",
+      realName: "Khách dùng thẻ",
+      storedValue: [{ category: 101, value: 200 }],
+    },
+    { memberCode: "CARD-001" },
+  );
+
+  assert.equal(member.memberCode, "CARD-001");
+  assert.equal(member.balances.principalVnd, 200);
+});
+
+test("maps a sellable point package without inventing extra bonus", () => {
+  const accounts = mapMemberAccounts([
+    { key: "principal", value: "VND", extendAttr: 1, unit: "Đồng" },
+    { key: "bonus", value: "赠币", extendAttr: 2, unit: "Đồng" },
+  ]);
+  const result = mapMemberPointPackage({
+    listItem: {
+      goodsId: "silver-50",
+      goodsName: "GSM: Silver +50",
+      category: 1,
+      remark: "",
+    },
+    detail: {
+      setMealId: "silver-50",
+      price: 1100000,
+      afterTaxPrice: 1210000,
+      giveConfigs: [
+        { shopAcctId: "bonus", giveAmount: 435, effectiveMode: 1, effectiveDays: 0 },
+      ],
+    },
+    precalculation: {
+      totalOriginalMoney: 1210000,
+      totalDiscountMoney: 0,
+      totalMoney: 1210000,
+    },
+    accounts,
+  });
+
+  assert.equal(result.paymentAmountVnd, 1210000);
+  assert.equal(result.bonusBucketPoints, 435);
+  assert.equal(result.totalPoints, 435);
+  assert.equal(result.extraBonusPoints, null);
+});
+
+test("excludes category-one products that do not grant playable points", () => {
+  const result = mapMemberPointPackage({
+    listItem: { goodsId: "birthday", goodsName: "Gói sinh nhật" },
+    detail: { setMealId: "birthday", giveConfigs: [] },
+    precalculation: { totalMoney: 21000000 },
+    accounts: [],
+  });
+
+  assert.equal(result, null);
+});

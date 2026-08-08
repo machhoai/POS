@@ -19,4 +19,5 @@ export const SHARED_AUTH_COLLECTIONS = {
 export const POS_COLLECTIONS = {
   products: "jpos_products",
   orders: "pos_orders",
+  members: "pos_members",
 } as const;

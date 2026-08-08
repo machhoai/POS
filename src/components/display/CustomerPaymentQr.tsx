@@ -1,4 +1,4 @@
-import { CircleX, Clock3, LoaderCircle, ReceiptText, ScanLine, TriangleAlert } from "lucide-react";
+import { CircleX, Clock3, LoaderCircle, ScanLine, TriangleAlert } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { CustomerDisplayOrderSnapshot, CustomerDisplayTransferPayment } from "@/lib/types/customerDisplay";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
@@ -56,8 +56,6 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
         ? null
         : STATUS_CONTENT[displayStatus];
     const StatusIcon = statusContent?.icon;
-
-    const itemCount = order?.items.reduce((total, item) => total + item.quantity, 0) ?? 0;
 
     return (
         <section className="flex flex-col h-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-md)]" aria-live="polite">

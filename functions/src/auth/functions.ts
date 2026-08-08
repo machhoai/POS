@@ -21,10 +21,22 @@ import {
   preparePosOrderForUser,
   retryPosOrderSyncForUser,
 } from "../order/functions";
+import {
+  lookupPosMemberForUser,
+  registerPosMemberForUser,
+  updatePosMemberProfileForUser,
+} from "../member/functions";
+import {
+  finalizeMemberPackageSaleForUser,
+  listMemberPackagesForUser,
+  prepareMemberPackageOrderForUser,
+  sellMemberPackageForCashForUser,
+} from "../member/packageFunctions";
+import { throwMemberCallableError } from "../member/callable";
 const CALLABLE_OPTIONS = {
   region: "asia-southeast1",
   cors: true,
-  timeoutSeconds: 120,
+  timeoutSeconds: 300,
   maxInstances: 20,
   secrets: [joyworldUserSecret, joyworldPassSecret],
 };
@@ -75,6 +87,65 @@ export const getPosAuthSession = onCall(
     }
 
     const action = request.data?.action;
+    if (
+      action === "lookupMember" ||
+      action === "registerMember" ||
+      action === "updateMemberProfile" ||
+      action === "getMemberPackages" ||
+      action === "prepareMemberPackageOrder" ||
+      action === "sellMemberPackageCash" ||
+      action === "finalizeMemberPackageSale"
+    ) {
+      try {
+        if (action === "lookupMember") {
+          return await lookupPosMemberForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "registerMember") {
+          return await registerPosMemberForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "getMemberPackages") {
+          return await listMemberPackagesForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "prepareMemberPackageOrder") {
+          return await prepareMemberPackageOrderForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "sellMemberPackageCash") {
+          return await sellMemberPackageForCashForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "finalizeMemberPackageSale") {
+          return await finalizeMemberPackageSaleForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        return await updatePosMemberProfileForUser(
+          request.auth.uid,
+          request.data?.payload,
+        );
+      } catch (error: unknown) {
+        return throwMemberCallableError(
+          error,
+          `getPosAuthSession:${action}`,
+          request.auth.uid,
+        );
+      }
+    }
+
     if (
       action === "prepareOrder" ||
       action === "checkoutOrder" ||

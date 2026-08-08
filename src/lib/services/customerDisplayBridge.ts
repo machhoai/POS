@@ -36,7 +36,14 @@ function isStateEnvelope(value: unknown): value is StateEnvelope {
     return false;
   }
   if (typeof value.sentAt !== "number" || !isRecord(value.state)) return false;
-  return ["IDLE", "CART", "TRANSFER", "SUCCESS"].includes(
+  return [
+    "IDLE",
+    "CART",
+    "TRANSFER",
+    "SUCCESS",
+    "MEMBER_REVIEW",
+    "MEMBER_SUCCESS",
+  ].includes(
     String(value.state.mode),
   );
 }

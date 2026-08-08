@@ -14,3 +14,10 @@ test("a verified local payment starts HK synchronization exactly once", () => {
   assert.equal(shouldSynchronizeRemoteOrder("LOCAL_PAID", "LOCAL_PAID"), false);
   assert.equal(shouldSynchronizeRemoteOrder("LOCAL_PAID", "SYNCING"), false);
 });
+
+test("member package orders wait for the synchronous API-first callable", () => {
+  assert.equal(
+    shouldSynchronizeRemoteOrder("DRAFT", "LOCAL_PAID", "MEMBER_PACKAGE"),
+    false,
+  );
+});
