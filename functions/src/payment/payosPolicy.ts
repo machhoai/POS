@@ -8,6 +8,33 @@ export type PayOSNextAction =
 
 export const PAYOS_DISPLAY_WINDOW_MS = 5 * 60 * 1000;
 export const MANUAL_CONFIRMATION_ERROR_WINDOW_MS = 10 * 60 * 1000;
+export const PAYOS_DESCRIPTION_MAX_LENGTH = 25;
+export const PAYOS_STORE_CODE_MAX_LENGTH = 6;
+export const PAYOS_PAYMENT_REFERENCE_LENGTH = 12;
+
+/**
+ * Builds the bank-transfer description from the warehouse business code and
+ * the stable suffix of the local order ID. The payment reference always has
+ * priority; the warehouse code only uses the remaining space, up to 6 chars.
+ */
+export function buildPayOSPaymentDescription(
+  warehouseCode: string,
+  localOrderId: string,
+): string {
+  const paymentReference = localOrderId.slice(
+    -Math.min(PAYOS_PAYMENT_REFERENCE_LENGTH, PAYOS_DESCRIPTION_MAX_LENGTH),
+  );
+  const availableStoreCodeLength = Math.max(
+    0,
+    PAYOS_DESCRIPTION_MAX_LENGTH - paymentReference.length - 1,
+  );
+  const storeCode = warehouseCode.trim().slice(
+    0,
+    Math.min(PAYOS_STORE_CODE_MAX_LENGTH, availableStoreCodeLength),
+  );
+
+  return storeCode ? `${storeCode} ${paymentReference}` : paymentReference;
+}
 
 export function isCompletedOrderStatus(status: OrderStatus): boolean {
   return ["LOCAL_PAID", "SYNCING", "SYNC_SUCCESS", "SYNC_FAILED"].includes(

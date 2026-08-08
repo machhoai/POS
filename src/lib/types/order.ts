@@ -18,8 +18,15 @@ export type OrderKind = "STANDARD" | "MEMBER_PACKAGE";
 export interface OrderItem {
   goodsId: string;
   goodsName: string;
+  /** Giá bán một đơn vị đã bao gồm thuế. */
   price: number;
   quantity: number;
+  /** Giá một đơn vị trước thuế, được chốt tại thời điểm tạo đơn. */
+  unitPriceBeforeTax?: number;
+  /** Thuế suất phần trăm được chốt tại thời điểm tạo đơn. */
+  taxRate?: number;
+  /** Tổng tiền thuế của dòng hàng. */
+  taxAmount?: number;
 }
 
 /** Metadata tracking the sync process with the remote HK API. */
@@ -99,6 +106,11 @@ export interface PosOrder {
 
   /** Số tiền order_create trả về, dùng đối soát đơn gói thành viên. */
   remoteActualPayment?: number | null;
+  /** Opaque bearer token encoded in the public invoice-request QR. */
+  invoiceRequestToken?: string;
+
+  /** ISO timestamp when the public invoice-request capability was created. */
+  invoiceRequestCreatedAt?: string;
 
   /** The shop this order belongs to */
   shopId: number;

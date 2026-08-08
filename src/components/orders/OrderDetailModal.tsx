@@ -6,6 +6,7 @@
 
 import type { PosOrder } from "@/lib/types/order";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import ReceiptPrintButton from "@/features/receipt/components/ReceiptPrintButton";
 
 interface OrderDetailModalProps {
     order: PosOrder;
@@ -138,6 +139,10 @@ export default function OrderDetailModal({
                         <span className="text-sm font-bold text-[var(--color-text-primary)]">Tổng cộng</span>
                         <span className="text-xl font-bold text-[var(--color-accent)]">{formatCurrency(finalAmount)}</span>
                     </div>
+                    <ReceiptPrintButton
+                        order={order}
+                        className="mt-3 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#202124] px-4 text-sm font-bold text-white active:scale-[0.98] disabled:opacity-50"
+                    />
                     {order.status === "SYNC_FAILED" && (
                         <button
                             type="button"

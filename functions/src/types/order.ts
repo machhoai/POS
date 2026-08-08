@@ -24,8 +24,15 @@ export type OrderKind = "STANDARD" | "MEMBER_PACKAGE";
 export interface OrderItem {
   goodsId: string;
   goodsName: string;
+  /** Tax-inclusive unit price charged to the customer. */
   price: number;
   quantity: number;
+  /** Authoritative pre-tax unit price at order creation time. */
+  unitPriceBeforeTax?: number;
+  /** Derived tax percentage at order creation time. */
+  taxRate?: number;
+  /** Total tax amount for this line. */
+  taxAmount?: number;
 }
 
 /** Sync metadata. */
@@ -93,6 +100,10 @@ export interface PosOrder {
   hkOrderNumber: string | null;
   /** Amount returned by order_create, retained for member-sale reconciliation. */
   remoteActualPayment?: number | null;
+  /** Opaque bearer token encoded in the public invoice-request QR. */
+  invoiceRequestToken?: string;
+  /** ISO timestamp when the public invoice-request capability was created. */
+  invoiceRequestCreatedAt?: string;
   shopId: number;
   warehouseId: string;
   createdBy: string;

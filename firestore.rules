@@ -10,6 +10,11 @@ service cloud.firestore {
 
     match /pos_members/{memberId} {
       allow read, write: if false;
+    // POS order reads and writes go through authenticated callable Functions.
+    // The documents contain opaque invoice-request capability tokens, so direct
+    // client access must stay disabled even for authenticated users.
+    match /pos_orders/{orderId} {
+      allow read, write: if false;
     }
   }
 }

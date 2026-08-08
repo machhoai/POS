@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IoDesktop, IoDocument, IoHome, IoPeople } from "react-icons/io5";
+import { IoDesktop, IoDocument, IoHome, IoPeople, IoSettings } from "react-icons/io5";
 
 interface SidebarProps {
     onLogout: () => void;
@@ -70,17 +70,17 @@ export default function Sidebar({ onLogout }: SidebarProps) {
             </nav>
 
             <div className="mt-auto flex flex-col items-center gap-2">
-                <button
-                    type="button"
-                    className="w-11 h-11 flex items-center justify-center rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
-                    title="Cài đặt"
-                    aria-label="Cài đặt"
+                <Link
+                    href="/settings/receipt"
+                    className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors ${pathname.startsWith("/settings")
+                        ? "text-[var(--color-accent)] bg-orange-50"
+                        : "text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]"
+                        }`}
+                    title="Cấu hình biên lai"
+                    aria-label="Cấu hình biên lai"
                 >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.6 3.6c.1-.6.6-1.1 1.3-1.1h2.2c.7 0 1.2.5 1.3 1.1l.2 1.1c.1.4.3.7.7.9l.3.2c.4.2.8.2 1.1.1l1.1-.4c.6-.2 1.3 0 1.6.6l1.1 1.9c.3.6.2 1.3-.3 1.7l-.9.7c-.3.2-.5.6-.5 1v.4c0 .4.2.8.5 1l.9.7c.5.4.7 1.1.3 1.7l-1.1 1.9c-.3.6-1 .8-1.6.6l-1.1-.4c-.4-.1-.8-.1-1.1.1l-.3.2c-.4.2-.6.5-.7.9l-.2 1.1c-.1.6-.6 1.1-1.3 1.1h-2.2c-.7 0-1.2-.5-1.3-1.1l-.2-1.1c-.1-.4-.3-.7-.7-.9l-.3-.2c-.4-.2-.8-.2-1.1-.1l-1.1.4c-.6.2-1.3 0-1.6-.6l-1.1-1.9c-.3-.6-.2-1.3.3-1.7l.9-.7c.3-.2.5-.6.5-1v-.4c0-.4-.2-.8-.5-1l-.9-.7c-.5-.4-.7-1.1-.3-1.7l1.1-1.9c.3-.6 1-.8 1.6-.6l1.1.4c.4.1.8.1 1.1-.1l.3-.2c.4-.2.6-.5.7-.9l.2-1.1Z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                    </svg>
-                </button>
+                    <IoSettings className="w-5 h-5" />
+                </Link>
                 <button
                     type="button"
                     onClick={onLogout}

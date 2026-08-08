@@ -19,6 +19,7 @@ import type {
   PosOrder,
 } from "../types/order";
 import {
+  buildPayOSPaymentDescription,
   canManuallyConfirmPayOSPayment,
   decidePayOSWebhookPayment,
   inferPayOSNextAction,
@@ -198,6 +199,7 @@ async function reservePaymentAttempt(
   docRef: DocumentReference,
   userId: string,
 ): Promise<{ order: PosOrder; attempt: PayOSPaymentAttempt }> {
+  const session = await getPosAuthSession(userId);
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(docRef);
     if (!snapshot.exists) {
@@ -208,6 +210,21 @@ async function reservePaymentAttempt(
       throw new HttpsError(
         "permission-denied",
         "Chỉ thu ngân tạo đơn mới được khởi tạo mã thanh toán.",
+      );
+    }
+    const warehouse = session.warehouses.find(
+      (candidate) => candidate.id === order.warehouseId,
+    );
+    if (!warehouse) {
+      throw new HttpsError(
+        "permission-denied",
+        "Bạn không có quyền tạo mã thanh toán tại điểm bán này.",
+      );
+    }
+    if (!warehouse.code.trim()) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Điểm bán chưa được cấu hình mã cửa hàng để tạo nội dung chuyển khoản.",
       );
     }
     if (order.status !== "DRAFT") {
@@ -233,11 +250,10 @@ async function reservePaymentAttempt(
 
     const now = new Date();
     const orderCode = generatePayOSOrderCode();
-    const cleanWarehouseId = (order.warehouseId || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-    const storePrefix = cleanWarehouseId
-      ? (cleanWarehouseId.startsWith("J") ? cleanWarehouseId : `J${cleanWarehouseId}`)
-      : "JPOS";
-    const description = `${storePrefix} ${order.localOrderId.slice(-12)}`;
+    const description = buildPayOSPaymentDescription(
+      warehouse.code,
+      order.localOrderId,
+    );
 
     const attempt: PayOSPaymentAttempt = {
       orderCode,

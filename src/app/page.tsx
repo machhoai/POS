@@ -14,7 +14,13 @@ import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/u
 import { useProductStore } from "@/lib/stores/useProductStore";
 import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { syncProducts } from "@/lib/services/productService";
+import { fetchOrderForReceipt } from "@/lib/services/orderService";
 import { showError, showPromise, showWarning } from "@/lib/utils/toast";
+import {
+  describeReceiptPrintError,
+  printReceiptSilently,
+} from "@/features/receipt/components/ReceiptPrintButton";
+import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
 import { filterProducts } from "@/lib/utils/productSearch";
 import { usePayOSCheckoutController } from "@/lib/hooks/usePayOSCheckoutController";
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
@@ -77,15 +83,50 @@ export default function CashierPage() {
   const refreshCurrentOrderStatus = useCartStore((s) => s.refreshCurrentOrderStatus);
   const clearCart = useCartStore((s) => s.clearCart);
   const completePayOSCheckout = useCartStore((s) => s.completePayOSCheckout);
+  const receiptSettings = useReceiptSettingsStore((state) => state.settings);
   const paymentMethods = JPOS_PAYMENT_METHODS;
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
   const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
+
+  const handleAutoPrint = useCallback(async (localOrderId: string) => {
+    console.info("[Biên lai] Bắt đầu in tự động", { localOrderId });
+    let order: Awaited<ReturnType<typeof fetchOrderForReceipt>>;
+    try {
+      order = await fetchOrderForReceipt(localOrderId);
+    } catch (error: unknown) {
+      console.error("[Biên lai] Không thể tải đơn để in tự động:", error);
+      showError(
+        "Thanh toán thành công nhưng chưa tải được biên lai",
+        "Dịch vụ đơn hàng chưa sẵn sàng. Vui lòng in lại từ lịch sử đơn hàng.",
+      );
+      return;
+    }
+
+    try {
+      await printReceiptSilently(order, receiptSettings);
+    } catch (error: unknown) {
+      console.error("[Biên lai] In tự động thất bại:", error);
+      showError(
+        "Thanh toán thành công nhưng chưa in được biên lai",
+        describeReceiptPrintError(
+          error,
+          "Không thể gửi biên lai tới máy in mặc định của Windows.",
+        ),
+      );
+    }
+  }, [receiptSettings]);
+
+  const handlePayOSCompleted = useCallback((localOrderId: string, status: Parameters<typeof completePayOSCheckout>[1]) => {
+    completePayOSCheckout(localOrderId, status);
+    void handleAutoPrint(localOrderId);
+  }, [completePayOSCheckout, handleAutoPrint]);
+
   const payOSPayment = usePayOSCheckoutController({
     shopId,
     warehouseId: effectiveWarehouseId,
     draftOrderId,
     items: cartItems,
-    onCompleted: completePayOSCheckout,
+    onCompleted: handlePayOSCompleted,
   });
   useCustomerDisplayPublisher(payOSPayment);
 
@@ -189,7 +230,11 @@ export default function CashierPage() {
       throw error;
     }
 
-    const runCheckout = () => checkout(shopId, effectiveWarehouseId);
+    const runCheckout = async () => {
+      const result = await checkout(shopId, effectiveWarehouseId);
+      await handleAutoPrint(result.localOrderId);
+      return result;
+    };
     const notifyCheckout = (): ReturnType<typeof runCheckout> => {
       return showPromise(runCheckout(), {
         loading: "Đang ghi nhận thanh toán...",
@@ -211,7 +256,7 @@ export default function CashierPage() {
       console.error("[POS] Lỗi thanh toán:", error);
       throw error;
     }
-  }, [effectiveWarehouseId, checkout, shopId]);
+  }, [effectiveWarehouseId, checkout, handleAutoPrint, shopId]);
 
   // ── Loading / Auth Guard State ─────────────────────────────────────────
   if (authLoading || !user || !userDoc) {

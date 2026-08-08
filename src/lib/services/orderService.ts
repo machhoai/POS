@@ -100,6 +100,24 @@ export async function fetchOrderSyncStatus(
   return result.data;
 }
 
+/** Load the authoritative paid order used to render and print its receipt. */
+export async function fetchOrderForReceipt(
+  localOrderId: string,
+): Promise<PosOrder> {
+  const callable = httpsCallable<
+    {
+      action: "getOrder";
+      payload: { localOrderId: string };
+    },
+    { order: PosOrder }
+  >(functions, "getPosAuthSession");
+  const result = await callable({
+    action: "getOrder",
+    payload: { localOrderId },
+  });
+  return result.data.order;
+}
+
 export interface OrderHistoryResult {
   orders: PosOrder[];
   fetchedAt: string;
