@@ -17,6 +17,7 @@ import {
 interface PayOSCheckoutInput {
   shopId: number;
   warehouseId: string | null;
+  memberUid?: string | null;
   draftOrderId: string | null;
   items: OrderItem[];
   onCompleted: (
@@ -31,6 +32,7 @@ interface PayOSCheckoutInput {
 export function usePayOSCheckoutController({
   shopId,
   warehouseId,
+  memberUid = null,
   draftOrderId,
   items,
   onCompleted,
@@ -157,6 +159,7 @@ export function usePayOSCheckoutController({
         localOrderId: paymentOrderId,
         shopId,
         warehouseId,
+        ...(memberUid ? { uid: memberUid } : {}),
         items: items.map(({ goodsId, quantity }) => ({ goodsId, quantity })),
       });
       if (result.nextAction === "WAIT") {
@@ -176,6 +179,7 @@ export function usePayOSCheckoutController({
     localOrderId,
     lockCartForPayOS,
     manageCartLock,
+    memberUid,
     shopId,
     startPayment,
     warehouseId,

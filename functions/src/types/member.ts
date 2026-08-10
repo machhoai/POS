@@ -111,6 +111,8 @@ export interface HKMemberPackageDetailDto {
   category?: HKNumberish;
   price?: HKNumberish;
   afterTaxPrice?: HKNumberish;
+  foreColor?: string | null;
+  backColor?: string | null;
   giveConfigs?: HKPackageGiveConfigDto[] | null;
   exchangeSetts?: unknown[] | null;
 }
@@ -120,6 +122,77 @@ export interface HKOrderPrecalculationDto {
   totalDiscountMoney?: HKNumberish;
   totalMoney?: HKNumberish;
   totalQty?: HKNumberish;
+}
+
+export interface HKMemberStoredValueLogDto {
+  createTime?: string | null;
+  flowType?: HKNumberish;
+  businessType?: HKNumberish;
+  businessTypeName?: string | null;
+  beforeAmount?: HKNumberish;
+  amount?: HKNumberish;
+  afterAmount?: HKNumberish;
+  remark?: string | null;
+}
+
+export interface HKMemberCardDto {
+  category?: HKNumberish;
+  memberCode?: string | null;
+  icCard?: string | null;
+  remark?: string | null;
+}
+
+export interface HKMemberPassTicketDto {
+  passticketId?: string | null;
+  passticketName?: string | null;
+  passticketCategory?: HKNumberish;
+  activeMode?: HKNumberish;
+  maxNumber?: HKNumberish;
+  takeMaxNumber?: HKNumberish;
+  maxPlayTime?: HKNumberish;
+  maxAccompany?: HKNumberish;
+  buyAmount?: HKNumberish;
+  enabledAmount?: HKNumberish;
+  buyTime?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+}
+
+export interface HKMemberCompensationDataDto {
+  totalValue?: HKNumberish;
+}
+
+export type MemberCompensationStatus =
+  | "PROCESSING"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "UNKNOWN";
+
+export interface MemberCompensationRecord {
+  id: string;
+  warehouse_id: string;
+  shop_id: number;
+  member_uid: string;
+  member_code: string | null;
+  member_name: string;
+  stored_category: 1;
+  amount: number;
+  reason: string;
+  accounting_category: 1004;
+  status: MemberCompensationStatus;
+  created_by: string;
+  created_by_name: string;
+  device_id: string;
+  action_time: Date;
+  sync_time: Date;
+  attempt_count: number;
+  remote_total_value: number | null;
+  remote_code: number | null;
+  remote_message: string | null;
+  completed_at: Date | null;
+  is_deleted: false;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export interface MemberBalances {
@@ -177,6 +250,39 @@ export interface MemberPointPackage {
   totalPoints: number;
   extraBonusPoints: number | null;
   credits: MemberPackageCredit[];
+}
+
+export type MemberStoredValueCategory = 1 | 2 | 5 | 6 | 7;
+
+export interface MemberStoredValueRecord {
+  storedCategory: MemberStoredValueCategory;
+  createTime: string;
+  flowType: 1 | 2;
+  businessType: number;
+  businessTypeName: string;
+  beforeAmount: number;
+  amount: number;
+  afterAmount: number;
+  remark: string;
+}
+
+export interface MemberCard {
+  category: number;
+  memberCode: string;
+  icCard: string;
+  remark: string;
+}
+
+export interface MemberPassTicket {
+  passticketId: string;
+  name: string;
+  category: number;
+  activeMode: number;
+  buyAmount: number;
+  enabledAmount: number;
+  buyTime: string;
+  startTime: string;
+  endTime: string;
 }
 
 export interface MemberLookupContext {

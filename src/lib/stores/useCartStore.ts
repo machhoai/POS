@@ -39,6 +39,7 @@ interface CheckoutContext {
 export interface CartState {
   // ── State ──────────────────────────────────────────────────────────────────
   items: OrderItem[];
+  memberUid: string | null;
   paymentMethod: PaymentMethod;
   draftOrderId: string | null;
   currentOrderId: string | null;
@@ -57,6 +58,7 @@ export interface CartState {
 
   // ── Actions ────────────────────────────────────────────────────────────────
   addItem: (item: OrderItem) => void;
+  setMemberUid: (uid: string | null) => void;
   removeItem: (goodsId: string) => void;
   updateQuantity: (goodsId: string, quantity: number) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
@@ -114,6 +116,7 @@ function saveCartCheckpoint(
       overrides.localOrderId ?? state.currentOrderId ?? state.draftOrderId,
     shopId: context.shopId,
     warehouseId: context.warehouseId,
+    memberUid: overrides.memberUid ?? state.memberUid,
     items,
     paymentMethod: overrides.paymentMethod ?? state.paymentMethod,
     totalAmount:
@@ -134,6 +137,7 @@ function saveCartCheckpoint(
 export const useCartStore = create<CartState>((set, get) => ({
   // ── Initial State ──────────────────────────────────────────────────────────
   items: [],
+  memberUid: null,
   paymentMethod: "CASH",
   draftOrderId: null,
   currentOrderId: null,
@@ -179,6 +183,12 @@ export const useCartStore = create<CartState>((set, get) => ({
     saveCartCheckpoint(get(), "CART_READY");
   },
 
+  setMemberUid: (memberUid) => {
+    if (get().isPaymentLocked) return;
+    set({ memberUid });
+    if (get().items.length > 0) saveCartCheckpoint(get(), "CART_READY");
+  },
+
   removeItem: (goodsId) => {
     set((state) => state.isPaymentLocked
       ? {}
@@ -215,6 +225,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (get().isPaymentLocked) return;
     set({
       items: [],
+      memberUid: null,
       paymentMethod: "CASH",
       draftOrderId: null,
       currentOrderId: null,
@@ -259,6 +270,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     ].includes(journal.checkpoint);
     set({
       items: paymentFinished ? [] : journal.items,
+      memberUid: paymentFinished ? null : journal.memberUid ?? null,
       paymentMethod: journal.paymentMethod,
       draftOrderId: paymentFinished ? null : journal.localOrderId,
       currentOrderId: journal.localOrderId,
@@ -307,6 +319,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           goodsId,
           quantity,
         })),
+        ...(state.memberUid ? { uid: state.memberUid } : {}),
       });
 
       const current = get();
@@ -356,6 +369,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     });
     set({
       items: [],
+      memberUid: null,
       paymentMethod: "CASH",
       draftOrderId: null,
       currentOrderId: localOrderId,
@@ -426,6 +440,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           goodsId,
           quantity,
         })),
+        ...(state.memberUid ? { uid: state.memberUid } : {}),
       });
 
       saveCartCheckpoint(get(), "RECEIPT_PENDING", {
@@ -441,6 +456,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
       set({
         items: [],
+        memberUid: null,
         paymentMethod: "CASH",
         draftOrderId: null,
         currentOrderId: result.localOrderId,

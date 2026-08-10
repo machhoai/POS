@@ -1,16 +1,38 @@
 import { createHash } from "node:crypto";
-import type { MemberGender } from "../types/member";
+import type {
+  MemberGender,
+  MemberStoredValueCategory,
+} from "../types/member";
 
 export type MemberLookupMode = "CARD" | "PHONE";
+export type MemberCardLookupKind = "MEMBER_CODE" | "SERIAL_NUMBER";
+export type MemberStoredValueCategoryFilter = MemberStoredValueCategory | "ALL";
 
 interface MemberScopeInput {
   shopId: number;
   warehouseId: string;
 }
 
+export interface MemberRemoteScopeInput extends MemberScopeInput {
+  uid: string;
+}
+
+export interface MemberStoredValueHistoryInput extends MemberRemoteScopeInput {
+  storedCategory: MemberStoredValueCategoryFilter;
+  startTime: string;
+  endTime: string;
+  page: number;
+  limit: number;
+}
+
+export interface MemberPassTicketInput extends MemberRemoteScopeInput {
+  category: 1 | 2 | 3 | null;
+}
+
 export interface MemberLookupInput extends MemberScopeInput {
   mode: MemberLookupMode;
   query: string;
+  cardLookupKind?: MemberCardLookupKind;
 }
 
 export interface MemberRegistrationInput extends MemberScopeInput {
@@ -127,16 +149,110 @@ function profileInput(data: Record<string, unknown>): MemberRegistrationInput {
   };
 }
 
+export interface MemberCompensationInput extends MemberScopeInput {
+  operationId: string;
+  uid: string;
+  memberCode: string | null;
+  memberName: string;
+  amount: number;
+  reason: string;
+  actionTime: string;
+}
+
+function remoteScopeInput(data: Record<string, unknown>): MemberRemoteScopeInput {
+  return {
+    ...scopeInput(data),
+    uid: requiredString(data.uid, "UID thành viên", 128),
+  };
+}
+
+function remoteDateTime(value: unknown, label: string): string {
+  const normalized = requiredString(value, label, 23);
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(normalized)) {
+    throw new MemberInputError(`${label} không đúng định dạng.`);
+  }
+  return normalized;
+}
+
+function positiveInteger(
+  value: unknown,
+  label: string,
+  maximum: number,
+): number {
+  if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > maximum) {
+    throw new MemberInputError(`${label} không hợp lệ.`);
+  }
+  return Number(value);
+}
+
 export function validateMemberLookupInput(data: unknown): MemberLookupInput {
   const input = inputRecord(data);
   const mode = input.mode;
   if (mode !== "CARD" && mode !== "PHONE") {
     throw new MemberInputError("Phương thức tra cứu thành viên không hợp lệ.");
   }
-  const query = mode === "PHONE"
-    ? normalizePhone(input.query)
-    : requiredString(input.query, "Mã thẻ", 64);
-  return { ...scopeInput(input), mode, query };
+  if (mode === "PHONE") {
+    return { ...scopeInput(input), mode, query: normalizePhone(input.query) };
+  }
+
+  const cardLookupKind = input.cardLookupKind ?? "MEMBER_CODE";
+  if (cardLookupKind !== "MEMBER_CODE" && cardLookupKind !== "SERIAL_NUMBER") {
+    throw new MemberInputError("Loại mã thẻ tra cứu không hợp lệ.");
+  }
+  const query = requiredString(
+    input.query,
+    cardLookupKind === "SERIAL_NUMBER" ? "Serial thẻ" : "Mã thẻ",
+    64,
+  );
+  if (cardLookupKind === "SERIAL_NUMBER" && !/^\d{1,20}$/.test(query)) {
+    throw new MemberInputError("Serial thẻ không đúng định dạng.");
+  }
+  return { ...scopeInput(input), mode, query, cardLookupKind };
+}
+
+export function validateMemberRemoteScopeInput(
+  data: unknown,
+): MemberRemoteScopeInput {
+  return remoteScopeInput(inputRecord(data));
+}
+
+export function validateMemberStoredValueHistoryInput(
+  data: unknown,
+): MemberStoredValueHistoryInput {
+  const input = inputRecord(data);
+  const storedCategory = input.storedCategory === "ALL"
+    ? "ALL"
+    : Number(input.storedCategory);
+  if (storedCategory !== "ALL" && ![1, 2, 5, 6, 7].includes(storedCategory)) {
+    throw new MemberInputError("Loại số dư không hợp lệ.");
+  }
+  const startTime = remoteDateTime(input.startTime, "Thời gian bắt đầu");
+  const endTime = remoteDateTime(input.endTime, "Thời gian kết thúc");
+  if (startTime > endTime) {
+    throw new MemberInputError("Thời gian bắt đầu phải trước thời gian kết thúc.");
+  }
+  return {
+    ...remoteScopeInput(input),
+    storedCategory: storedCategory as MemberStoredValueCategoryFilter,
+    startTime,
+    endTime,
+    page: positiveInteger(input.page, "Trang", 100_000),
+    limit: positiveInteger(input.limit, "Số dòng mỗi trang", 100),
+  };
+}
+
+export function validateMemberPassTicketInput(data: unknown): MemberPassTicketInput {
+  const input = inputRecord(data);
+  const category = input.category === undefined || input.category === null
+    ? null
+    : Number(input.category);
+  if (category !== null && ![1, 2, 3].includes(category)) {
+    throw new MemberInputError("Loại vé thành viên không hợp lệ.");
+  }
+  return {
+    ...remoteScopeInput(input),
+    category: category as 1 | 2 | 3 | null,
+  };
 }
 
 export function validateMemberRegistrationInput(
@@ -154,6 +270,35 @@ export function validateMemberProfileUpdateInput(
     uid: requiredString(input.uid, "UID thành viên", 128),
     mid: optionalString(input.mid, "MID thành viên", 128),
     memberCode: optionalString(input.memberCode, "Mã thẻ", 64),
+  };
+}
+
+export function validateMemberCompensationInput(
+  data: unknown,
+): MemberCompensationInput {
+  const input = inputRecord(data);
+  const operationId = requiredString(input.operationId, "Mã thao tác", 64);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(operationId)) {
+    throw new MemberInputError("Mã thao tác nạp bù không hợp lệ.");
+  }
+  const actionTime = requiredString(input.actionTime, "Thời gian thao tác", 40);
+  const parsedActionTime = new Date(actionTime);
+  if (Number.isNaN(parsedActionTime.getTime())) {
+    throw new MemberInputError("Thời gian thao tác không hợp lệ.");
+  }
+  const reason = requiredString(input.reason, "Lý do nạp bù", 500);
+  if (reason.length < 5) {
+    throw new MemberInputError("Lý do nạp bù phải có ít nhất 5 ký tự.");
+  }
+  return {
+    ...scopeInput(input),
+    operationId,
+    uid: requiredString(input.uid, "UID thành viên", 128),
+    memberCode: optionalString(input.memberCode, "Mã thẻ", 64),
+    memberName: requiredString(input.memberName, "Tên thành viên", 120),
+    amount: positiveInteger(input.amount, "Số điểm nạp bù", 10_000_000),
+    reason,
+    actionTime: parsedActionTime.toISOString(),
   };
 }
 

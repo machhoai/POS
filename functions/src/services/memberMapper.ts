@@ -2,19 +2,26 @@ import {
   MEMBER_ACCOUNT_ATTRIBUTES,
   MEMBER_BALANCE_CATEGORIES,
   type HKAccountDto,
+  type HKMemberCardDto,
   type HKMemberLookupDataDto,
   type HKMemberPackageDetailDto,
   type HKMemberPackageListItemDto,
+  type HKMemberPassTicketDto,
+  type HKMemberStoredValueLogDto,
   type HKNumberish,
   type HKOrderPrecalculationDto,
   type HKStoredValueDto,
   type MemberAccountDefinition,
   type MemberBalanceBucket,
   type MemberBalances,
+  type MemberCard,
   type MemberGender,
   type MemberLookupContext,
+  type MemberPassTicket,
   type MemberPointPackage,
   type MemberProfile,
+  type MemberStoredValueCategory,
+  type MemberStoredValueRecord,
 } from "../types/member";
 
 export class MemberMappingError extends Error {
@@ -132,6 +139,62 @@ export function mapMemberLookup(
     shopName: toOptionalString(selectedShop?.shopName) || null,
     balances: mapMemberBalances(storedValues),
   };
+}
+
+export function mapMemberStoredValueRecords(
+  records: HKMemberStoredValueLogDto[],
+  storedCategory: MemberStoredValueCategory,
+): MemberStoredValueRecord[] {
+  return records.map((record) => {
+    const flowType = toRequiredNumber(record.flowType, "flowType");
+    if (flowType !== 1 && flowType !== 2) {
+      throw new MemberMappingError("Response lịch sử có flowType không hợp lệ.");
+    }
+    return {
+      storedCategory,
+      createTime: toOptionalString(record.createTime),
+      flowType,
+      businessType: toRequiredNumber(record.businessType, "businessType"),
+      businessTypeName: toOptionalString(record.businessTypeName),
+      beforeAmount: toRequiredNumber(record.beforeAmount, "beforeAmount"),
+      amount: Math.abs(toRequiredNumber(record.amount, "amount")),
+      afterAmount: toRequiredNumber(record.afterAmount, "afterAmount"),
+      remark: toOptionalString(record.remark),
+    };
+  });
+}
+
+export function mapMemberCards(cards: HKMemberCardDto[]): MemberCard[] {
+  return cards.flatMap((card) => {
+    const memberCode = toOptionalString(card.memberCode);
+    if (!memberCode) return [];
+    return [{
+      category: toFiniteNumber(card.category) ?? 0,
+      memberCode,
+      icCard: toOptionalString(card.icCard),
+      remark: toOptionalString(card.remark),
+    }];
+  });
+}
+
+export function mapMemberPassTickets(
+  tickets: HKMemberPassTicketDto[],
+): MemberPassTicket[] {
+  return tickets.flatMap((ticket) => {
+    const passticketId = toOptionalString(ticket.passticketId);
+    if (!passticketId) return [];
+    return [{
+      passticketId,
+      name: toOptionalString(ticket.passticketName) || "Vé thành viên",
+      category: toFiniteNumber(ticket.passticketCategory) ?? 0,
+      activeMode: toFiniteNumber(ticket.activeMode) ?? 0,
+      buyAmount: toFiniteNumber(ticket.buyAmount) ?? 0,
+      enabledAmount: toFiniteNumber(ticket.enabledAmount) ?? 0,
+      buyTime: toOptionalString(ticket.buyTime),
+      startTime: toOptionalString(ticket.startTime),
+      endTime: toOptionalString(ticket.endTime),
+    }];
+  });
 }
 
 export function mapMemberAccounts(accounts: HKAccountDto[]): MemberAccountDefinition[] {

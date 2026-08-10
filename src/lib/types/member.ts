@@ -1,5 +1,7 @@
 export type MemberLookupMode = "CARD" | "PHONE";
+export type MemberCardLookupKind = "MEMBER_CODE" | "SERIAL_NUMBER";
 export type MemberGender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
+export type MemberRegistrationGender = Extract<MemberGender, "MALE" | "FEMALE">;
 export type MemberBalanceBucket =
   | "PRINCIPAL_VND"
   | "BONUS"
@@ -74,17 +76,81 @@ export interface MemberPointPackage {
   credits: MemberPackageCredit[];
 }
 
+export type MemberStoredValueCategory = 1 | 2 | 5 | 6 | 7;
+export type MemberStoredValueCategoryFilter = MemberStoredValueCategory | "ALL";
+
+export interface MemberStoredValueRecord {
+  storedCategory: MemberStoredValueCategory;
+  createTime: string;
+  flowType: 1 | 2;
+  businessType: number;
+  businessTypeName: string;
+  beforeAmount: number;
+  amount: number;
+  afterAmount: number;
+  remark: string;
+}
+
+export interface MemberStoredValueHistory {
+  page: number;
+  limit: number;
+  totalPage: number;
+  totalRecord: number;
+  records: MemberStoredValueRecord[];
+  fetchedAt: string;
+}
+
+export interface MemberCard {
+  category: number;
+  memberCode: string;
+  icCard: string;
+  remark: string;
+}
+
+export interface MemberPassTicket {
+  passticketId: string;
+  name: string;
+  category: number;
+  activeMode: number;
+  buyAmount: number;
+  enabledAmount: number;
+  buyTime: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface MemberRegistrationDraft {
   fullName: string;
   phone: string;
-  gender: MemberGender;
-  birthDate: string;
+  gender: MemberRegistrationGender;
+  birthDay: string;
+  birthMonth: string;
+  birthYear: string;
   email: string;
 }
 
 export interface MemberCompensationDraft {
   amount: number | null;
   reason: string;
+}
+
+export interface MemberCompensationInput {
+  operationId: string;
+  shopId: number;
+  warehouseId: string;
+  uid: string;
+  memberCode: string | null;
+  memberName: string;
+  amount: number;
+  reason: string;
+  actionTime: string;
+}
+
+export interface MemberCompensationResult {
+  operationId: string;
+  totalValue: number | null;
+  completedAt: string | null;
+  idempotentReplay: boolean;
 }
 
 /** Bản ghi do POS sở hữu, chỉ lưu sau khi OpenAPI đăng ký thành công. */

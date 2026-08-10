@@ -36,6 +36,10 @@ export interface SyncProduct {
   category: number;
   /** Sub-category name from HK API (if available) */
   subCategory: string;
+  /** Text color used by HK for the product card. */
+  foreColor?: string;
+  /** Background color used by HK for the product card. */
+  backColor?: string;
   /** Current stock quantity for physical souvenir products. */
   amount?: number;
   /** HK product code for physical souvenir products. */

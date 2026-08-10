@@ -7,7 +7,7 @@
 
 import { create } from "zustand";
 import type { Product } from "@/lib/types/product";
-import { CATEGORY_MAP } from "@/lib/types/product";
+import { CATEGORY_IDS, CATEGORY_MAP } from "@/lib/types/product";
 import { filterProducts } from "@/lib/utils/productSearch";
 import {
   getProducts,
@@ -49,20 +49,10 @@ interface ProductState {
  * Giữ thứ tự ổn định theo CATEGORY_MAP.
  */
 function deriveCategories(products: Product[]): CategoryEntry[] {
-  const seen = new Set<number>();
-  const result: CategoryEntry[] = [];
-
-  for (const product of products) {
-    if (!seen.has(product.category) && CATEGORY_MAP[product.category]) {
-      seen.add(product.category);
-      result.push({
-        id: product.category,
-        label: CATEGORY_MAP[product.category],
-      });
-    }
-  }
-
-  return result;
+  const available = new Set(products.map((product) => product.category));
+  return CATEGORY_IDS
+    .filter((category) => available.has(category))
+    .map((category) => ({ id: category, label: CATEGORY_MAP[category] }));
 }
 
 function toProduct(source: StoredProduct): Product {
@@ -83,8 +73,8 @@ function toProduct(source: StoredProduct): Product {
     subCategory: source.subCategory || "",
     typeId: "",
     typeName: source.typeName || source.subCategory || "",
-    foreColor: "#FFFFFF",
-    backColor: "#2563EB",
+    foreColor: source.foreColor || "#FFFFFF",
+    backColor: source.backColor || "#F97316",
     taxRate: 0,
     isOpenSales: true,
     isEnabled: true,

@@ -1,5 +1,8 @@
 import type { ReceiptSettings, ReceiptTheme } from "@/features/receipt/types/receipt";
-import type { RemotePosReceiptSettings } from "@/lib/types/deviceEnrollment";
+import type {
+  RemotePosReceiptSettings,
+  RemotePosReceiptSettingsPayload,
+} from "@/lib/types/deviceEnrollment";
 
 export function mapRemoteReceiptSettings(
   remote: RemotePosReceiptSettings,
@@ -29,5 +32,36 @@ export function mapRemoteReceiptSettings(
     showInvoiceRequestQr: remote.show_invoice_request_qr,
     showThemeMessage: remote.show_theme_message,
     defaultTaxRate: remote.default_tax_rate,
+  };
+}
+
+export function mapReceiptSettingsToRemote(
+  settings: ReceiptSettings,
+): RemotePosReceiptSettingsPayload {
+  return {
+    paper_size: settings.paperSize,
+    theme: settings.theme,
+    theme_messages: settings.themeMessages,
+    theme_message_font_size_pt: settings.themeMessageFontSizePt,
+    store_name: settings.storeName,
+    store_address: settings.storeAddress,
+    hotline: settings.hotline,
+    after_sales_text: settings.afterSalesText,
+    footer_message: settings.footerMessage,
+    logo_data_url: settings.logoDataUrl,
+    logo_width_mm: settings.logoWidthMm,
+    logo_max_height_mm: settings.logoMaxHeightMm,
+    logo_contrast_percent: settings.logoContrastPercent,
+    invoice_qr_size_mm: settings.invoiceQrSizeMm,
+    invoice_qr_title_font_size_pt: settings.invoiceQrTitleFontSizePt,
+    invoice_qr_hint_font_size_pt: settings.invoiceQrHintFontSizePt,
+    font_weights: settings.fontWeights,
+    show_logo: settings.showLogo,
+    show_cashier: settings.showCashier,
+    show_contact: settings.showContact,
+    show_item_tax: settings.showItemTax,
+    show_invoice_request_qr: settings.showInvoiceRequestQr,
+    show_theme_message: settings.showThemeMessage,
+    default_tax_rate: settings.defaultTaxRate,
   };
 }

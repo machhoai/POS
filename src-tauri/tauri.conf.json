@@ -1,11 +1,11 @@
 {
     "$schema": "https://raw.githubusercontent.com/nicegui/nicegui-native/refs/heads/main/nicegui_native/.tauri/config-schema.json",
     "productName": "JPOS",
-    "version": "0.1.9",
+    "version": "0.1.11",
     "identifier": "com.jpos.system",
     "build": {
         "beforeDevCommand": "pnpm dev",
-        "beforeBuildCommand": "pnpm build",
+        "beforeBuildCommand": "pnpm card-reader:build && pnpm build",
         "devUrl": "http://localhost:3000",
         "frontendDist": "../out"
     },
@@ -32,6 +32,9 @@
     "bundle": {
         "active": true,
         "targets": "all",
+        "resources": [
+            "resources/card-reader/*"
+        ],
         "icon": [
             "icons/32x32.png",
             "icons/128x128.png",

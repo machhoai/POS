@@ -64,8 +64,10 @@ const idleRequest: RemoteRequestState = {
 const emptyRegistrationDraft: MemberRegistrationDraft = {
   fullName: "",
   phone: "",
-  gender: "UNKNOWN",
-  birthDate: "",
+  gender: "MALE",
+  birthDay: "",
+  birthMonth: "",
+  birthYear: "",
   email: "",
 };
 
@@ -105,7 +107,11 @@ export const useMemberStore = create<MemberState>((set) => ({
     cardReaderStatus: "IDLE",
     cardReaderError: null,
   }),
-  setLookupQuery: (lookupQuery) => set({ lookupQuery }),
+  setLookupQuery: (lookupQuery) => set({
+    lookupQuery,
+    cardReaderStatus: "IDLE",
+    cardReaderError: null,
+  }),
   startCardRead: () => set({ cardReaderStatus: "READING", cardReaderError: null }),
   completeCardRead: (cardNumber) => set({
     lookupMode: "CARD",

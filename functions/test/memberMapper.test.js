@@ -4,8 +4,11 @@ const assert = require("node:assert/strict");
 const {
   mapMemberAccounts,
   mapMemberBalances,
+  mapMemberCards,
   mapMemberLookup,
+  mapMemberPassTickets,
   mapMemberPointPackage,
+  mapMemberStoredValueRecords,
 } = require("../lib/services/memberMapper");
 
 test("maps the confirmed member balance categories", () => {
@@ -70,6 +73,45 @@ test("preserves the queried card number when the card response omits it", () => 
 
   assert.equal(member.memberCode, "CARD-001");
   assert.equal(member.balances.principalVnd, 200);
+});
+
+test("maps stored-value history with an absolute movement amount", () => {
+  const records = mapMemberStoredValueRecords([{
+    createTime: "2026-08-10 10:30:20",
+    flowType: 2,
+    businessType: 2001,
+    businessTypeName: "Chơi máy",
+    beforeAmount: 1500,
+    amount: -50,
+    afterAmount: 1450,
+    remark: "Sử dụng 50 điểm",
+  }], 1);
+
+  assert.equal(records[0].storedCategory, 1);
+  assert.equal(records[0].flowType, 2);
+  assert.equal(records[0].amount, 50);
+  assert.equal(records[0].afterAmount, 1450);
+});
+
+test("maps current cards and member pass tickets", () => {
+  const cards = mapMemberCards([{
+    category: 1,
+    memberCode: "CARD-001",
+    icCard: "IC-001",
+    remark: "Thẻ vật lý",
+  }]);
+  const tickets = mapMemberPassTickets([{
+    passticketId: "ticket-01",
+    passticketName: "Vé 10 lượt",
+    passticketCategory: 1,
+    buyAmount: 10,
+    enabledAmount: 8,
+    buyTime: "2026-08-01 09:00:00",
+  }]);
+
+  assert.equal(cards[0].memberCode, "CARD-001");
+  assert.equal(tickets[0].name, "Vé 10 lượt");
+  assert.equal(tickets[0].enabledAmount, 8);
 });
 
 test("maps a sellable point package without inventing extra bonus", () => {

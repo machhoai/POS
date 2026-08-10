@@ -9,7 +9,8 @@
     "lint": "eslint",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "card-reader:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-card-reader-sidecar.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",

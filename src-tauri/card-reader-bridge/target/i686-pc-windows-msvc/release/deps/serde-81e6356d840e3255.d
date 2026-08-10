@@ -1,0 +1,14 @@
+D:\Github\POS\src-tauri\card-reader-bridge\target\i686-pc-windows-msvc\release\deps\serde-81e6356d840e3255.d: C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\lib.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\integer128.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\mod.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\de.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\ser.rs D:\Github\POS\src-tauri\card-reader-bridge\target\i686-pc-windows-msvc\release\build\serde-25b75f1f499f3830\out/private.rs
+
+D:\Github\POS\src-tauri\card-reader-bridge\target\i686-pc-windows-msvc\release\deps\libserde-81e6356d840e3255.rlib: C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\lib.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\integer128.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\mod.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\de.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\ser.rs D:\Github\POS\src-tauri\card-reader-bridge\target\i686-pc-windows-msvc\release\build\serde-25b75f1f499f3830\out/private.rs
+
+D:\Github\POS\src-tauri\card-reader-bridge\target\i686-pc-windows-msvc\release\deps\libserde-81e6356d840e3255.rmeta: C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\lib.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\integer128.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\mod.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\de.rs C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\ser.rs D:\Github\POS\src-tauri\card-reader-bridge\target\i686-pc-windows-msvc\release\build\serde-25b75f1f499f3830\out/private.rs
+
+C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\lib.rs:
+C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\integer128.rs:
+C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\mod.rs:
+C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\de.rs:
+C:\Users\machh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\ser.rs:
+D:\Github\POS\src-tauri\card-reader-bridge\target\i686-pc-windows-msvc\release\build\serde-25b75f1f499f3830\out/private.rs:
+
+# env-dep:OUT_DIR=D:\\Github\\POS\\src-tauri\\card-reader-bridge\\target\\i686-pc-windows-msvc\\release\\build\\serde-25b75f1f499f3830\\out

@@ -15,11 +15,15 @@ import { generateHkApiRequest } from "../utils/hk-signature";
 import * as functions from "firebase-functions";
 import type {
   HKAccountDto,
+  HKMemberCardDto,
+  HKMemberCompensationDataDto,
   HKMemberLookupDataDto,
   HKMemberPackageDetailDto,
+  HKMemberPassTicketDto,
   HKMemberProfileUpdateBodyDto,
   HKMemberRegistrationBodyDto,
   HKMemberRegistrationDataDto,
+  HKMemberStoredValueLogDto,
   HKOrderPrecalculationDto,
 } from "../types/member";
 
@@ -34,6 +38,10 @@ export interface HKApiResponse<TData = Record<string, unknown>> {
   msg: string;
   data: TData | null;
   desc?: string;
+  page?: number;
+  limit?: number;
+  totalPage?: number;
+  totalRecord?: number;
 }
 
 export interface RemoteOrderItemInput {
@@ -50,6 +58,35 @@ export type RemoteOrderPayBody = {
   OrderNumber: string;
   PayAmount: null;
 };
+
+export type RemoteMemberCompensationBody = {
+  uid: string;
+  tradeNo: string;
+  category: 1004;
+  storedCategory: 1;
+  storedValue: number;
+  effectiveDays: 0;
+  bizCode: string;
+  remark: string;
+};
+
+export function buildRemoteMemberCompensationBody(params: {
+  uid: string;
+  operationId: string;
+  amount: number;
+  remark: string;
+}): RemoteMemberCompensationBody {
+  return {
+    uid: params.uid,
+    tradeNo: params.operationId,
+    category: 1004,
+    storedCategory: 1,
+    storedValue: params.amount,
+    effectiveDays: 0,
+    bizCode: params.operationId,
+    remark: params.remark,
+  };
+}
 
 /**
  * Build the exact order_create body documented by the HK OpenAPI.
@@ -256,6 +293,94 @@ async function sendToHKApi<TData = Record<string, unknown>>(
           desc: "Mock response",
         };
 
+      case "member_addstored":
+        return {
+          success: true,
+          msg: "Nạp bù thành công",
+          code: 0,
+          data: {
+            totalValue: Number(body.storedValue) || 0,
+          } as TData,
+          desc: "Mock response",
+        };
+
+      case "member_getstored_log":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          page: Number(body.page) || 1,
+          limit: Number(body.limit) || 20,
+          totalPage: 1,
+          totalRecord: 3,
+          data: [
+            {
+              createTime: "2026-08-10 10:45:29",
+              flowType: 1,
+              businessType: 1001,
+              businessTypeName: "Nạp tài khoản",
+              beforeAmount: 1400,
+              amount: 50,
+              afterAmount: 1450,
+              remark: "Nạp thêm 50 điểm",
+            },
+            {
+              createTime: "2026-08-10 10:40:22",
+              flowType: 2,
+              businessType: 2001,
+              businessTypeName: "Chơi máy",
+              beforeAmount: 1450,
+              amount: 50,
+              afterAmount: 1400,
+              remark: "Sử dụng 50 điểm tại máy game",
+            },
+            {
+              createTime: "2026-08-10 10:30:20",
+              flowType: 2,
+              businessType: 2001,
+              businessTypeName: "Chơi máy",
+              beforeAmount: 1500,
+              amount: 50,
+              afterAmount: 1450,
+              remark: "Sử dụng 50 điểm tại máy game",
+            },
+          ] as TData,
+          desc: "Mock response",
+        };
+
+      case "member_getmembercode":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          data: [{
+            category: 1,
+            memberCode: "MOCK-CARD-001",
+            icCard: "MOCK-IC-CARD",
+            remark: "Thẻ vật lý thử nghiệm",
+          }] as TData,
+          desc: "Mock response",
+        };
+
+      case "member_passticket_list":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          data: [{
+            passticketId: "mock-ticket-001",
+            passticketName: "Vé 10 lượt thử nghiệm",
+            passticketCategory: 1,
+            activeMode: 1,
+            buyAmount: 10,
+            enabledAmount: 8,
+            buyTime: "2026-08-01 09:00:00",
+            startTime: "2026-08-01 09:00:00",
+            endTime: "2026-09-01 23:59:59",
+          }] as TData,
+          desc: "Mock response",
+        };
+
       case "basic_account_list":
         return {
           success: true,
@@ -425,6 +550,16 @@ export async function fetchRemoteMemberByCard(
   );
 }
 
+export async function fetchRemoteMemberByCardSerial(
+  serialNumber: string,
+): Promise<HKApiResponse<HKMemberLookupDataDto>> {
+  return sendToHKApi<HKMemberLookupDataDto>(
+    "member_getmember_serialnumber",
+    { serialNumber },
+    "10.11.8",
+  );
+}
+
 export async function registerRemoteMember(
   input: HKMemberRegistrationBodyDto,
 ): Promise<HKApiResponse<HKMemberRegistrationDataDto>> {
@@ -442,6 +577,58 @@ export async function updateRemoteMemberProfile(
     "member_info_modify",
     { ...input },
     "10.11.8",
+  );
+}
+
+export async function compensateRemoteMemberBalance(params: {
+  uid: string;
+  operationId: string;
+  amount: number;
+  remark: string;
+}): Promise<HKApiResponse<HKMemberCompensationDataDto>> {
+  return sendToHKApi<HKMemberCompensationDataDto>(
+    "member_addstored",
+    buildRemoteMemberCompensationBody(params),
+    "10.11.8",
+  );
+}
+
+export async function fetchRemoteMemberStoredValueHistory(params: {
+  uid: string;
+  storedCategory: number;
+  startTime: string;
+  endTime: string;
+  page: number;
+  limit: number;
+}): Promise<HKApiResponse<HKMemberStoredValueLogDto[]>> {
+  return sendToHKApi<HKMemberStoredValueLogDto[]>(
+    "member_getstored_log",
+    params,
+    "10.11.8",
+  );
+}
+
+export async function fetchRemoteMemberCards(
+  uid: string,
+): Promise<HKApiResponse<HKMemberCardDto[]>> {
+  return sendToHKApi<HKMemberCardDto[]>(
+    "member_getmembercode",
+    { uid },
+    "10.11.8",
+  );
+}
+
+export async function fetchRemoteMemberPassTickets(params: {
+  uid: string;
+  category: 1 | 2 | 3 | null;
+}): Promise<HKApiResponse<HKMemberPassTicketDto[]>> {
+  return sendToHKApi<HKMemberPassTicketDto[]>(
+    "member_passticket_list",
+    {
+      uid: params.uid,
+      ...(params.category === null ? {} : { category: params.category }),
+    },
+    "11.7.1",
   );
 }
 
@@ -485,6 +672,22 @@ export interface HKGoodsItem {
   subCategory?: string | number;
   CategoryGroupName?: string;
   categoryGroupName?: string;
+  ForeColor?: string;
+  foreColor?: string;
+  BackColor?: string;
+  backColor?: string;
+}
+
+/** Card colors returned by the package-management list endpoint. */
+export interface HKProductVisualItem {
+  SetMealId?: string;
+  setMealId?: string;
+  GoodsId?: string;
+  goodsId?: string;
+  ForeColor?: string;
+  foreColor?: string;
+  BackColor?: string;
+  backColor?: string;
 }
 
 /** Product classification returned by `setmeal_type_select`. */
@@ -530,6 +733,18 @@ export async function fetchGoodsByCategory(
     Category: String(category),
     ...(typeId ? { TypeId: typeId } : {}),
   });
+}
+
+/**
+ * Fetch the package-management catalog that carries the card foreground and
+ * background colors omitted by `setmeal_getsellgoods`.
+ */
+export async function fetchProductVisualCatalog(): Promise<HKApiResponse> {
+  return sendToHKApi(
+    "setmeal_passticket_list",
+    { category: 4, page: 1, limit: 99999 },
+    "11.7.1",
+  );
 }
 
 /**

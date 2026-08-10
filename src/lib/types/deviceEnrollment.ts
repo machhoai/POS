@@ -44,6 +44,11 @@ export interface RemotePosReceiptSettings {
   default_tax_rate: number;
 }
 
+export type RemotePosReceiptSettingsPayload = Omit<
+  RemotePosReceiptSettings,
+  "warehouse_id" | "version"
+>;
+
 export interface PosReceiptSettingsWatchResult {
   changed: boolean;
   receipt_settings: RemotePosReceiptSettings | null;

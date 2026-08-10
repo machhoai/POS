@@ -33,18 +33,8 @@ export default function CustomerDisplayPage() {
         );
     }
 
-    if (state.mode === "MEMBER_REVIEW" || state.mode === "MEMBER_SUCCESS") {
-        return (
-            <main className="h-screen overflow-y-auto bg-[var(--color-background)] p-3">
-                <div className={`mx-auto grid min-h-full max-w-7xl gap-3 ${state.order ? "lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]" : "place-items-center"}`}>
-                    <MemberRegistrationDisplay state={state} />
-                    {state.order ? <CustomerOrderPanel order={state.order} /> : null}
-                </div>
-            </main>
-        );
-    }
-
-    const contentLayout = (state.mode === "TRANSFER" || state.mode === "CART")
+    const isMemberMode = state.mode === "MEMBER_REVIEW" || state.mode === "MEMBER_SUCCESS";
+    const contentLayout = (state.mode === "TRANSFER" || state.mode === "CART" || isMemberMode)
         ? "grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]"
         : "grid-cols-1";
 
@@ -64,6 +54,12 @@ export default function CustomerDisplayPage() {
                         payment={state.payment}
                         remainingSeconds={remainingSeconds}
                     />
+                ) : null}
+                {isMemberMode ? (
+                    <div className="scrollbar-thin flex min-h-0 flex-col gap-3 overflow-y-auto">
+                        <MemberRegistrationDisplay state={state} />
+                        {state.order ? <CustomerOrderPanel order={state.order} /> : null}
+                    </div>
                 ) : null}
             </div>
         </main>

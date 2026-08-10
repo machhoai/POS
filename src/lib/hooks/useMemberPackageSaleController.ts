@@ -38,6 +38,7 @@ export function useMemberPackageSaleController({
   const mutation = useMemberStore((state) => state.mutation);
   const lookupMode = useMemberStore((state) => state.lookupMode);
   const lookupQuery = useMemberStore((state) => state.lookupQuery);
+  const cardReaderStatus = useMemberStore((state) => state.cardReaderStatus);
   const startLoading = useMemberStore((state) => state.startLoadingPackages);
   const setPackages = useMemberStore((state) => state.setPackages);
   const failLoading = useMemberStore((state) => state.failLoadingPackages);
@@ -96,9 +97,12 @@ export function useMemberPackageSaleController({
       warehouseId,
       mode: canReuseQuery ? lookupMode : "PHONE",
       query: canReuseQuery ? lookupQuery : member.phone,
+      cardLookupKind: canReuseQuery && lookupMode === "CARD" && cardReaderStatus === "SUCCEEDED"
+        ? "SERIAL_NUMBER"
+        : undefined,
     });
     completeLookup(result.member);
-  }, [completeLookup, lookupMode, lookupQuery, member, shopId, warehouseId]);
+  }, [cardReaderStatus, completeLookup, lookupMode, lookupQuery, member, shopId, warehouseId]);
 
   const finishRemoteSale = useCallback(async (orderId: string) => {
     setPaymentCollected(true);

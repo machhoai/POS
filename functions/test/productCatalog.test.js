@@ -18,7 +18,10 @@ test("maps package products with the HK classification name", () => {
     ],
     4,
     "Vé một lượt",
-    "2026-07-31T00:00:00.000Z"
+    "2026-07-31T00:00:00.000Z",
+    new Map([
+      ["TICKET-01", { foreColor: "#743535", backColor: "#465288" }],
+    ]),
   );
 
   assert.deepEqual(products, [
@@ -30,6 +33,8 @@ test("maps package products with the HK classification name", () => {
       afterTaxPrice: 100000,
       category: 4,
       subCategory: "1",
+      foreColor: "#743535",
+      backColor: "#465288",
       typeName: "Vé một lượt",
       lastSyncAt: "2026-07-31T00:00:00.000Z",
     },

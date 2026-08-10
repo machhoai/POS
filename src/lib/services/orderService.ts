@@ -30,6 +30,7 @@ interface OrderRequest {
   localOrderId: string;
   shopId: number;
   warehouseId: string;
+  uid?: string;
   items: Array<Pick<OrderItem, "goodsId" | "quantity">>;
 }
 

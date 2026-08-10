@@ -34,6 +34,7 @@ interface OrderInput {
   localOrderId: string;
   shopId: number;
   warehouseId: string;
+  uid?: string;
   deviceId?: string;
   items: OrderItemInput[];
 }
@@ -106,6 +107,14 @@ function validateOrderInput(data: unknown): OrderInput {
   ) {
     throw new HttpsError("invalid-argument", "Điểm bán không hợp lệ.");
   }
+  if (
+    input.uid !== undefined &&
+    (typeof input.uid !== "string" ||
+      input.uid.trim().length === 0 ||
+      input.uid.trim().length > 128)
+  ) {
+    throw new HttpsError("invalid-argument", "UID thành viên không hợp lệ.");
+  }
   if (!Array.isArray(input.items) || input.items.length === 0) {
     throw new HttpsError("invalid-argument", "Đơn hàng chưa có sản phẩm.");
   }
@@ -139,6 +148,7 @@ function validateOrderInput(data: unknown): OrderInput {
     localOrderId: input.localOrderId,
     shopId: Number(input.shopId),
     warehouseId: input.warehouseId.trim(),
+    ...(typeof input.uid === "string" ? { uid: input.uid.trim() } : {}),
     deviceId:
       typeof input.deviceId === "string" && input.deviceId.length <= 80
         ? input.deviceId
@@ -243,6 +253,7 @@ function createDraftOrder(
     invoiceRequestCreatedAt: now,
     shopId: input.shopId,
     warehouseId: input.warehouseId,
+    ...(input.uid ? { uid: input.uid } : {}),
     ...(input.deviceId ? { deviceId: input.deviceId } : {}),
     createdBy: operator.firebaseUid,
     operatorId: operator.employeeId,
@@ -262,6 +273,15 @@ function createDraftOrder(
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function assertMemberAssociation(order: PosOrder, input: OrderInput): void {
+  if (order.uid && input.uid && order.uid !== input.uid) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Đơn hàng đã được gắn với một thành viên khác.",
+    );
+  }
 }
 
 function hasScopedPermission(
@@ -359,6 +379,7 @@ export async function stagePosOrderForPayOS(
     }
 
     const existing = snapshot.data() as PosOrder;
+    assertMemberAssociation(existing, input);
     if (existing.createdBy !== userId) {
       throw new HttpsError(
         "permission-denied",
@@ -381,6 +402,7 @@ export async function stagePosOrderForPayOS(
         existing.invoiceRequestCreatedAt ?? now,
       shopId: input.shopId,
       warehouseId: input.warehouseId,
+      uid: input.uid ?? existing.uid,
       operatorId: operator.employeeId,
       operatorFirebaseUid: operator.firebaseUid,
       operatorName: operator.name,
@@ -394,6 +416,7 @@ export async function stagePosOrderForPayOS(
     transaction.update(docRef, {
       shopId: stagedOrder.shopId,
       warehouseId: stagedOrder.warehouseId,
+      ...(stagedOrder.uid ? { uid: stagedOrder.uid } : {}),
       operatorId: stagedOrder.operatorId,
       operatorFirebaseUid: stagedOrder.operatorFirebaseUid,
       operatorName: stagedOrder.operatorName,
@@ -429,6 +452,11 @@ export async function preparePosOrderForUser(
             "permission-denied",
             "Mã đơn hàng đã thuộc về một phiên khác.",
           );
+        }
+        assertMemberAssociation(existing, input);
+        if (input.uid && !existing.uid) {
+          transaction.update(docRef, { uid: input.uid, updatedAt: new Date().toISOString() });
+          return { ...existing, uid: input.uid };
         }
         return existing;
       }
@@ -514,6 +542,7 @@ export async function checkoutPosOrderForUser(
           "Bạn không có quyền thanh toán đơn hàng này.",
         );
       }
+      assertMemberAssociation(existing, input);
       if (existing.status !== "DRAFT") {
         return false;
       }
@@ -521,6 +550,7 @@ export async function checkoutPosOrderForUser(
       transaction.update(docRef, {
         shopId: input.shopId,
         warehouseId: input.warehouseId,
+        ...(input.uid ? { uid: input.uid } : {}),
         operatorId: operator.employeeId,
         operatorFirebaseUid: operator.firebaseUid,
         operatorName: operator.name,

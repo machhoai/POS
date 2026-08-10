@@ -3,8 +3,11 @@ import { db } from "../config/firebase";
 import { POS_COLLECTIONS } from "../config/collections";
 import {
   fetchGoodsByCategory,
+  fetchMemberPackageDetail,
+  fetchProductVisualCatalog,
   fetchSetmealTypes,
   type HKGoodsItem,
+  type HKProductVisualItem,
   type HKSetmealType,
 } from "./hkApiService";
 import { fetchSouvenirCatalog } from "./joyworldCatalogService";
@@ -33,17 +36,92 @@ export interface ProductCatalogResult {
 }
 
 function extractList<T>(
-  data: Record<string, unknown> | null,
+  data: unknown,
   extraKeys: string[] = [],
 ): T[] {
   if (!data) return [];
   if (Array.isArray(data)) return data as T[];
+  if (typeof data !== "object") return [];
+
+  const record = data as Record<string, unknown>;
 
   for (const key of ["list", "data", "items", ...extraKeys]) {
-    if (Array.isArray(data[key])) return data[key] as T[];
+    if (Array.isArray(record[key])) return record[key] as T[];
   }
 
   return [];
+}
+
+function mapProductVisualColors(items: HKProductVisualItem[]) {
+  const colorsByGoodsId = new Map<
+    string,
+    { foreColor?: string; backColor?: string }
+  >();
+
+  for (const item of items) {
+    const goodsId = (
+      item.SetMealId ||
+      item.setMealId ||
+      item.GoodsId ||
+      item.goodsId ||
+      ""
+    ).trim();
+    if (!goodsId) continue;
+
+    const foreColor = (item.ForeColor || item.foreColor || "").trim();
+    const backColor = (item.BackColor || item.backColor || "").trim();
+    if (!foreColor && !backColor) continue;
+
+    colorsByGoodsId.set(goodsId, {
+      ...(foreColor ? { foreColor } : {}),
+      ...(backColor ? { backColor } : {}),
+    });
+  }
+
+  return colorsByGoodsId;
+}
+
+async function loadProductDetailVisualColors(
+  items: HKGoodsItem[],
+  colorsByGoodsId: Map<
+    string,
+    { foreColor?: string; backColor?: string }
+  >,
+): Promise<void> {
+  const goodsIds = Array.from(new Set(items.flatMap((item) => {
+    const goodsId = (item.GoodsId || item.goodsId || "").trim();
+    return goodsId ? [goodsId] : [];
+  })));
+  const results = await Promise.allSettled(goodsIds.map(async (goodsId) => ({
+    goodsId,
+    response: await fetchMemberPackageDetail(goodsId),
+  })));
+  let loadedCount = 0;
+  let failedCount = 0;
+
+  for (const result of results) {
+    if (result.status === "rejected" || !result.value.response.success) {
+      failedCount += 1;
+      continue;
+    }
+
+    const detail = result.value.response.data;
+    const foreColor = detail?.foreColor?.trim() || "";
+    const backColor = detail?.backColor?.trim() || "";
+    if (!foreColor && !backColor) continue;
+
+    colorsByGoodsId.set(result.value.goodsId, {
+      ...(foreColor ? { foreColor } : {}),
+      ...(backColor ? { backColor } : {}),
+    });
+    loadedCount += 1;
+  }
+
+  logger.info("[productSync] Product detail colors loaded", {
+    requestedCount: goodsIds.length,
+    loadedCount,
+    failedCount,
+  });
 }
 
 interface SetmealTypeOption {
@@ -103,6 +181,8 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       afterTaxPrice,
       category,
       subCategory: data.subCategory ? String(data.subCategory) : "",
+      ...(data.foreColor ? { foreColor: String(data.foreColor) } : {}),
+      ...(data.backColor ? { backColor: String(data.backColor) } : {}),
       ...(Number.isFinite(Number(data.amount))
         ? { amount: Number(data.amount) }
         : {}),
@@ -125,6 +205,22 @@ export async function synchronizePosProducts(
 
   const now = new Date().toISOString();
   const allProducts: SyncProduct[] = [];
+
+  const visualResponse = await fetchProductVisualCatalog();
+  const visualColorsByGoodsId = visualResponse.success
+    ? mapProductVisualColors(extractList<HKProductVisualItem>(visualResponse.data))
+    : new Map<string, { foreColor?: string; backColor?: string }>();
+
+  if (!visualResponse.success) {
+    logger.warn("[productSync] Product visual catalog request failed", {
+      code: visualResponse.code,
+      message: visualResponse.msg,
+    });
+  } else {
+    logger.info("[productSync] Product visual colors loaded", {
+      colorCount: visualColorsByGoodsId.size,
+    });
+  }
 
   const typeResponse = await fetchSetmealTypes();
   if (!typeResponse.success) {
@@ -156,6 +252,12 @@ export async function synchronizePosProducts(
       response.data,
       ["goodsItems"],
     );
+    if (categoryId === 1) {
+      await loadProductDetailVisualColors(
+        ungroupedItems,
+        visualColorsByGoodsId,
+      );
+    }
     const productsById = new Map<string, SyncProduct>();
 
     for (const setmealType of setmealTypes) {
@@ -181,6 +283,7 @@ export async function synchronizePosProducts(
         categoryId,
         setmealType.typeName,
         now,
+        visualColorsByGoodsId,
       );
 
       for (const product of groupedProducts) {
@@ -194,6 +297,7 @@ export async function synchronizePosProducts(
       categoryId,
       "Khác",
       now,
+      visualColorsByGoodsId,
     )) {
       if (!productsById.has(product.goodsId)) {
         productsById.set(product.goodsId, product);

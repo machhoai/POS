@@ -23,6 +23,8 @@ export interface JoyworldGiftCatalogItem {
   giftName?: string;
   goodsName?: string;
   typeName?: string;
+  foreColor?: string | null;
+  backColor?: string | null;
   price?: number | string;
   afterTaxPrice?: number | string;
   stockAmount?: number | string;

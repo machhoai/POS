@@ -5,7 +5,10 @@ import type {
   PosDeviceCredential,
   PosDeviceSessionResult,
   PosReceiptSettingsWatchResult,
+  RemotePosReceiptSettings,
 } from "@/lib/types/deviceEnrollment";
+import { mapReceiptSettingsToRemote } from "@/features/receipt/helpers/remoteReceiptSettings";
+import type { ReceiptSettings } from "@/features/receipt/types/receipt";
 import {
   clearWebDevDeviceCredential,
   getOrCreateWebDevInstallationId,
@@ -217,6 +220,41 @@ export async function watchRemoteReceiptSettings(
   return envelope.data;
 }
 
+export async function saveRemoteReceiptSettings(
+  settings: ReceiptSettings,
+): Promise<RemotePosReceiptSettings> {
+  const credential = await loadDeviceCredential();
+  if (!credential) {
+    throw new Error("Máy POS chưa được kích hoạt trên JPULSE.");
+  }
+  const appVersion = await getRuntimeAppVersion();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/pos/devices/receipt-settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_id: credential.device_id,
+        device_credential: credential.device_credential,
+        app_version: appVersion,
+        receipt_settings: mapReceiptSettingsToRemote(settings),
+      }),
+    });
+  } catch {
+    throw new DeviceSessionError(
+      "Không thể kết nối JPULSE để lưu cấu hình biên lai.",
+      false,
+    );
+  }
+  const envelope = (await response.json()) as ApiEnvelope<RemotePosReceiptSettings>;
+  if (!response.ok || !envelope.data) {
+    throw new DeviceSessionError(
+      envelope.messages?.vi || "Không thể lưu cấu hình biên lai lên JPULSE.",
+      response.status === 401 || response.status === 403,
+    );
+  }
+  return envelope.data;
+}
 
 export async function persistVerifiedDeviceSession(
   credential: PosDeviceCredential,

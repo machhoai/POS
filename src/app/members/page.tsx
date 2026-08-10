@@ -1,166 +1,494 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MonitorCheck, PackageOpen, SearchX, UserPlus, UsersRound } from "lucide-react";
+import { MonitorCheck, SearchX, UsersRound } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import MemberLookupPanel from "@/components/members/MemberLookupPanel";
-import MemberPackageCatalog from "@/components/members/MemberPackageCatalog";
-import MemberPackageCheckoutModal from "@/components/members/MemberPackageCheckoutModal";
-import MemberProfileCard from "@/components/members/MemberProfileCard";
+import MemberDetailsPanel from "@/components/members/MemberDetailsPanel";
+import MemberCompensationConfirmModal from "@/components/members/MemberCompensationConfirmModal";
+import MemberCompensationPanel from "@/components/members/MemberCompensationPanel";
+import MemberProductCatalog from "@/components/members/MemberProductCatalog";
 import MemberRegistrationForm from "@/components/members/MemberRegistrationForm";
 import StoreSelector from "@/components/pos/StoreSelector";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
 import { useMemberCustomerDisplayPublisher } from "@/lib/hooks/useMemberCustomerDisplayPublisher";
-import { useMemberPackageCustomerDisplayPublisher } from "@/lib/hooks/useMemberPackageCustomerDisplayPublisher";
-import { useMemberPackageSaleController } from "@/lib/hooks/useMemberPackageSaleController";
+import { useMemberActivityController } from "@/lib/hooks/useMemberActivityController";
+import { useMemberCompensationController } from "@/lib/hooks/useMemberCompensationController";
 import {
-  lookupMember,
-  registerMember,
-  toMemberServiceError,
-  validateMemberRegistrationDraft,
+    lookupMember,
+    registerMember,
+    toMemberServiceError,
+    validateMemberRegistrationDraft,
 } from "@/lib/services/memberService";
+import {
+    cancelMemberCardRead,
+    readMemberCard,
+    toCardReaderServiceError,
+} from "@/lib/services/cardReaderService";
 import { useMemberStore } from "@/lib/stores/useMemberStore";
-import { showError, showInfo, showPromise, showSuccess } from "@/lib/utils/toast";
+import { useCartStore } from "@/lib/stores/useCartStore";
+import { useProductStore } from "@/lib/stores/useProductStore";
+import type { MemberCardLookupKind, MemberLookupMode } from "@/lib/types/member";
+import type { Product } from "@/lib/types/product";
+import { showError, showInfo, showPromise, showSuccess, showWarning } from "@/lib/utils/toast";
 
-type MemberOperation = "LOOKUP" | "REGISTER" | "PACKAGE";
+type MemberOperation = "LOOKUP" | "REGISTER" | "COMPENSATION";
+
+interface LookupOverride {
+    mode: MemberLookupMode;
+    query: string;
+    cardLookupKind?: MemberCardLookupKind;
+}
 
 function retryLookup(): void {
-  const form = document.getElementById("member-lookup-form");
-  if (form instanceof HTMLFormElement) form.requestSubmit();
+    const form = document.getElementById("member-lookup-form");
+    if (form instanceof HTMLFormElement) form.requestSubmit();
 }
 
 function retryRegistration(): void {
-  const button = document.getElementById("member-register-button");
-  if (button instanceof HTMLButtonElement) button.click();
+    const button = document.getElementById("member-register-button");
+    if (button instanceof HTMLButtonElement) button.click();
 }
 
 export default function MembersPage() {
-  useCustomerDisplayWindow();
-  const router = useRouter();
-  const auth = useAuth();
-  const [operation, setOperation] = useState<MemberOperation>("LOOKUP");
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const mode = useMemberStore((state) => state.lookupMode);
-  const query = useMemberStore((state) => state.lookupQuery);
-  const request = useMemberStore((state) => state.lookupRequest);
-  const member = useMemberStore((state) => state.currentMember);
-  const draft = useMemberStore((state) => state.registrationDraft);
-  const reviewStatus = useMemberStore((state) => state.registrationReviewStatus);
-  const mutation = useMemberStore((state) => state.mutation);
-  const setMode = useMemberStore((state) => state.setLookupMode);
-  const setQuery = useMemberStore((state) => state.setLookupQuery);
-  const startLookup = useMemberStore((state) => state.startLookup);
-  const completeLookup = useMemberStore((state) => state.completeLookup);
-  const failLookup = useMemberStore((state) => state.failLookup);
-  const updateDraft = useMemberStore((state) => state.updateRegistrationDraft);
-  const startReview = useMemberStore((state) => state.startRegistrationReview);
-  const confirmReview = useMemberStore((state) => state.confirmRegistrationReview);
-  const editRegistration = useMemberStore((state) => state.editRegistration);
-  const startNewRegistration = useMemberStore((state) => state.startNewRegistration);
-  const startMutation = useMemberStore((state) => state.startMutation);
-  const completeMutation = useMemberStore((state) => state.completeMutation);
-  const failMutation = useMemberStore((state) => state.failMutation);
-  const resetMutation = useMemberStore((state) => state.resetMutation);
-  const resetSession = useMemberStore((state) => state.resetMemberSession);
-  const registrationMember = mutation.kind === "REGISTER" && mutation.status === "SUCCEEDED" ? member : null;
-  const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
-  const packageSale = useMemberPackageSaleController({
-    shopId,
-    warehouseId: operation === "PACKAGE" ? auth.effectiveWarehouseId : null,
-  });
+    useCustomerDisplayWindow();
+    const router = useRouter();
+    const auth = useAuth();
+    const [operation, setOperation] = useState<MemberOperation>("LOOKUP");
+    const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+    const cardReadAttemptRef = useRef(0);
 
-  useMemberCustomerDisplayPublisher({ enabled: operation === "REGISTER", suppressWhenDisabled: operation === "PACKAGE", draft, reviewStatus, mutationStatus: mutation.status, member: registrationMember });
-  useMemberPackageCustomerDisplayPublisher({ enabled: operation === "PACKAGE", selectedPackage: packageSale.selectedPackage, mutation: packageSale.mutation, paymentMethod: packageSale.paymentMethod, payment: packageSale.payOSPayment });
+    const mode = useMemberStore((state) => state.lookupMode);
+    const query = useMemberStore((state) => state.lookupQuery);
+    const request = useMemberStore((state) => state.lookupRequest);
+    const cardReaderStatus = useMemberStore((state) => state.cardReaderStatus);
+    const cardReaderError = useMemberStore((state) => state.cardReaderError);
+    const member = useMemberStore((state) => state.currentMember);
+    const draft = useMemberStore((state) => state.registrationDraft);
+    const reviewStatus = useMemberStore((state) => state.registrationReviewStatus);
+    const mutation = useMemberStore((state) => state.mutation);
+    const products = useProductStore((state) => state.products);
+    const productsLoading = useProductStore((state) => state.isLoading);
+    const productsError = useProductStore((state) => state.error);
+    const fetchProducts = useProductStore((state) => state.fetchProducts);
+    const cartItems = useCartStore((state) => state.items);
+    const isPaymentLocked = useCartStore((state) => state.isPaymentLocked);
+    const addCartItem = useCartStore((state) => state.addItem);
+    const updateCartQuantity = useCartStore((state) => state.updateQuantity);
+    const setCartMemberUid = useCartStore((state) => state.setMemberUid);
+    const setCheckoutContext = useCartStore((state) => state.setCheckoutContext);
+    const hydrateCheckoutJournal = useCartStore((state) => state.hydrateCheckoutJournal);
 
-  useEffect(() => {
-    if (!auth.isLoading && (!auth.user || !auth.userDoc)) router.replace("/login");
-  }, [auth.isLoading, auth.user, auth.userDoc, router]);
+    const setMode = useMemberStore((state) => state.setLookupMode);
+    const setQuery = useMemberStore((state) => state.setLookupQuery);
+    const startCardRead = useMemberStore((state) => state.startCardRead);
+    const completeCardRead = useMemberStore((state) => state.completeCardRead);
+    const failCardRead = useMemberStore((state) => state.failCardRead);
+    const startLookup = useMemberStore((state) => state.startLookup);
+    const completeLookup = useMemberStore((state) => state.completeLookup);
+    const failLookup = useMemberStore((state) => state.failLookup);
+    const updateDraft = useMemberStore((state) => state.updateRegistrationDraft);
+    const startReview = useMemberStore((state) => state.startRegistrationReview);
+    const confirmReview = useMemberStore((state) => state.confirmRegistrationReview);
+    const editRegistration = useMemberStore((state) => state.editRegistration);
+    const startNewRegistration = useMemberStore((state) => state.startNewRegistration);
+    const startMutation = useMemberStore((state) => state.startMutation);
+    const completeMutation = useMemberStore((state) => state.completeMutation);
+    const failMutation = useMemberStore((state) => state.failMutation);
+    const resetMutation = useMemberStore((state) => state.resetMutation);
+    const resetSession = useMemberStore((state) => state.resetMemberSession);
 
-  const handleLookup = useCallback(async () => {
-    if (!auth.effectiveWarehouseId) {
-      showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi tra cứu.");
-      return;
-    }
-    startLookup();
-    try {
-      const result = await showPromise(lookupMember({ shopId, warehouseId: auth.effectiveWarehouseId, mode, query }), {
-        loading: "Đang tra cứu OpenAPI...", success: "Đã tìm thấy thành viên", error: "Tra cứu không thành công",
-        successDescription: "Thông tin và số dư mới nhất đã được tải.", errorDescription: "Lý do chi tiết được hiển thị trên màn hình.", onRetry: retryLookup,
-      });
-      completeLookup(result.member);
-      setFetchedAt(result.fetchedAt);
-    } catch (error: unknown) {
-      const memberError = toMemberServiceError(error);
-      console.error("[Thành viên] Tra cứu thất bại:", memberError);
-      failLookup(memberError.message, memberError.code);
-      setFetchedAt(null);
-    }
-  }, [auth.effectiveWarehouseId, completeLookup, failLookup, mode, query, shopId, startLookup]);
+    const registrationMember = mutation.kind === "REGISTER" && mutation.status === "SUCCEEDED" ? member : null;
+    const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
 
-  const handleStartReview = useCallback(() => {
-    try {
-      const normalized = validateMemberRegistrationDraft(draft);
-      resetMutation();
-      updateDraft(normalized);
-      startReview();
-      showInfo("Đã gửi sang màn hình khách", "Vui lòng nhờ khách kiểm tra và xác nhận thông tin.");
-    } catch (error: unknown) {
-      const memberError = toMemberServiceError(error);
-      showError("Thông tin chưa hợp lệ", memberError.message);
-    }
-  }, [draft, resetMutation, startReview, updateDraft]);
+    const refreshAfterCompensation = useCallback(async () => {
+        if (!auth.effectiveWarehouseId) return;
+        try {
+            const result = await lookupMember({
+                shopId,
+                warehouseId: auth.effectiveWarehouseId,
+                mode,
+                query,
+                cardLookupKind: mode === "CARD" && cardReaderStatus === "SUCCEEDED"
+                    ? "SERIAL_NUMBER"
+                    : undefined,
+            });
+            completeLookup(result.member);
+            setFetchedAt(result.fetchedAt);
+        } catch (error: unknown) {
+            const parsed = toMemberServiceError(error);
+            showWarning("Đã nạp bù nhưng chưa tải lại được số dư", parsed.message);
+        }
+    }, [auth.effectiveWarehouseId, cardReaderStatus, completeLookup, mode, query, shopId]);
 
-  const handleRegister = useCallback(async () => {
-    if (!auth.effectiveWarehouseId) {
-      showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi đăng ký.");
-      return;
-    }
-    startMutation("REGISTER");
-    try {
-      const result = await showPromise(registerMember({ ...draft, shopId, warehouseId: auth.effectiveWarehouseId }), {
-        loading: "Đang chờ OpenAPI đăng ký...", success: "Đăng ký thành viên thành công", error: "Đăng ký không thành công",
-        successDescription: "OpenAPI đã xác nhận và POS đã lưu hồ sơ.", errorDescription: "Hồ sơ chưa được lưu. Xem lý do trên màn hình và thử lại.", onRetry: retryRegistration,
-      });
-      completeLookup(result.member);
-      completeMutation();
-      setFetchedAt(result.createdAt);
-    } catch (error: unknown) {
-      const memberError = toMemberServiceError(error);
-      console.error("[Thành viên] Đăng ký thất bại:", memberError);
-      failMutation(memberError.message, memberError.code);
-    }
-  }, [auth.effectiveWarehouseId, completeLookup, completeMutation, draft, failMutation, shopId, startMutation]);
+    const memberActivity = useMemberActivityController({
+        member: operation === "LOOKUP" || operation === "COMPENSATION" ? member : null,
+        shopId,
+        warehouseId: auth.effectiveWarehouseId,
+    });
 
-  if (auth.isLoading || !auth.user || !auth.userDoc) {
-    return <div className="flex h-screen items-center justify-center bg-[var(--color-background)]"><div className="size-10 animate-spin rounded-full border-4 border-[var(--color-accent)] border-t-transparent" /></div>;
-  }
-  if (auth.needsWarehouseSelection) {
-    return <StoreSelector userName={auth.userDoc.full_name} warehouses={auth.availableWarehouses} onSelectWarehouse={auth.selectWarehouse} onLogout={auth.logout} />;
-  }
+    const compensation = useMemberCompensationController({
+        member: operation === "COMPENSATION" ? member : null,
+        shopId,
+        warehouseId: auth.effectiveWarehouseId,
+        onSucceeded: refreshAfterCompensation,
+    });
 
-  return (
-    <div className="flex h-screen bg-[var(--color-background)]">
-      <Sidebar onLogout={auth.logout} />
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] bg-white px-4 py-3 md:px-6">
-          <div className="flex items-center gap-3"><span className="flex size-11 items-center justify-center rounded-2xl bg-orange-50 text-[var(--color-accent)]"><UsersRound className="size-6" /></span><div><h1 className="text-xl font-extrabold">Thành viên</h1><p className="text-xs text-[var(--color-text-muted)]">Điểm bán: {auth.effectiveWarehouseName || auth.effectiveWarehouseId}</p></div></div>
-          <div className="flex rounded-2xl bg-[var(--color-surface-hover)] p-1.5">{(["LOOKUP", "REGISTER", "PACKAGE"] as const).map((item) => <button key={item} type="button" onClick={() => setOperation(item)} className={`min-h-11 rounded-xl px-4 text-sm font-bold ${operation === item ? "bg-white text-[var(--color-accent)] shadow-sm" : "text-[var(--color-text-secondary)]"}`}>{item === "LOOKUP" ? "Tra cứu" : item === "REGISTER" ? "Đăng ký mới" : "Bán gói"}</button>)}</div>
-        </header>
+    const canCompensate = auth.hasPermission("pos.members.compensate", auth.effectiveWarehouseId || undefined);
 
-        <div className="scrollbar-thin flex-1 overflow-y-auto p-3 md:p-5">
-          <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[minmax(340px,440px)_1fr]">
-            <div className="space-y-3">
-              {operation !== "REGISTER" ? <MemberLookupPanel mode={mode} query={query} isLookingUp={request.status === "WAITING_API"} onModeChange={(nextMode) => { setFetchedAt(null); setMode(nextMode); }} onQueryChange={setQuery} onSubmit={() => void handleLookup()} /> : <MemberRegistrationForm draft={draft} reviewStatus={reviewStatus} mutation={mutation} onChange={updateDraft} onStartReview={handleStartReview} onConfirmCustomer={() => { confirmReview(); showSuccess("Khách đã xác nhận", "Có thể gửi yêu cầu đăng ký đến OpenAPI."); }} onEdit={() => { resetMutation(); editRegistration(); }} onRegister={() => void handleRegister()} onStartNew={() => { startNewRegistration(); setFetchedAt(null); }} />}
-              {operation !== "REGISTER" ? <button type="button" onClick={() => { resetSession(); setFetchedAt(null); }} className="min-h-12 w-full rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm font-bold text-[var(--color-text-secondary)] active:scale-[0.98]">Xóa phiên tra cứu</button> : null}
+    useMemberCustomerDisplayPublisher({
+        enabled: operation === "REGISTER",
+        draft,
+        mutationStatus: mutation.status,
+        member: registrationMember,
+    });
+
+    useEffect(() => {
+        if (!auth.isLoading && (!auth.user || !auth.userDoc)) router.replace("/login");
+    }, [auth.isLoading, auth.user, auth.userDoc, router]);
+
+    useEffect(() => {
+        if (operation === "REGISTER" && auth.user && auth.userDoc && products.length === 0) {
+            void fetchProducts();
+        }
+    }, [auth.user, auth.userDoc, fetchProducts, operation, products.length]);
+
+    useEffect(() => {
+        if (!auth.effectiveWarehouseId) return;
+        setCheckoutContext(shopId, auth.effectiveWarehouseId);
+        void hydrateCheckoutJournal();
+    }, [auth.effectiveWarehouseId, hydrateCheckoutJournal, setCheckoutContext, shopId]);
+
+    useEffect(() => () => {
+        cardReadAttemptRef.current += 1;
+        void cancelMemberCardRead();
+    }, []);
+
+    const handleLookup = useCallback(async (override?: LookupOverride) => {
+        const lookupMode = override?.mode ?? mode;
+        const lookupQuery = override?.query ?? query;
+        const cardLookupKind = override?.cardLookupKind ?? (
+            lookupMode === "CARD" && cardReaderStatus === "SUCCEEDED"
+                ? "SERIAL_NUMBER"
+                : "MEMBER_CODE"
+        );
+        if (!auth.effectiveWarehouseId) {
+            showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi tra cứu.");
+            return;
+        }
+        startLookup();
+        try {
+            const result = await showPromise(
+                lookupMember({
+                    shopId,
+                    warehouseId: auth.effectiveWarehouseId,
+                    mode: lookupMode,
+                    query: lookupQuery,
+                    cardLookupKind: lookupMode === "CARD" ? cardLookupKind : undefined,
+                }),
+                {
+                    loading: "Đang tra cứu OpenAPI...",
+                    success: "Đã tìm thấy thành viên",
+                    error: "Tra cứu không thành công",
+                    successDescription: "Thông tin và số dư mới nhất đã được tải.",
+                    errorDescription: "Lý do chi tiết được hiển thị trên màn hình.",
+                    onRetry: retryLookup,
+                }
+            );
+            completeLookup(result.member);
+            setFetchedAt(result.fetchedAt);
+        } catch (error: unknown) {
+            const memberError = toMemberServiceError(error);
+            console.error("[Thành viên] Tra cứu thất bại:", memberError);
+            failLookup(memberError.message, memberError.code);
+            setFetchedAt(null);
+        }
+    }, [auth.effectiveWarehouseId, cardReaderStatus, completeLookup, failLookup, mode, query, shopId, startLookup]);
+
+    const handleCardRead = useCallback(async () => {
+        const attemptId = cardReadAttemptRef.current + 1;
+        cardReadAttemptRef.current = attemptId;
+        startCardRead();
+
+        try {
+            const result = await readMemberCard();
+            if (cardReadAttemptRef.current !== attemptId) return;
+            completeCardRead(result.serialNumber);
+            await handleLookup({
+                mode: "CARD",
+                query: result.serialNumber,
+                cardLookupKind: "SERIAL_NUMBER",
+            });
+        } catch (error: unknown) {
+            if (cardReadAttemptRef.current !== attemptId) return;
+            const readerError = toCardReaderServiceError(error);
+            if (readerError.code === "READ_CANCELLED") return;
+            failCardRead(readerError.message);
+        }
+    }, [completeCardRead, failCardRead, handleLookup, startCardRead]);
+
+    const handleCancelCardRead = useCallback(() => {
+        cardReadAttemptRef.current += 1;
+        void cancelMemberCardRead().catch((error: unknown) => {
+            console.warn("[Đầu đọc thẻ] Không thể gửi lệnh hủy:", error);
+        });
+        failCardRead("Đã hủy chờ đọc thẻ. Bạn có thể đọc lại hoặc nhập mã thẻ thủ công.");
+    }, [failCardRead]);
+
+    const handleModeChange = useCallback((nextMode: MemberLookupMode) => {
+        if (nextMode === mode) return;
+        if (cardReaderStatus === "READING") {
+            cardReadAttemptRef.current += 1;
+            void cancelMemberCardRead();
+        }
+        setFetchedAt(null);
+        setMode(nextMode);
+        if (nextMode === "CARD") void handleCardRead();
+    }, [cardReaderStatus, handleCardRead, mode, setMode]);
+
+    const handleQueryChange = useCallback((nextQuery: string) => {
+        if (cardReaderStatus === "READING") {
+            cardReadAttemptRef.current += 1;
+            void cancelMemberCardRead();
+        }
+        setQuery(nextQuery);
+    }, [cardReaderStatus, setQuery]);
+
+    const handleStartReview = useCallback(() => {
+        try {
+            const normalized = validateMemberRegistrationDraft(draft);
+            resetMutation();
+            updateDraft(normalized);
+            startReview();
+            showInfo("Thông tin đã sẵn sàng xác nhận", "Màn hình khách đã được cập nhật liên tục trong lúc nhập.");
+        } catch (error: unknown) {
+            const memberError = toMemberServiceError(error);
+            showError("Thông tin chưa hợp lệ", memberError.message);
+        }
+    }, [draft, resetMutation, startReview, updateDraft]);
+
+    const handleAddProduct = useCallback((product: Product) => {
+        if (isPaymentLocked) {
+            showWarning("Giỏ hàng đang được khóa", "Hãy hoàn tất hoặc hủy thanh toán hiện tại trước khi sửa đơn.");
+            return;
+        }
+        addCartItem({
+            goodsId: product.goodsId,
+            goodsName: product.goodsName,
+            price: product.afterTaxPrice > 0 ? product.afterTaxPrice : product.price,
+            quantity: 1,
+        });
+    }, [addCartItem, isPaymentLocked]);
+
+    const handleRegister = useCallback(async () => {
+        if (!auth.effectiveWarehouseId) {
+            showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi đăng ký.");
+            return;
+        }
+        startMutation("REGISTER");
+        try {
+            const result = await showPromise(
+                registerMember({
+                    ...draft,
+                    shopId,
+                    warehouseId: auth.effectiveWarehouseId,
+                }),
+                {
+                    loading: "Đang chờ OpenAPI đăng ký...",
+                    success: "Đăng ký thành viên thành công",
+                    error: "Đăng ký không thành công",
+                    successDescription: "OpenAPI đã xác nhận và POS đã lưu hồ sơ.",
+                    errorDescription: "Hồ sơ chưa được lưu. Xem lý do trên màn hình và thử lại.",
+                    onRetry: retryRegistration,
+                }
+            );
+            completeLookup(result.member);
+            completeMutation();
+            setCartMemberUid(result.member.uid);
+            setFetchedAt(result.createdAt);
+        } catch (error: unknown) {
+            const memberError = toMemberServiceError(error);
+            console.error("[Thành viên] Đăng ký thất bại:", memberError);
+            failMutation(memberError.message, memberError.code);
+        }
+    }, [auth.effectiveWarehouseId, completeLookup, completeMutation, draft, failMutation, setCartMemberUid, shopId, startMutation]);
+
+    if (auth.isLoading || !auth.user || !auth.userDoc) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-[var(--color-background)]">
+                <div className="size-10 animate-spin rounded-full border-4 border-[var(--color-accent)] border-t-transparent" />
             </div>
+        );
+    }
 
-            {operation === "PACKAGE" && member ? <div className="space-y-4"><MemberProfileCard member={member} fetchedAt={fetchedAt} /><MemberPackageCatalog packages={packageSale.packages} request={packageSale.packagesRequest} selectedPackage={packageSale.selectedPackage} mutation={packageSale.mutation} canRetryRemote={packageSale.canRetryRemote} onSelect={packageSale.selectPackage} onReload={() => void packageSale.loadPackages()} onBuy={packageSale.openCheckout} onRetryRemote={packageSale.retryRemoteSale} /></div> : operation === "LOOKUP" && member ? <MemberProfileCard member={member} fetchedAt={fetchedAt} /> : operation !== "REGISTER" && request.status === "FAILED" ? <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-red-200 bg-red-50 p-8 text-center"><SearchX className="mb-3 size-10 text-red-500" /><h2 className="text-lg font-extrabold text-red-800">Không thể hiển thị thành viên</h2><p className="mt-2 text-sm text-red-700">{request.errorMessage}</p><p className="mt-3 text-xs font-semibold text-red-500">Mã lỗi: {request.errorCode || "không xác định"}</p></div> : operation === "REGISTER" && registrationMember ? <MemberProfileCard member={registrationMember} fetchedAt={fetchedAt} /> : <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-dashed border-[var(--color-border-subtle)] bg-white p-8 text-center"><MonitorCheck className="mb-3 size-11 text-orange-300" /><h2 className="text-lg font-extrabold">{operation === "REGISTER" ? "Xác nhận trên màn hình phụ" : operation === "PACKAGE" ? "Tra cứu trước khi bán gói" : "Tra cứu thành viên"}</h2><p className="mt-2 max-w-md text-sm text-[var(--color-text-muted)]">{operation === "REGISTER" ? "Thông tin chỉ được gửi OpenAPI sau khi khách đã kiểm tra và xác nhận đúng." : operation === "PACKAGE" ? "Mỗi đơn gói bắt buộc gắn với đúng UID thành viên trên OpenAPI." : "Nhập số điện thoại hoặc mã thẻ để tải dữ liệu mới nhất từ OpenAPI."}</p>{operation === "REGISTER" ? <UserPlus className="mt-5 size-8 text-[var(--color-accent)]" /> : operation === "PACKAGE" ? <PackageOpen className="mt-5 size-8 text-[var(--color-accent)]" /> : null}</div>}
-          </div>
+    if (auth.needsWarehouseSelection) {
+        return (
+            <StoreSelector
+                userName={auth.userDoc.full_name}
+                warehouses={auth.availableWarehouses}
+                onSelectWarehouse={auth.selectWarehouse}
+                onLogout={auth.logout}
+            />
+        );
+    }
+
+    return (
+        <div className="flex h-screen bg-[var(--color-background)]">
+            <Sidebar onLogout={auth.logout} />
+            <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] bg-white px-4 py-3 md:px-6">
+                    <div className="flex items-center gap-3">
+                        <span className="flex size-11 items-center justify-center rounded-2xl bg-orange-50 text-[var(--color-accent)]">
+                            <UsersRound className="size-6" />
+                        </span>
+                        <div>
+                            <h1 className="text-xl font-extrabold">Thành viên</h1>
+                            <p className="text-xs text-[var(--color-text-muted)]">
+                                Điểm bán: {auth.effectiveWarehouseName || auth.effectiveWarehouseId}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex overflow-x-auto rounded-full bg-[var(--color-surface-hover)] p-1.5">
+                        {(["LOOKUP", "REGISTER", ...(canCompensate ? (["COMPENSATION"] as const) : [])] as const).map(
+                            (item) => (
+                                <button
+                                    key={item}
+                                    type="button"
+                                    onClick={() => setOperation(item)}
+                                    className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-bold ${operation === item
+                                        ? "bg-white text-[var(--color-accent)] shadow-sm"
+                                        : "text-[var(--color-text-secondary)]"
+                                        }`}
+                                >
+                                    {item === "LOOKUP"
+                                        ? "Tra cứu"
+                                        : item === "REGISTER"
+                                            ? "Đăng ký mới"
+                                            : "Nạp bù"}
+                                </button>
+                            )
+                        )}
+                    </div>
+                </header>
+
+                <div className="scrollbar-thin flex-1 overflow-y-auto p-3">
+                    <div className="mx-auto grid gap-4 lg:grid-cols-[minmax(340px,440px)_1fr]">
+                        <div className="space-y-3">
+                            {operation !== "REGISTER" ? (
+                                <MemberLookupPanel
+                                    mode={mode}
+                                    query={query}
+                                    isLookingUp={request.status === "WAITING_API"}
+                                    cardReaderStatus={cardReaderStatus}
+                                    cardReaderError={cardReaderError}
+                                    onModeChange={handleModeChange}
+                                    onQueryChange={handleQueryChange}
+                                    onReadCard={() => void handleCardRead()}
+                                    onCancelCardRead={handleCancelCardRead}
+                                    onSubmit={() => void handleLookup()}
+                                />
+                            ) : (
+                                <MemberRegistrationForm
+                                    draft={draft}
+                                    reviewStatus={reviewStatus}
+                                    mutation={mutation}
+                                    onChange={updateDraft}
+                                    onStartReview={handleStartReview}
+                                    onConfirmCustomer={() => {
+                                        confirmReview();
+                                        showSuccess("Khách đã xác nhận", "Có thể gửi yêu cầu đăng ký đến OpenAPI.");
+                                    }}
+                                    onEdit={() => {
+                                        resetMutation();
+                                        editRegistration();
+                                    }}
+                                    onRegister={() => void handleRegister()}
+                                    onStartNew={() => {
+                                        startNewRegistration();
+                                        setCartMemberUid(null);
+                                        setFetchedAt(null);
+                                    }}
+                                />
+                            )}
+                            {operation !== "REGISTER" ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        resetSession();
+                                        setFetchedAt(null);
+                                    }}
+                                    className="min-h-12 w-full rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm font-bold text-[var(--color-text-secondary)] active:scale-[0.98]"
+                                >
+                                    Xóa phiên tra cứu
+                                </button>
+                            ) : null}
+                        </div>
+                        {operation === "REGISTER" ? (
+                            <MemberProductCatalog
+                                products={products}
+                                items={cartItems}
+                                isLoading={productsLoading}
+                                error={productsError}
+                                isPaymentLocked={isPaymentLocked}
+                                memberReady={Boolean(registrationMember)}
+                                onReload={() => void fetchProducts()}
+                                onAdd={handleAddProduct}
+                                onUpdateQuantity={updateCartQuantity}
+                                onContinueCheckout={() => router.push("/")}
+                            />
+                        ) : operation === "LOOKUP" && member ? (
+                            <MemberDetailsPanel member={member} fetchedAt={fetchedAt} activity={memberActivity} />
+                        ) : operation === "COMPENSATION" && member ? (
+                            <MemberCompensationPanel
+                                member={member}
+                                fetchedAt={fetchedAt}
+                                activity={memberActivity}
+                                compensation={compensation}
+                            />
+                        ) : request.status === "FAILED" ? (
+                            <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
+                                <SearchX className="mb-3 size-10 text-red-500" />
+                                <h2 className="text-lg font-extrabold text-red-800">Không thể hiển thị thành viên</h2>
+                                <p className="mt-2 text-sm text-red-700">{request.errorMessage}</p>
+                                <p className="mt-3 text-xs font-semibold text-red-500">
+                                    Mã lỗi: {request.errorCode || "không xác định"}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-dashed border-[var(--color-border-subtle)] bg-white p-8 text-center">
+                                <MonitorCheck className="mb-3 size-11 text-orange-300" />
+                                <h2 className="text-lg font-extrabold">
+                                    {operation === "COMPENSATION"
+                                        ? "Tra cứu trước khi nạp bù"
+                                        : "Tra cứu thành viên"}
+                                </h2>
+                                <p className="mt-2 max-w-md text-sm text-[var(--color-text-muted)]">
+                                    {operation === "COMPENSATION"
+                                        ? "Chọn đúng khách hàng trước khi thực hiện điều chỉnh số dư."
+                                        : "Nhập số điện thoại hoặc mã thẻ để tải dữ liệu mới nhất từ OpenAPI."}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </main>
+            {operation === "COMPENSATION" && member && compensation.isConfirmOpen ? (
+                <MemberCompensationConfirmModal
+                    member={member}
+                    draft={compensation.draft}
+                    warehouseName={
+                        auth.effectiveWarehouseName || auth.effectiveWarehouseId || "Điểm bán hiện tại"
+                    }
+                    busy={
+                        compensation.mutation.kind === "COMPENSATION_TOP_UP" &&
+                        compensation.mutation.status === "WAITING_API"
+                    }
+                    onClose={compensation.closeConfirmation}
+                    onConfirm={() => void compensation.submit()}
+                />
+            ) : null}
         </div>
-      </main>
-      {operation === "PACKAGE" && packageSale.isCheckoutOpen && packageSale.selectedPackage ? <MemberPackageCheckoutModal selectedPackage={packageSale.selectedPackage} paymentMethod={packageSale.paymentMethod} mutationBusy={["WAITING_PAYMENT", "WAITING_API"].includes(packageSale.mutation.status)} payOSPayment={packageSale.payOSPayment} onPaymentMethodChange={packageSale.setPaymentMethod} onClose={packageSale.closeCheckout} onCashConfirm={() => void packageSale.sellForCash()} onQrConfirm={() => void packageSale.startQrPayment()} /> : null}
-    </div>
-  );
+    );
 }

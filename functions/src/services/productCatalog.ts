@@ -14,6 +14,11 @@ function toFiniteNumber(value: number | string | undefined): number | null {
   return Number.isFinite(parsedValue) ? parsedValue : null;
 }
 
+function toOptionalString(...values: Array<string | undefined>): string | undefined {
+  const value = values.find((candidate) => candidate?.trim());
+  return value?.trim();
+}
+
 /**
  * Convert package/ticket records queried through a concrete `TypeId` into
  * products carrying the classification name used by the POS group filter.
@@ -22,7 +27,11 @@ export function mapGroupedGoods(
   items: HKGoodsItem[],
   category: number,
   typeName: string,
-  lastSyncAt: string
+  lastSyncAt: string,
+  visualColorsByGoodsId: ReadonlyMap<
+    string,
+    { foreColor?: string; backColor?: string }
+  > = new Map(),
 ): SyncProduct[] {
   const normalizedTypeName = typeName.trim() || "Khác";
 
@@ -39,6 +48,17 @@ export function mapGroupedGoods(
     );
 
     const price = toFiniteNumber(item.Price ?? item.price) ?? 0;
+    const visualColors = visualColorsByGoodsId.get(goodsId);
+    const foreColor = toOptionalString(
+      item.ForeColor,
+      item.foreColor,
+      visualColors?.foreColor,
+    );
+    const backColor = toOptionalString(
+      item.BackColor,
+      item.backColor,
+      visualColors?.backColor,
+    );
 
     return [{
       goodsId,
@@ -51,6 +71,8 @@ export function mapGroupedGoods(
       category,
       subCategory,
       typeName: normalizedTypeName,
+      ...(foreColor ? { foreColor } : {}),
+      ...(backColor ? { backColor } : {}),
       lastSyncAt,
     }];
   });
@@ -92,6 +114,8 @@ export function mapSellableSouvenirs(
     );
     const typeName = (item.typeName || "").trim();
     const goodsName = (item.giftName || item.goodsName || "").trim() || giftNo;
+    const foreColor = toOptionalString(item.foreColor ?? undefined);
+    const backColor = toOptionalString(item.backColor ?? undefined);
     const existingProduct = productsById.get(goodsId);
 
     if (existingProduct) {
@@ -109,6 +133,8 @@ export function mapSellableSouvenirs(
       typeName,
       amount,
       giftNo,
+      ...(foreColor ? { foreColor } : {}),
+      ...(backColor ? { backColor } : {}),
       lastSyncAt,
     });
   }

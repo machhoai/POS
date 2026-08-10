@@ -69,6 +69,7 @@ export default function CashierPage() {
 
   // ── Cart Store ─────────────────────────────────────────────────────────
   const cartItems = useCartStore((s) => s.items);
+  const cartMemberUid = useCartStore((s) => s.memberUid);
   const paymentMethod = useCartStore((s) => s.paymentMethod);
   const isCheckingOut = useCartStore((s) => s.isCheckingOut);
   const isPaymentLocked = useCartStore((s) => s.isPaymentLocked);
@@ -135,6 +136,7 @@ export default function CashierPage() {
   const payOSPayment = usePayOSCheckoutController({
     shopId,
     warehouseId: effectiveWarehouseId,
+    memberUid: cartMemberUid,
     draftOrderId,
     items: cartItems,
     onCompleted: handlePayOSCompleted,

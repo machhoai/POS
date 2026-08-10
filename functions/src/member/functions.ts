@@ -2,20 +2,33 @@ import { HttpsError } from "firebase-functions/v2/https";
 import type { HKApiResponse } from "../services/hkApiService";
 import {
   fetchRemoteMemberByCard,
+  fetchRemoteMemberByCardSerial,
   fetchRemoteMemberByPhone,
+  fetchRemoteMemberCards,
+  fetchRemoteMemberPassTickets,
+  fetchRemoteMemberStoredValueHistory,
   registerRemoteMember,
   updateRemoteMemberProfile,
 } from "../services/hkApiService";
-import { mapMemberLookup, MemberMappingError } from "../services/memberMapper";
+import {
+  mapMemberCards,
+  mapMemberLookup,
+  mapMemberPassTickets,
+  mapMemberStoredValueRecords,
+  MemberMappingError,
+} from "../services/memberMapper";
 import {
   getStoredMemberProfile,
   saveStoredMemberProfile,
 } from "../services/memberRepository";
 import { getPosAuthSession } from "../services/posAuthService";
 import type {
+  HKMemberStoredValueLogDto,
   HKMemberLookupDataDto,
   MemberBalances,
   MemberProfile,
+  MemberStoredValueCategory,
+  MemberStoredValueRecord,
   StoredMemberProfile,
 } from "../types/member";
 import {
@@ -23,11 +36,35 @@ import {
   type MemberLookupInput,
   type MemberProfileUpdateInput,
   type MemberRegistrationInput,
+  type MemberStoredValueHistoryInput,
   toRemoteSex,
   validateMemberLookupInput,
+  validateMemberPassTicketInput,
   validateMemberProfileUpdateInput,
   validateMemberRegistrationInput,
+  validateMemberRemoteScopeInput,
+  validateMemberStoredValueHistoryInput,
 } from "./memberPolicy";
+
+const STORED_VALUE_CATEGORIES = [1, 2, 5, 6, 7] as const;
+const REMOTE_HISTORY_PAGE_LIMIT = 100;
+
+interface StoredValueHistoryPage {
+  storedCategory: MemberStoredValueCategory;
+  totalPage: number;
+  totalRecord: number;
+  records: MemberStoredValueRecord[];
+}
+
+function isUnavailableStoredValueCategoryError(error: unknown): boolean {
+  if (!(error instanceof MemberRemoteApiError) ||
+      error.action !== "member_getstored_log") {
+    return false;
+  }
+  const message = error.message.toLocaleLowerCase("vi-VN");
+  return message.includes("loại tài khoản được lưu trữ không thành công") ||
+    message.includes("stored account type");
+}
 
 const EMPTY_BALANCES: MemberBalances = {
   principalVnd: 0,
@@ -112,14 +149,19 @@ function mergeLocalProfile(
 
 async function fetchAndMapMember(input: MemberLookupInput): Promise<MemberProfile> {
   const isPhone = input.mode === "PHONE";
+  const isCardSerial = input.mode === "CARD" && input.cardLookupKind === "SERIAL_NUMBER";
   const action = isPhone
     ? "member_getmember_phone"
-    : "member_getmember_membercode";
+    : isCardSerial
+      ? "member_getmember_serialnumber"
+      : "member_getmember_membercode";
   const response = await callRemote<HKMemberLookupDataDto>(
     action,
     () => isPhone
       ? fetchRemoteMemberByPhone({ shopId: input.shopId, phone: input.query })
-      : fetchRemoteMemberByCard(input.query),
+      : isCardSerial
+        ? fetchRemoteMemberByCardSerial(input.query)
+        : fetchRemoteMemberByCard(input.query),
   );
 
   if (!response.success || !response.data) {
@@ -134,7 +176,7 @@ async function fetchAndMapMember(input: MemberLookupInput): Promise<MemberProfil
   try {
     return mapMemberLookup(response.data, {
       shopId: input.shopId,
-      memberCode: isPhone ? undefined : input.query,
+      memberCode: isPhone || isCardSerial ? undefined : input.query,
     });
   } catch (error: unknown) {
     if (error instanceof MemberMappingError) throw error;
@@ -153,6 +195,176 @@ export async function lookupPosMemberForUser(
 
   return {
     member: mergeLocalProfile(remoteMember, localMember),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+async function fetchStoredValueHistoryPage(
+  input: MemberStoredValueHistoryInput,
+  storedCategory: MemberStoredValueCategory,
+  page: number,
+  limit: number,
+): Promise<StoredValueHistoryPage> {
+  const response = await callRemote<HKMemberStoredValueLogDto[]>(
+    "member_getstored_log",
+    () => fetchRemoteMemberStoredValueHistory({
+      uid: input.uid,
+      storedCategory,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      page,
+      limit,
+    }),
+  );
+  if (!response.success || !Array.isArray(response.data)) {
+    throw new MemberRemoteApiError(
+      "member_getstored_log",
+      response.code,
+      remoteReason(response, "OpenAPI không thể tải lịch sử sử dụng."),
+    );
+  }
+
+  const records = mapMemberStoredValueRecords(response.data, storedCategory);
+  const totalRecord = response.totalRecord ?? records.length;
+  return {
+    storedCategory,
+    totalPage: response.totalPage ?? Math.ceil(totalRecord / limit),
+    totalRecord,
+    records,
+  };
+}
+
+async function fetchAllStoredValueHistory(
+  input: MemberStoredValueHistoryInput,
+): Promise<{
+  totalPage: number;
+  totalRecord: number;
+  records: MemberStoredValueRecord[];
+}> {
+  const requestedRecordCount = input.page * input.limit;
+  const remotePageLimit = Math.min(
+    requestedRecordCount,
+    REMOTE_HISTORY_PAGE_LIMIT,
+  );
+  const requestedRemotePages = Math.ceil(
+    requestedRecordCount / remotePageLimit,
+  );
+  const firstPageResults = await Promise.all(
+    STORED_VALUE_CATEGORIES.map((storedCategory) =>
+      fetchStoredValueHistoryPage(
+        input,
+        storedCategory,
+        1,
+        remotePageLimit,
+      ).catch((error: unknown) => {
+        if (isUnavailableStoredValueCategoryError(error)) return null;
+        throw error;
+      }),
+    ),
+  );
+  const firstPages = firstPageResults.filter(
+    (historyPage): historyPage is StoredValueHistoryPage => historyPage !== null,
+  );
+  const remainingPages = await Promise.all(
+    firstPages.flatMap((firstPage) => {
+      const finalPage = Math.min(firstPage.totalPage, requestedRemotePages);
+      return Array.from(
+        { length: Math.max(0, finalPage - 1) },
+        (_, index) => fetchStoredValueHistoryPage(
+          input,
+          firstPage.storedCategory,
+          index + 2,
+          remotePageLimit,
+        ),
+      );
+    }),
+  );
+  const totalRecord = firstPages.reduce(
+    (total, historyPage) => total + historyPage.totalRecord,
+    0,
+  );
+  const records = [...firstPages, ...remainingPages]
+    .flatMap((historyPage) => historyPage.records)
+    .sort((left, right) => right.createTime.localeCompare(left.createTime));
+  const startIndex = (input.page - 1) * input.limit;
+
+  return {
+    totalPage: Math.ceil(totalRecord / input.limit),
+    totalRecord,
+    records: records.slice(startIndex, startIndex + input.limit),
+  };
+}
+
+export async function listPosMemberStoredValueHistoryForUser(
+  userId: string,
+  data: unknown,
+) {
+  const input = validateMemberStoredValueHistoryInput(data);
+  await assertWarehouseAccess(userId, input.warehouseId);
+  const history = input.storedCategory === "ALL"
+    ? await fetchAllStoredValueHistory(input)
+    : await fetchStoredValueHistoryPage(
+      input,
+      input.storedCategory,
+      input.page,
+      input.limit,
+    );
+
+  return {
+    page: input.page,
+    limit: input.limit,
+    totalPage: history.totalPage,
+    totalRecord: history.totalRecord,
+    records: history.records,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+export async function listPosMemberCardsForUser(
+  userId: string,
+  data: unknown,
+) {
+  const input = validateMemberRemoteScopeInput(data);
+  await assertWarehouseAccess(userId, input.warehouseId);
+  const response = await callRemote(
+    "member_getmembercode",
+    () => fetchRemoteMemberCards(input.uid),
+  );
+  if (!response.success || !Array.isArray(response.data)) {
+    throw new MemberRemoteApiError(
+      "member_getmembercode",
+      response.code,
+      remoteReason(response, "OpenAPI không thể tải danh sách thẻ."),
+    );
+  }
+  return {
+    cards: mapMemberCards(response.data),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+export async function listPosMemberPassTicketsForUser(
+  userId: string,
+  data: unknown,
+) {
+  const input = validateMemberPassTicketInput(data);
+  await assertWarehouseAccess(userId, input.warehouseId);
+  const response = await callRemote(
+    "member_passticket_list",
+    () => fetchRemoteMemberPassTickets({
+      uid: input.uid,
+      category: input.category,
+    }),
+  );
+  if (!response.success || !Array.isArray(response.data)) {
+    throw new MemberRemoteApiError(
+      "member_passticket_list",
+      response.code,
+      remoteReason(response, "OpenAPI không thể tải vé và gói đã mua."),
+    );
+  }
+  return {
+    tickets: mapMemberPassTickets(response.data),
     fetchedAt: new Date().toISOString(),
   };
 }

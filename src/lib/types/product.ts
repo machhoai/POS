@@ -7,13 +7,15 @@
  * Mapping từ numeric ID của HK API sang nhãn tiếng Việt.
  */
 export const CATEGORY_MAP: Record<number, string> = {
-    //   1: "Gói thành viên",
+    1: "Gói Xu",
+    2: "Gói Điểm",
     4: "Vé lượt",
+    6: "Nạp Thẻ",
     10: "Sản phẩm lưu niệm",
 };
 
 /** Thứ tự hiển thị các nhóm sản phẩm. */
-export const CATEGORY_IDS = [4, 1, 10] as const;
+export const CATEGORY_IDS = [4, 10, 1, 2, 6] as const;
 
 /**
  * Nhóm phụ (typeName) bên trong mỗi category.

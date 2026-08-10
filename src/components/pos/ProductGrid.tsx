@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect, type CSSProperties } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import type { Product } from "@/lib/types/product";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import { getProductColors } from "@/lib/utils/productColors";
 import { ShoppingCart } from "lucide-react";
 import { IoGift, IoTicket, IoChevronDown, IoFilterOutline } from "react-icons/io5";
 
@@ -232,15 +233,7 @@ function TypeFilterSelector({
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
     const displayPrice = product.afterTaxPrice > 0 ? product.afterTaxPrice : product.price;
-    const artworkColor = /^#[0-9a-f]{6}$/i.test(product.backColor) ? product.backColor : "#f97316";
-    const rgb = [1, 3, 5].map((offset) => Number.parseInt(artworkColor.slice(offset, offset + 2), 16));
-    const isLightArtwork = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 > 210;
-    const iconColor = isLightArtwork && /^#[0-9a-f]{6}$/i.test(product.foreColor)
-        ? product.foreColor
-        : artworkColor;
-    const artworkStyle = {
-        backgroundColor: `color-mix(in srgb, ${artworkColor} 13%, #f4f1ec)`,
-    } as CSSProperties;
+    const colors = getProductColors(product);
     const description =
         product.description ||
         (product.category === 4
@@ -250,21 +243,33 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
                 : `${product.subCategory || product.typeName} · Mã ${product.giftNo || product.goodsId.slice(0, 6)}`);
 
     return (
-        <article className="group relative min-w-0 bg-white rounded-2xl border border-white shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5 transition-all overflow-hidden">
+        <article
+            className="group relative min-w-0 overflow-hidden rounded-2xl border bg-white shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]"
+            style={{ borderColor: `color-mix(in srgb, ${colors.background} 28%, white)` }}
+        >
             <button type="button" onClick={onAdd} className="w-full text-left" aria-label={`Thêm ${product.goodsName} vào giỏ`}>
-                <div className="relative h-[132px] m-2.5 mb-0 rounded-[13px] overflow-hidden" style={artworkStyle}>
-                    <div className="absolute -right-8 -top-10 w-28 h-28 rounded-full bg-white/35" />
-                    <div className="absolute -left-7 -bottom-10 w-24 h-24 rounded-full bg-white/30" />
+                <div className="relative m-2.5 mb-0 h-[132px] overflow-hidden rounded-[13px]" style={{ backgroundColor: colors.background }}>
+                    <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/20" />
+                    <div className="absolute -bottom-10 -left-7 h-24 w-24 rounded-full bg-white/15" />
                     <div
                         className="absolute left-1/2 top-1/2 -translate-x-1/2 p-5 -translate-y-1/2 w-[74px] h-[74px] rounded-[24px] rotate-[-5deg] flex items-center justify-center shadow-[0_14px_28px_rgba(24,24,27,0.12)]"
-                        style={{ backgroundColor: iconColor }}
+                        style={{
+                            backgroundColor: `color-mix(in srgb, ${colors.foreground} 18%, transparent)`,
+                            color: colors.foreground,
+                        }}
                     >
-                        {product.category == 4 ? <IoTicket className="size-full text-white rotate-45" /> : <IoGift className="size-full text-white -rotate-2" />}
+                        {product.category == 4 ? <IoTicket className="size-full rotate-45" /> : <IoGift className="size-full -rotate-2" />}
                     </div>
-                    <span className="absolute left-2.5 top-2.5 max-w-[70%] px-2 py-1 rounded-md bg-white/80 backdrop-blur-sm text-[12px] font-bold uppercase tracking-wide text-[var(--color-text-secondary)] truncate">
+                    <span
+                        className="absolute left-2.5 top-2.5 max-w-[70%] truncate rounded-md px-2 py-1 text-[12px] font-bold uppercase tracking-wide shadow-sm"
+                        style={{ backgroundColor: colors.foreground, color: colors.background }}
+                    >
                         {product.typeName || "Sản phẩm"}
                     </span>
-                    <span className="absolute right-2.5 top-2.5 w-8 h-8 p-1 rounded-lg bg-white/90 text-[var(--color-accent)] flex items-center justify-center shadow-sm group-hover:bg-[var(--color-accent)] group-hover:text-white transition-colors">
+                    <span
+                        className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-lg p-1 shadow-sm"
+                        style={{ backgroundColor: colors.foreground, color: colors.background }}
+                    >
                         <ShoppingCart className="size-4" />
                     </span>
                 </div>
@@ -277,7 +282,7 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
                         {description}
                     </p>
                     <div className="mt-3 flex items-end justify-between gap-2">
-                        <p className="text-base font-extrabold tracking-[-0.02em] text-[var(--color-accent)]">
+                        <p className="text-base font-extrabold tracking-[-0.02em]" style={{ color: colors.accentText }}>
                             {displayPrice > 0 ? formatCurrency(displayPrice) : "Miễn phí"}
                         </p>
                         <span className="text-[10px] font-medium text-[var(--color-text-muted)] whitespace-nowrap">

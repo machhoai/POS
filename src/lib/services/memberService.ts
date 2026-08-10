@@ -2,6 +2,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 import type {
+  MemberCardLookupKind,
   MemberLookupMode,
   MemberProfile,
   MemberRegistrationDraft,
@@ -12,6 +13,7 @@ export interface MemberLookupInput {
   warehouseId: string;
   mode: MemberLookupMode;
   query: string;
+  cardLookupKind?: MemberCardLookupKind;
 }
 
 export interface MemberLookupResult {
@@ -28,6 +30,44 @@ export interface MemberRegistrationResult {
   member: MemberProfile;
   remoteMessage: string | null;
   createdAt: string;
+}
+
+function normalizedBirthDate(
+  draft: MemberRegistrationDraft,
+): { birthDate: string | null; birthDay: string; birthMonth: string; birthYear: string } {
+  const birthDay = draft.birthDay.trim();
+  const birthMonth = draft.birthMonth.trim();
+  const birthYear = draft.birthYear.trim();
+  const hasAnyPart = Boolean(birthDay || birthMonth || birthYear);
+
+  if (!hasAnyPart) {
+    return { birthDate: null, birthDay: "", birthMonth: "", birthYear: "" };
+  }
+  if (!/^\d{1,2}$/.test(birthDay) || !/^\d{1,2}$/.test(birthMonth) || !/^\d{4}$/.test(birthYear)) {
+    throw new MemberServiceError(
+      "Vui lòng nhập đầy đủ ngày, tháng và năm sinh.",
+      "invalid-birth-date",
+    );
+  }
+
+  const paddedDay = birthDay.padStart(2, "0");
+  const paddedMonth = birthMonth.padStart(2, "0");
+  const birthDate = `${birthYear}-${paddedMonth}-${paddedDay}`;
+  const parsed = new Date(`${birthDate}T00:00:00.000Z`);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== birthDate ||
+    parsed.getTime() > Date.now()
+  ) {
+    throw new MemberServiceError("Ngày sinh không hợp lệ.", "invalid-birth-date");
+  }
+
+  return {
+    birthDate,
+    birthDay: paddedDay,
+    birthMonth: paddedMonth,
+    birthYear,
+  };
 }
 
 export class MemberServiceError extends Error {
@@ -82,17 +122,19 @@ export function validateMemberRegistrationDraft(
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new MemberServiceError("Email không đúng định dạng.", "invalid-email");
   }
-  if (draft.birthDate) {
-    const parsed = new Date(`${draft.birthDate}T00:00:00.000Z`);
-    if (
-      Number.isNaN(parsed.getTime()) ||
-      parsed.toISOString().slice(0, 10) !== draft.birthDate ||
-      parsed.getTime() > Date.now()
-    ) {
-      throw new MemberServiceError("Ngày sinh không hợp lệ.", "invalid-birth-date");
-    }
+  if (draft.gender !== "MALE" && draft.gender !== "FEMALE") {
+    throw new MemberServiceError("Giới tính chỉ có thể là Nam hoặc Nữ.", "invalid-gender");
   }
-  return { ...draft, fullName, phone, email };
+  const birthDate = normalizedBirthDate(draft);
+  return {
+    ...draft,
+    fullName,
+    phone,
+    email,
+    birthDay: birthDate.birthDay,
+    birthMonth: birthDate.birthMonth,
+    birthYear: birthDate.birthYear,
+  };
 }
 
 export function toMemberServiceError(error: unknown): MemberServiceError {
@@ -149,13 +191,11 @@ export async function registerMember(
   input: MemberRegistrationInput,
 ): Promise<MemberRegistrationResult> {
   const draft = validateMemberRegistrationDraft(input);
-  type RegistrationPayload = Omit<
-    MemberRegistrationInput,
-    "birthDate" | "email"
-  > & {
+  type RegistrationPayload = Omit<MemberRegistrationInput, "birthDay" | "birthMonth" | "birthYear" | "email"> & {
     birthDate: string | null;
     email: string | null;
   };
+  const birthDate = normalizedBirthDate(draft).birthDate;
   const callable = httpsCallable<
     { action: "registerMember"; payload: RegistrationPayload },
     MemberRegistrationResult
@@ -165,9 +205,12 @@ export async function registerMember(
     const result = await callable(await withDeviceAuth({
       action: "registerMember" as const,
       payload: {
-        ...input,
-        ...draft,
-        birthDate: draft.birthDate || null,
+        fullName: draft.fullName,
+        phone: draft.phone,
+        gender: draft.gender,
+        shopId: input.shopId,
+        warehouseId: input.warehouseId,
+        birthDate,
         email: draft.email || null,
       },
     }));

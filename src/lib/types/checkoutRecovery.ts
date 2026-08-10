@@ -15,6 +15,7 @@ export interface CheckoutJournalRecord {
   localOrderId: string | null;
   shopId: number;
   warehouseId: string;
+  memberUid?: string | null;
   items: OrderItem[];
   paymentMethod: PaymentMethod;
   totalAmount: number;

@@ -14,7 +14,6 @@ import type {
   MemberMutationStatus,
   MemberProfile,
   MemberRegistrationDraft,
-  MemberRegistrationReviewStatus,
 } from "@/lib/types/member";
 import {
   createCustomerDisplayOrderSnapshot,
@@ -26,9 +25,19 @@ interface MemberDisplayPublisherInput {
   enabled: boolean;
   suppressWhenDisabled?: boolean;
   draft: MemberRegistrationDraft;
-  reviewStatus: MemberRegistrationReviewStatus;
   mutationStatus: MemberMutationStatus;
   member: MemberProfile | null;
+}
+
+function draftBirthDate(draft: MemberRegistrationDraft): string | null {
+  if (!draft.birthDay && !draft.birthMonth && !draft.birthYear) return null;
+  return `${draft.birthDay || "__"}/${draft.birthMonth || "__"}/${draft.birthYear || "____"}`;
+}
+
+function profileBirthDate(value: string | null): string | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
 }
 
 function memberSnapshot(
@@ -39,7 +48,7 @@ function memberSnapshot(
     fullName: member?.fullName || draft.fullName,
     phone: member?.phone || draft.phone,
     gender: member?.gender || draft.gender,
-    birthDate: member?.birthDate || draft.birthDate || null,
+    birthDate: member ? profileBirthDate(member.birthDate) : draftBirthDate(draft),
     email: member?.email || draft.email || null,
     memberCode: member?.memberCode || null,
   };
@@ -49,7 +58,6 @@ export function useMemberCustomerDisplayPublisher({
   enabled,
   suppressWhenDisabled = false,
   draft,
-  reviewStatus,
   mutationStatus,
   member,
 }: MemberDisplayPublisherInput): void {
@@ -66,7 +74,7 @@ export function useMemberCustomerDisplayPublisher({
     [order],
   );
   const displayState = useMemo<CustomerDisplayState>(() => {
-    if (!enabled || reviewStatus === "EDITING") return defaultState;
+    if (!enabled) return defaultState;
     return {
       mode: mutationStatus === "SUCCEEDED" && member ? "MEMBER_SUCCESS" : "MEMBER_REVIEW",
       connectionStatus: "CONNECTED",
@@ -74,7 +82,7 @@ export function useMemberCustomerDisplayPublisher({
       order,
       payment: { status: "NOT_STARTED", qr: null },
     };
-  }, [defaultState, draft, enabled, member, mutationStatus, order, reviewStatus]);
+  }, [defaultState, draft, enabled, member, mutationStatus, order]);
   const latestStateRef = useRef(displayState);
 
   useEffect(() => {

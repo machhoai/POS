@@ -2,8 +2,8 @@ import {
   CheckCircle2,
   Edit3,
   LoaderCircle,
-  MonitorCheck,
   RotateCcw,
+  ShieldCheck,
   UserPlus,
 } from "lucide-react";
 import type {
@@ -25,7 +25,10 @@ interface MemberRegistrationFormProps {
 }
 
 const fieldClass = "h-13 w-full rounded-2xl border border-[var(--color-border-subtle)] bg-white px-4 text-base font-semibold transition-colors focus:border-[var(--color-accent)] disabled:bg-neutral-50 disabled:text-[var(--color-text-muted)]";
-const MAX_BIRTH_DATE = new Date().toISOString().slice(0, 10);
+
+function numericPart(value: string, maxLength: number): string {
+  return value.replace(/\D/g, "").slice(0, maxLength);
+}
 
 export default function MemberRegistrationForm({
   draft,
@@ -65,10 +68,15 @@ export default function MemberRegistrationForm({
       <form onSubmit={(event) => { event.preventDefault(); onStartReview(); }} className="space-y-3">
         <label className="block text-sm font-bold">Họ và tên *<input value={draft.fullName} onChange={(event) => onChange({ fullName: event.target.value })} disabled={isLocked} maxLength={120} autoComplete="name" className={`${fieldClass} mt-1.5`} placeholder="Nguyễn Văn A" /></label>
         <label className="block text-sm font-bold">Số điện thoại *<input value={draft.phone} onChange={(event) => onChange({ phone: event.target.value })} disabled={isLocked} inputMode="tel" autoComplete="tel" className={`${fieldClass} mt-1.5`} placeholder="0901 234 567" /></label>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-sm font-bold">Giới tính<select value={draft.gender} onChange={(event) => onChange({ gender: event.target.value as MemberRegistrationDraft["gender"] })} disabled={isLocked} className={`${fieldClass} mt-1.5`}><option value="UNKNOWN">Chưa chọn</option><option value="MALE">Nam</option><option value="FEMALE">Nữ</option><option value="OTHER">Khác</option></select></label>
-          <label className="block text-sm font-bold">Ngày sinh<input type="date" value={draft.birthDate} onChange={(event) => onChange({ birthDate: event.target.value })} disabled={isLocked} max={MAX_BIRTH_DATE} className={`${fieldClass} mt-1.5`} /></label>
-        </div>
+        <label className="block text-sm font-bold">Giới tính<select value={draft.gender} onChange={(event) => onChange({ gender: event.target.value as MemberRegistrationDraft["gender"] })} disabled={isLocked} className={`${fieldClass} mt-1.5`}><option value="MALE">Nam</option><option value="FEMALE">Nữ</option></select></label>
+        <fieldset>
+          <legend className="text-sm font-bold">Ngày sinh</legend>
+          <div className="mt-1.5 grid grid-cols-[0.75fr_0.75fr_1fr] gap-2">
+            <label className="block"><span className="sr-only">Ngày sinh</span><input value={draft.birthDay} onChange={(event) => onChange({ birthDay: numericPart(event.target.value, 2) })} disabled={isLocked} inputMode="numeric" autoComplete="bday-day" maxLength={2} className={`${fieldClass} text-center`} placeholder="Ngày" aria-label="Ngày sinh" /></label>
+            <label className="block"><span className="sr-only">Tháng sinh</span><input value={draft.birthMonth} onChange={(event) => onChange({ birthMonth: numericPart(event.target.value, 2) })} disabled={isLocked} inputMode="numeric" autoComplete="bday-month" maxLength={2} className={`${fieldClass} text-center`} placeholder="Tháng" aria-label="Tháng sinh" /></label>
+            <label className="block"><span className="sr-only">Năm sinh</span><input value={draft.birthYear} onChange={(event) => onChange({ birthYear: numericPart(event.target.value, 4) })} disabled={isLocked} inputMode="numeric" autoComplete="bday-year" maxLength={4} className={`${fieldClass} text-center`} placeholder="Năm" aria-label="Năm sinh" /></label>
+          </div>
+        </fieldset>
         <label className="block text-sm font-bold">Email<input type="email" value={draft.email} onChange={(event) => onChange({ email: event.target.value })} disabled={isLocked} maxLength={254} autoComplete="email" className={`${fieldClass} mt-1.5`} placeholder="khachhang@example.com" /></label>
 
         {mutation.kind === "REGISTER" && mutation.status === "FAILED" ? (
@@ -76,7 +84,7 @@ export default function MemberRegistrationForm({
         ) : null}
 
         {reviewStatus === "EDITING" ? (
-          <button type="submit" className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--color-accent)] px-5 font-bold text-white shadow-[var(--shadow-glow)] active:scale-[0.98]"><MonitorCheck className="size-5" /> Gửi sang màn hình khách</button>
+          <button type="submit" className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--color-accent)] px-5 font-bold text-white shadow-[var(--shadow-glow)] active:scale-[0.98]"><ShieldCheck className="size-5" /> Yêu cầu khách xác nhận</button>
         ) : null}
         {reviewStatus === "AWAITING_CUSTOMER" ? (
           <div className="space-y-3 rounded-2xl bg-amber-50 p-4"><p className="text-sm font-semibold text-amber-800">Đang hiển thị trên màn hình phụ. Hãy nhờ khách kiểm tra kỹ trước khi tiếp tục.</p><div className="grid grid-cols-2 gap-3"><button type="button" onClick={onEdit} className="flex min-h-13 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white font-bold text-amber-800"><Edit3 className="size-4" /> Chỉnh sửa</button><button type="button" onClick={onConfirmCustomer} className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-amber-500 font-bold text-white"><CheckCircle2 className="size-5" /> Khách xác nhận đúng</button></div></div>

@@ -25,10 +25,14 @@ import {
 } from "../order/functions";
 import { assertActivePosDevice } from "../services/posDeviceAccessService";
 import {
+  listPosMemberCardsForUser,
+  listPosMemberPassTicketsForUser,
+  listPosMemberStoredValueHistoryForUser,
   lookupPosMemberForUser,
   registerPosMemberForUser,
   updatePosMemberProfileForUser,
 } from "../member/functions";
+import { compensatePosMemberForUser } from "../member/compensation";
 import {
   finalizeMemberPackageSaleForUser,
   listMemberPackagesForUser,
@@ -106,6 +110,10 @@ export const getPosAuthSession = onCall(
       action === "lookupMember" ||
       action === "registerMember" ||
       action === "updateMemberProfile" ||
+      action === "getMemberStoredValueHistory" ||
+      action === "getMemberCards" ||
+      action === "getMemberPassTickets" ||
+      action === "compensateMemberBalance" ||
       action === "getMemberPackages" ||
       action === "prepareMemberPackageOrder" ||
       action === "sellMemberPackageCash" ||
@@ -122,6 +130,31 @@ export const getPosAuthSession = onCall(
           return await registerPosMemberForUser(
             request.auth.uid,
             request.data?.payload,
+          );
+        }
+        if (action === "getMemberStoredValueHistory") {
+          return await listPosMemberStoredValueHistoryForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "getMemberCards") {
+          return await listPosMemberCardsForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "getMemberPassTickets") {
+          return await listPosMemberPassTicketsForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "compensateMemberBalance") {
+          return await compensatePosMemberForUser(
+            request.auth.uid,
+            request.data?.payload,
+            device.id,
           );
         }
         if (action === "getMemberPackages") {

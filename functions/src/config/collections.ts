@@ -22,4 +22,5 @@ export const POS_COLLECTIONS = {
   paymentSettings: "pos_payment_settings",
   devices: "pos_devices",
   members: "pos_members",
+  memberCompensations: "pos_member_compensations",
 } as const;

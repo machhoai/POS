@@ -24,6 +24,8 @@ export interface StoredProduct {
   afterTaxPrice?: number;
   category: number;
   subCategory: string;
+  foreColor?: string;
+  backColor?: string;
   amount?: number;
   giftNo?: string;
   typeName?: string;
