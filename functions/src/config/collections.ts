@@ -21,4 +21,5 @@ export const POS_COLLECTIONS = {
   orders: "pos_orders",
   paymentSettings: "pos_payment_settings",
   devices: "pos_devices",
+  members: "pos_members",
 } as const;

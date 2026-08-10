@@ -1,0 +1,386 @@
+import type { DocumentReference } from "firebase-admin/firestore";
+import { HttpsError } from "firebase-functions/v2/https";
+import { db } from "../config/firebase";
+import { POS_COLLECTIONS } from "../config/collections";
+import {
+  confirmRemotePayment,
+  createRemoteOrder,
+  queryPaymentStatus,
+  type HKApiResponse,
+} from "../services/hkApiService";
+import {
+  loadRemoteMemberPackage,
+  loadRemoteMemberPackages,
+} from "../services/memberPackageService";
+import { getPosAuthSession } from "../services/posAuthService";
+import type { MemberPointPackage } from "../types/member";
+import type { PosOrder } from "../types/order";
+import { MemberRemoteApiError } from "./functions";
+import {
+  validateMemberPackageCatalogInput,
+  validateMemberPackageOrderId,
+  validateMemberPackageSaleInput,
+  type MemberPackageSaleInput,
+} from "./packagePolicy";
+
+interface OperatorInfo {
+  employeeId: string;
+  firebaseUid: string;
+  name: string;
+}
+
+async function assertWarehouseAccess(
+  userId: string,
+  warehouseId: string,
+): Promise<OperatorInfo> {
+  const session = await getPosAuthSession(userId);
+  if (!session.warehouses.some((warehouse) => warehouse.id === warehouseId)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Bạn không có quyền bán gói tại điểm bán này.",
+    );
+  }
+  return {
+    employeeId: session.user.employee_id,
+    firebaseUid: userId,
+    name: session.user.full_name,
+  };
+}
+
+function createPackageDraft(
+  input: MemberPackageSaleInput,
+  selectedPackage: MemberPointPackage,
+  operator: OperatorInfo,
+): PosOrder {
+  const now = new Date().toISOString();
+  return {
+    localOrderId: input.localOrderId,
+    hkOrderNumber: null,
+    shopId: input.shopId,
+    warehouseId: input.warehouseId,
+    createdBy: operator.firebaseUid,
+    operatorId: operator.employeeId,
+    operatorFirebaseUid: operator.firebaseUid,
+    operatorName: operator.name,
+    orderKind: "MEMBER_PACKAGE",
+    uid: input.uid,
+    status: "DRAFT",
+    paymentMethod: "CASH",
+    paymentMethodId: "CASH",
+    paymentMethodName: "Tiền mặt",
+    totalAmount: selectedPackage.paymentAmountVnd,
+    items: [{
+      goodsId: selectedPackage.goodsId,
+      goodsName: selectedPackage.name,
+      price: selectedPackage.paymentAmountVnd,
+      quantity: 1,
+    }],
+    sync: { retryCount: 0, lastError: null, syncedAt: null },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function assertSamePackageOrder(
+  order: PosOrder,
+  input: MemberPackageSaleInput,
+): void {
+  if (
+    order.orderKind !== "MEMBER_PACKAGE" ||
+    order.uid !== input.uid ||
+    order.shopId !== input.shopId ||
+    order.warehouseId !== input.warehouseId ||
+    order.items.length !== 1 ||
+    order.items[0].goodsId !== input.goodsId
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Mã đơn đã được dùng cho một giao dịch khác.",
+    );
+  }
+}
+
+export async function listMemberPackagesForUser(userId: string, data: unknown) {
+  const input = validateMemberPackageCatalogInput(data);
+  await assertWarehouseAccess(userId, input.warehouseId);
+  const packages = await loadRemoteMemberPackages(input.uid);
+  return { packages, fetchedAt: new Date().toISOString() };
+}
+
+export async function prepareMemberPackageOrderForUser(
+  userId: string,
+  data: unknown,
+) {
+  const input = validateMemberPackageSaleInput(data);
+  const [operator, selectedPackage] = await Promise.all([
+    assertWarehouseAccess(userId, input.warehouseId),
+    loadRemoteMemberPackage(input.uid, input.goodsId),
+  ]);
+  if (
+    !Number.isSafeInteger(selectedPackage.paymentAmountVnd) ||
+    selectedPackage.paymentAmountVnd <= 0
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Giá gói từ OpenAPI không hợp lệ để thanh toán.",
+    );
+  }
+
+  const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
+  const order = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (snapshot.exists) {
+      const existing = snapshot.data() as PosOrder;
+      if (existing.createdBy !== userId) {
+        throw new HttpsError(
+          "permission-denied",
+          "Bạn không có quyền sử dụng đơn bán gói này.",
+        );
+      }
+      assertSamePackageOrder(existing, input);
+      return existing;
+    }
+    const draft = createPackageDraft(input, selectedPackage, operator);
+    transaction.create(docRef, draft);
+    return draft;
+  });
+
+  return {
+    localOrderId: order.localOrderId,
+    status: order.status,
+    totalAmount: order.totalAmount,
+    selectedPackage,
+  };
+}
+
+function isPaid(response: HKApiResponse): boolean {
+  return response.success && Number(response.data?.payStatus) === 2;
+}
+
+async function callRemote<T>(
+  action: string,
+  request: () => Promise<HKApiResponse<T>>,
+): Promise<HKApiResponse<T>> {
+  try {
+    return await request();
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : "Không rõ nguyên nhân";
+    throw new MemberRemoteApiError(
+      action,
+      null,
+      `Không thể kết nối OpenAPI: ${reason}`,
+    );
+  }
+}
+
+async function markSyncFailed(
+  docRef: DocumentReference,
+  order: PosOrder,
+  reason: string,
+  hkOrderNumber: string | null,
+): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  await docRef.update({
+    status: "SYNC_FAILED",
+    hkOrderNumber,
+    updatedAt,
+    sync: {
+      retryCount: (order.sync?.retryCount || 0) + 1,
+      lastError: reason,
+      syncedAt: null,
+    },
+  });
+}
+
+async function finalizeMemberPackageOrder(
+  userId: string,
+  localOrderId: string,
+) {
+  const docRef = db.collection(POS_COLLECTIONS.orders).doc(localOrderId);
+  const [session, snapshot] = await Promise.all([
+    getPosAuthSession(userId),
+    docRef.get(),
+  ]);
+  if (!snapshot.exists) {
+    throw new HttpsError("not-found", "Không tìm thấy đơn bán gói thành viên.");
+  }
+  const order = snapshot.data() as PosOrder;
+  const canAccess = order.createdBy === userId || session.warehouses.some(
+    (warehouse) => warehouse.id === order.warehouseId,
+  );
+  if (!canAccess) {
+    throw new HttpsError("permission-denied", "Bạn không có quyền xử lý đơn này.");
+  }
+  if (order.orderKind !== "MEMBER_PACKAGE" || !order.uid) {
+    throw new HttpsError("failed-precondition", "Đây không phải đơn gói thành viên.");
+  }
+  if (order.status === "SYNC_SUCCESS") {
+    return {
+      localOrderId,
+      remoteOrderNumber: order.hkOrderNumber,
+      status: order.status,
+      completedAt: order.sync.syncedAt,
+    };
+  }
+  if (order.status === "DRAFT") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Đơn chưa được xác nhận thanh toán tại POS.",
+    );
+  }
+  if (order.status === "SYNCING") {
+    throw new HttpsError(
+      "aborted",
+      "OpenAPI đang xử lý đơn. Vui lòng chờ và kiểm tra lại.",
+    );
+  }
+
+  await docRef.update({ status: "SYNCING", updatedAt: new Date().toISOString() });
+  let hkOrderNumber = order.hkOrderNumber;
+  let currentAction = "order_create";
+  try {
+    if (!hkOrderNumber) {
+      const createResponse = await callRemote(
+        "order_create",
+        () => createRemoteOrder({
+          uid: order.uid!,
+          goodsItems: order.items.map((item) => ({
+            goodsId: item.goodsId,
+            quantity: String(item.quantity),
+          })),
+        }),
+      );
+      hkOrderNumber = typeof createResponse.data?.orderNumber === "string"
+        ? createResponse.data.orderNumber
+        : null;
+      if (!createResponse.success || !hkOrderNumber) {
+        throw new MemberRemoteApiError(
+          "order_create",
+          createResponse.code,
+          createResponse.msg || "OpenAPI không thể tạo đơn bán gói.",
+        );
+      }
+      const remoteActualPayment = Number(createResponse.data?.actualPayment);
+      await docRef.update({
+        hkOrderNumber,
+        remoteActualPayment: Number.isFinite(remoteActualPayment)
+          ? remoteActualPayment
+          : null,
+        updatedAt: new Date().toISOString(),
+      });
+      if (
+        !Number.isFinite(remoteActualPayment) ||
+        remoteActualPayment !== order.totalAmount
+      ) {
+        throw new MemberRemoteApiError(
+          "order_create",
+          createResponse.code,
+          "Số tiền đơn OpenAPI không khớp số tiền khách đã thanh toán. " +
+            "Đơn đã dừng trước bước order_pay để đối soát.",
+        );
+      }
+    }
+
+    if (
+      order.remoteActualPayment !== undefined &&
+      order.remoteActualPayment !== order.totalAmount
+    ) {
+      throw new MemberRemoteApiError(
+        "order_create",
+        null,
+        "Số tiền đơn OpenAPI không khớp số tiền đã thu. Cần đối soát trước khi thử lại.",
+      );
+    }
+
+    currentAction = "order_pay_query";
+    let statusResponse = await callRemote(
+      "order_pay_query",
+      () => queryPaymentStatus({ orderNumber: hkOrderNumber! }),
+    );
+    if (!isPaid(statusResponse)) {
+      currentAction = "order_pay";
+      const payResponse = await callRemote(
+        "order_pay",
+        () => confirmRemotePayment({ orderNumber: hkOrderNumber! }),
+      );
+      currentAction = "order_pay_query";
+      statusResponse = await callRemote(
+        "order_pay_query",
+        () => queryPaymentStatus({ orderNumber: hkOrderNumber! }),
+      );
+      if (!payResponse.success && !isPaid(statusResponse)) {
+        throw new MemberRemoteApiError(
+          "order_pay",
+          payResponse.code,
+          payResponse.msg || "OpenAPI không thể thanh toán đơn bán gói.",
+        );
+      }
+    }
+    if (!isPaid(statusResponse)) {
+      throw new MemberRemoteApiError(
+        "order_pay_query",
+        statusResponse.code,
+        statusResponse.data?.payStatusDesc?.toString() ||
+          statusResponse.msg ||
+          "OpenAPI chưa xác nhận đơn đã thanh toán.",
+      );
+    }
+
+    const completedAt = new Date().toISOString();
+    await docRef.update({
+      status: "SYNC_SUCCESS",
+      hkOrderNumber,
+      updatedAt: completedAt,
+      sync: {
+        retryCount: order.sync?.retryCount || 0,
+        lastError: null,
+        syncedAt: completedAt,
+      },
+    });
+    return {
+      localOrderId,
+      remoteOrderNumber: hkOrderNumber,
+      status: "SYNC_SUCCESS" as const,
+      completedAt,
+    };
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : "OpenAPI xử lý thất bại.";
+    await markSyncFailed(docRef, order, reason, hkOrderNumber);
+    if (error instanceof MemberRemoteApiError) throw error;
+    throw new MemberRemoteApiError(currentAction, null, reason);
+  }
+}
+
+export async function sellMemberPackageForCashForUser(
+  userId: string,
+  data: unknown,
+) {
+  const input = validateMemberPackageSaleInput(data);
+  await prepareMemberPackageOrderForUser(userId, input);
+  const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    const order = snapshot.data() as PosOrder;
+    if (order.status !== "DRAFT") return;
+    const paidAt = new Date().toISOString();
+    transaction.update(docRef, {
+      status: "LOCAL_PAID",
+      paymentMethod: "CASH",
+      paymentMethodId: "CASH",
+      paymentMethodName: "Tiền mặt",
+      paidAt,
+      updatedAt: paidAt,
+    });
+  });
+  return finalizeMemberPackageOrder(userId, input.localOrderId);
+}
+
+export async function finalizeMemberPackageSaleForUser(
+  userId: string,
+  data: unknown,
+) {
+  return finalizeMemberPackageOrder(
+    userId,
+    validateMemberPackageOrderId(data),
+  );
+}

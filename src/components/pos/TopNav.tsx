@@ -1,6 +1,5 @@
 "use client";
 
-import { Gift, Ticket } from "lucide-react";
 import { IoGift, IoTicket } from "react-icons/io5";
 
 interface TopNavProps {

@@ -287,6 +287,48 @@ export async function stagePosOrderForPayOS(
   data: unknown,
 ): Promise<PosOrder> {
   const input = validateOrderInput(data);
+  const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
+  const existingSnapshot = await docRef.get();
+  if (existingSnapshot.exists) {
+    const existing = existingSnapshot.data() as PosOrder;
+    if (existing.orderKind === "MEMBER_PACKAGE") {
+      await assertWarehouseAccess(userId, input.warehouseId);
+      if (existing.createdBy !== userId) {
+        throw new HttpsError(
+          "permission-denied",
+          "Bạn không có quyền tạo thanh toán cho đơn bán gói này.",
+        );
+      }
+      if (
+        existing.status !== "DRAFT" ||
+        existing.shopId !== input.shopId ||
+        existing.warehouseId !== input.warehouseId ||
+        existing.items.length !== 1 ||
+        input.items.length !== 1 ||
+        existing.items[0].goodsId !== input.items[0].goodsId ||
+        input.items[0].quantity !== 1
+      ) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Đơn bán gói không còn phù hợp để tạo mã chuyển khoản.",
+        );
+      }
+      const updatedAt = new Date().toISOString();
+      await docRef.update({
+        paymentMethod: "QR_CODE",
+        paymentMethodId: "QR_CODE",
+        paymentMethodName: "Chuyển khoản",
+        updatedAt,
+      });
+      return {
+        ...existing,
+        paymentMethod: "QR_CODE",
+        paymentMethodId: "QR_CODE",
+        paymentMethodName: "Chuyển khoản",
+        updatedAt,
+      };
+    }
+  }
   const [operator, items] = await Promise.all([
     assertWarehouseAccess(userId, input.warehouseId),
     loadAuthoritativeItems(input.items),
@@ -299,7 +341,6 @@ export async function stagePosOrderForPayOS(
     );
   }
 
-  const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(docRef);
     const now = new Date().toISOString();
@@ -1037,7 +1078,11 @@ export const onOrderLocalPaid = onDocumentUpdated(
 
     const before = event.data.before.data() as PosOrder;
     const after = event.data.after.data() as PosOrder;
-    if (!shouldSynchronizeRemoteOrder(before.status, after.status)) {
+    if (!shouldSynchronizeRemoteOrder(
+      before.status,
+      after.status,
+      after.orderKind ?? "STANDARD",
+    )) {
       return;
     }
 
@@ -1067,15 +1112,20 @@ export const retryFailedOrderSyncs = onSchedule(
     if (snapshot.empty) return;
 
     const batch = db.batch();
+    let queuedCount = 0;
     for (const document of snapshot.docs) {
+      const order = document.data() as PosOrder;
+      if (order.orderKind === "MEMBER_PACKAGE") continue;
       batch.update(document.ref, {
         status: "LOCAL_PAID",
         updatedAt: new Date().toISOString(),
       });
+      queuedCount += 1;
     }
+    if (queuedCount === 0) return;
     await batch.commit();
     logger.info("[Đồng bộ đơn] Đã xếp lại đơn lỗi", {
-      count: snapshot.size,
+      count: queuedCount,
     });
   },
 );

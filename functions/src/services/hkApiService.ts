@@ -13,17 +13,26 @@
 
 import { generateHkApiRequest } from "../utils/hk-signature";
 import * as functions from "firebase-functions";
+import type {
+  HKAccountDto,
+  HKMemberLookupDataDto,
+  HKMemberPackageDetailDto,
+  HKMemberProfileUpdateBodyDto,
+  HKMemberRegistrationBodyDto,
+  HKMemberRegistrationDataDto,
+  HKOrderPrecalculationDto,
+} from "../types/member";
 
 // =============================================================================
 // Response Types (matching real API shape)
 // =============================================================================
 
 /** Standard response from the HK API. */
-interface HKApiResponse {
+export interface HKApiResponse<TData = Record<string, unknown>> {
   success: boolean;
   code: number;
   msg: string;
-  data: Record<string, unknown> | null;
+  data: TData | null;
   desc?: string;
 }
 
@@ -80,6 +89,14 @@ function isMockMode(): boolean {
   return !baseUrl || baseUrl.includes("[REMOTE_API_DOMAIN]");
 }
 
+export function resolveHkApiEndpoint(value: string): string {
+  const endpoint = new URL(value);
+  if (!endpoint.pathname.endsWith("/openapi/action")) {
+    endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}/openapi/action`;
+  }
+  return endpoint.toString();
+}
+
 /**
  * Send a signed request to the HK API.
  *
@@ -87,24 +104,16 @@ function isMockMode(): boolean {
  * @param body - The business parameters object.
  * @returns The parsed API response.
  */
-async function sendToHKApi(
+async function sendToHKApi<TData = Record<string, unknown>>(
   action: string,
   body: Record<string, unknown>,
   version?: string
-): Promise<HKApiResponse> {
+): Promise<HKApiResponse<TData>> {
   const signedRequest = generateHkApiRequest({ action, body, version });
 
   if (isMockMode()) {
     // ── MOCK MODE ──────────────────────────────────────────────────────────
-    functions.logger.info(
-      `[HK API Mock] Action: ${action}`,
-      {
-        appId: signedRequest.appId,
-        sign: signedRequest.sign,
-        timestamp: signedRequest.timestamp,
-        bodyPreview: signedRequest.body.substring(0, 200),
-      }
-    );
+    functions.logger.info(`[HK API Mock] Action: ${action}`);
 
     // Return mock success responses based on action
     switch (action) {
@@ -119,7 +128,7 @@ async function sendToHKApi(
             totalMoney: 100,
             totalQty: 1,
             goodsList: [],
-          },
+          } as unknown as TData,
           desc: "Mock response",
         };
 
@@ -133,7 +142,7 @@ async function sendToHKApi(
             totalAmount: 100,
             discountAmount: 0,
             actualPayment: 100,
-          },
+          } as unknown as TData,
           desc: "Mock response",
         };
 
@@ -144,7 +153,7 @@ async function sendToHKApi(
           code: 0,
           data: {
             orderNumber: (body.OrderNumber as string) || `O-MOCK-${Date.now()}`,
-          },
+          } as unknown as TData,
           desc: "Mock response",
         };
 
@@ -157,7 +166,7 @@ async function sendToHKApi(
             orderNumber: (body.OrderNumber as string) || "",
             payStatus: 2,
             payStatusDesc: "已支付",
-          },
+          } as unknown as TData,
           desc: "Mock response",
         };
 
@@ -166,7 +175,119 @@ async function sendToHKApi(
           success: true,
           msg: "",
           code: 0,
-          data: { items: [] },
+          data: { items: [] } as unknown as TData,
+          desc: "Mock response",
+        };
+
+      case "setmeal_getsellgoods":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          data: {
+            goodsItems: String(body.Category) === "1" ? [{
+              goodsId: "mock-member-package",
+              goodsName: "Gói điểm thử nghiệm",
+              category: 1,
+              price: 100,
+              remark: "Dữ liệu mô phỏng cục bộ",
+              badge: "",
+            }] : [],
+          } as unknown as TData,
+          desc: "Mock response",
+        };
+
+      case "member_getmember_phone":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          data: {
+            mid: "mock-member",
+            phone: String(body.phone || ""),
+            realName: "Thành viên thử nghiệm",
+            sex: "male",
+            items: [{
+              shopId: Number(body.shopId),
+              shopName: "Cửa hàng thử nghiệm",
+              uid: "mock-member-account",
+              levelName: "",
+              storedValues: [],
+            }],
+          } as TData,
+          desc: "Mock response",
+        };
+
+      case "member_getmember_membercode":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          data: {
+            uid: "mock-member-account",
+            memberCode: String(body.memberCode || ""),
+            phone: "0900000000",
+            realName: "Thành viên thử nghiệm",
+            sex: "male",
+            levelName: "",
+            storedValue: [],
+          } as TData,
+          desc: "Mock response",
+        };
+
+      case "member_join":
+        return {
+          success: true,
+          msg: "Đăng ký thành công",
+          code: 0,
+          data: {
+            uid: "mock-member-account",
+            mid: "mock-member",
+          } as TData,
+          desc: "Mock response",
+        };
+
+      case "member_info_modify":
+        return {
+          success: true,
+          msg: "Cập nhật thông tin thành viên thành công",
+          code: 0,
+          data: true as TData,
+          desc: "Mock response",
+        };
+
+      case "basic_account_list":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          data: [{
+            key: "mock-bonus-account",
+            value: "Tiền thưởng",
+            extendAttr: 2,
+            unit: "Điểm",
+          }] as unknown as TData,
+          desc: "Mock response",
+        };
+
+      case "setmeal_passticket_details":
+        return {
+          success: true,
+          msg: "",
+          code: 0,
+          data: {
+            setMealId: String(body.setmealId || ""),
+            setMealName: "Gói thành viên thử nghiệm",
+            category: 1,
+            price: 100,
+            afterTaxPrice: 100,
+            giveConfigs: [{
+              shopAcctId: "mock-bonus-account",
+              giveAmount: 120,
+              effectiveMode: 1,
+              effectiveDays: 0,
+            }],
+          } as TData,
           desc: "Mock response",
         };
 
@@ -175,24 +296,22 @@ async function sendToHKApi(
           success: true,
           msg: "",
           code: 0,
-          data: {},
+          data: {} as TData,
           desc: "Mock response (unknown action)",
         };
     }
   }
 
   // ── REAL API CALL ──────────────────────────────────────────────────────
-  const baseUrl = process.env.HK_API_BASE_URL!;
+  const endpoint = resolveHkApiEndpoint(process.env.HK_API_BASE_URL!);
 
-  functions.logger.info(`[HK API] Sending ${action} to ${baseUrl}`, {
-    sign: signedRequest.sign,
-    timestamp: signedRequest.timestamp,
-  });
+  functions.logger.info(`[HK API] Sending ${action}`);
 
-  const response = await fetch(baseUrl, {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(signedRequest),
+    signal: AbortSignal.timeout(45_000),
   });
 
   if (!response.ok) {
@@ -201,7 +320,7 @@ async function sendToHKApi(
     );
   }
 
-  const result = (await response.json()) as HKApiResponse;
+  const result = (await response.json()) as HKApiResponse<TData>;
 
   functions.logger.info(`[HK API] Response for ${action}:`, {
     success: result.success,
@@ -226,8 +345,8 @@ async function sendToHKApi(
 export async function precalculateOrder(params: {
   uid?: string;
   goodsItems: Array<{ goodsId: string; quantity: string }>;
-}): Promise<HKApiResponse> {
-  return sendToHKApi("order_precalculate", {
+}): Promise<HKApiResponse<HKOrderPrecalculationDto>> {
+  return sendToHKApi<HKOrderPrecalculationDto>("order_precalculate", {
     Uid: params.uid || "",
     GoodsItems: params.goodsItems.map((item) => ({
       GoodsId: item.goodsId,
@@ -279,6 +398,71 @@ export async function queryPaymentStatus(params: {
   return sendToHKApi("order_pay_query", {
     OrderNumber: params.orderNumber,
   });
+}
+
+// =============================================================================
+// Members
+// =============================================================================
+
+export async function fetchRemoteMemberByPhone(params: {
+  shopId: number;
+  phone: string;
+}): Promise<HKApiResponse<HKMemberLookupDataDto>> {
+  return sendToHKApi<HKMemberLookupDataDto>(
+    "member_getmember_phone",
+    { shopId: params.shopId, phone: params.phone },
+    "10.11.8",
+  );
+}
+
+export async function fetchRemoteMemberByCard(
+  memberCode: string,
+): Promise<HKApiResponse<HKMemberLookupDataDto>> {
+  return sendToHKApi<HKMemberLookupDataDto>(
+    "member_getmember_membercode",
+    { memberCode },
+    "10.11.8",
+  );
+}
+
+export async function registerRemoteMember(
+  input: HKMemberRegistrationBodyDto,
+): Promise<HKApiResponse<HKMemberRegistrationDataDto>> {
+  return sendToHKApi<HKMemberRegistrationDataDto>(
+    "member_join",
+    { openId: input.openId, phone: input.phone, realName: input.realName },
+    "10.11.8",
+  );
+}
+
+export async function updateRemoteMemberProfile(
+  input: HKMemberProfileUpdateBodyDto,
+): Promise<HKApiResponse<boolean>> {
+  return sendToHKApi<boolean>(
+    "member_info_modify",
+    { ...input },
+    "10.11.8",
+  );
+}
+
+/** Load stored-value account metadata used to classify package credits. */
+export async function fetchMemberAccounts(): Promise<HKApiResponse<HKAccountDto[]>> {
+  return sendToHKApi<HKAccountDto[]>(
+    "basic_account_list",
+    { scene: 2 },
+    "11.7.1",
+  );
+}
+
+/** Load the authoritative credit configuration for one point package. */
+export async function fetchMemberPackageDetail(
+  goodsId: string,
+): Promise<HKApiResponse<HKMemberPackageDetailDto>> {
+  return sendToHKApi<HKMemberPackageDetailDto>(
+    "setmeal_passticket_details",
+    { setmealId: goodsId },
+    "11.7.1",
+  );
 }
 
 // =============================================================================

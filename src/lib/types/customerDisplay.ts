@@ -7,7 +7,9 @@ export type CustomerDisplayMode =
   | "IDLE"
   | "CART"
   | "TRANSFER"
-  | "SUCCESS";
+  | "SUCCESS"
+  | "MEMBER_REVIEW"
+  | "MEMBER_SUCCESS";
 
 /** Trạng thái kết nối giữa cửa sổ thu ngân và cửa sổ khách. */
 export type CustomerDisplayConnectionStatus =
@@ -51,6 +53,15 @@ export interface CustomerDisplayOrderSnapshot {
   items: readonly CustomerDisplayItem[];
   totalAmount: number;
   paymentMethod: CustomerDisplayPaymentMethod;
+}
+
+export interface CustomerDisplayMemberSnapshot {
+  fullName: string;
+  phone: string;
+  gender: "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
+  birthDate: string | null;
+  email: string | null;
+  memberCode: string | null;
 }
 
 /** Dữ liệu QR hiện tại; value là chuỗi QR có thể hiển thị cho khách. */
@@ -110,6 +121,13 @@ export interface CustomerDisplaySuccessState extends CustomerDisplayBaseState {
   payment: { status: "PAID"; qr: null };
 }
 
+export interface CustomerDisplayMemberState extends CustomerDisplayBaseState {
+  mode: "MEMBER_REVIEW" | "MEMBER_SUCCESS";
+  member: CustomerDisplayMemberSnapshot;
+  order: CustomerDisplayOrderSnapshot | null;
+  payment: { status: "NOT_STARTED"; qr: null };
+}
+
 /**
  * Payload duy nhất được phép truyền sang cửa sổ khách.
  *
@@ -120,4 +138,5 @@ export type CustomerDisplayState =
   | CustomerDisplayIdleState
   | CustomerDisplayCartState
   | CustomerDisplayTransferState
-  | CustomerDisplaySuccessState;
+  | CustomerDisplaySuccessState
+  | CustomerDisplayMemberState;

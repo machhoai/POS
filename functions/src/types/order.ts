@@ -18,6 +18,7 @@ export type OrderStatus =
 
 /** Payment methods. */
 export type PaymentMethod = "CASH" | "QR_CODE";
+export type OrderKind = "STANDARD" | "MEMBER_PACKAGE";
 
 /** A single line item. */
 export interface OrderItem {
@@ -126,6 +127,8 @@ export interface FixedTransferDetails {
 export interface PosOrder {
   localOrderId: string;
   hkOrderNumber: string | null;
+  /** Amount returned by order_create, retained for member-sale reconciliation. */
+  remoteActualPayment?: number | null;
   /** Opaque bearer token encoded in the public invoice-request QR. */
   invoiceRequestToken?: string;
   /** ISO timestamp when the public invoice-request capability was created. */
@@ -137,6 +140,8 @@ export interface PosOrder {
   operatorId: string;
   operatorFirebaseUid: string;
   operatorName: string;
+  /** Business flow; omitted on legacy orders and treated as STANDARD. */
+  orderKind?: OrderKind;
   /** HK system member UID — required by the 鲸舰 API for order_create */
   uid?: string;
   status: OrderStatus;

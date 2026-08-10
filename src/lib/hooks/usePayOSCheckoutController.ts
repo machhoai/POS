@@ -19,7 +19,13 @@ interface PayOSCheckoutInput {
   warehouseId: string | null;
   draftOrderId: string | null;
   items: OrderItem[];
-  onCompleted: (localOrderId: string, status: OrderStatus) => void;
+  onCompleted: (
+    localOrderId: string,
+    status: OrderStatus,
+  ) => void | Promise<void>;
+  onCancelled?: () => void;
+  manageCartLock?: boolean;
+  requireRemoteCompletion?: boolean;
 }
 
 export function usePayOSCheckoutController({
@@ -28,6 +34,9 @@ export function usePayOSCheckoutController({
   draftOrderId,
   items,
   onCompleted,
+  onCancelled,
+  manageCartLock = true,
+  requireRemoteCompletion = false,
 }: PayOSCheckoutInput): PayOSCheckoutController {
   const session = usePayOSPaymentStore((state) => state.session);
   const fixedTransfer = usePayOSPaymentStore((state) => state.fixedTransfer);
@@ -103,6 +112,11 @@ export function usePayOSCheckoutController({
         "Đã xác nhận chuyển khoản thủ công",
         "Đơn đã hoàn thành và được đánh dấu Chưa được xác nhận thanh toán.",
       );
+    } else if (requireRemoteCompletion) {
+      showInfo(
+        "Đã nhận thanh toán chuyển khoản",
+        "Đang chờ OpenAPI xác nhận nạp gói vào tài khoản thành viên.",
+      );
     } else {
       showSuccess(
         "Thanh toán chuyển khoản thành công",
@@ -118,6 +132,7 @@ export function usePayOSCheckoutController({
     onCompleted,
     orderStatus,
     resetPayment,
+    requireRemoteCompletion,
   ]);
 
   const createPayment = useCallback(async () => {
@@ -129,7 +144,7 @@ export function usePayOSCheckoutController({
       return;
     }
     const paymentOrderId = draftOrderId || localOrderId || generateLocalOrderId();
-    if (!lockCartForPayOS(paymentOrderId)) {
+    if (manageCartLock && !lockCartForPayOS(paymentOrderId)) {
       showError(
         "Không thể khóa giỏ hàng",
         "Giỏ hàng đã thay đổi hoặc đang thuộc một phiên thanh toán khác.",
@@ -160,6 +175,7 @@ export function usePayOSCheckoutController({
     items,
     localOrderId,
     lockCartForPayOS,
+    manageCartLock,
     shopId,
     startPayment,
     warehouseId,
@@ -243,7 +259,8 @@ export function usePayOSCheckoutController({
         );
         return;
       }
-      unlockCartAfterCancellation(orderId);
+      if (manageCartLock) unlockCartAfterCancellation(orderId);
+      onCancelled?.();
       resetPayment();
       showSuccess(
         "Đã hủy mã thanh toán",
@@ -261,6 +278,9 @@ export function usePayOSCheckoutController({
     cancelPayOS,
     fixedTransfer?.status,
     localOrderId,
+    localOrderId,
+    manageCartLock,
+    onCancelled,
     resetPayment,
     unlockCartAfterCancellation,
   ]);

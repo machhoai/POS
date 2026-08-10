@@ -2,6 +2,14 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // POS orders and member profiles are backend-only. Authenticated clients
+    // use callable Cloud Functions; only the Admin SDK reads or writes data.
+    match /pos_orders/{orderId} {
+      allow read, write: if false;
+    }
+
+    match /pos_members/{memberId} {
+      allow read, write: if false;
     // POS order reads and writes go through authenticated callable Functions.
     // The documents contain opaque invoice-request capability tokens, so direct
     // client access must stay disabled even for authenticated users.

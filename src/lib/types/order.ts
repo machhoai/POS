@@ -12,6 +12,7 @@ export type OrderStatus =
 
 /** Accepted payment methods at the POS terminal. */
 export type PaymentMethod = "CASH" | "QR_CODE";
+export type OrderKind = "STANDARD" | "MEMBER_PACKAGE";
 
 /** A single line item in an order. */
 export interface OrderItem {
@@ -132,6 +133,8 @@ export interface PosOrder {
   /** Order number returned by the HK API after successful sync */
   hkOrderNumber: string | null;
 
+  /** Số tiền order_create trả về, dùng đối soát đơn gói thành viên. */
+  remoteActualPayment?: number | null;
   /** Opaque bearer token encoded in the public invoice-request QR. */
   invoiceRequestToken?: string;
 
@@ -151,6 +154,12 @@ export interface PosOrder {
   operatorId?: string;
   operatorFirebaseUid?: string;
   operatorName?: string;
+
+  /** Luồng nghiệp vụ; đơn cũ không có field này được hiểu là STANDARD. */
+  orderKind?: OrderKind;
+
+  /** UID thành viên trên OpenAPI, chỉ dùng ở backend khi tạo đơn từ xa. */
+  uid?: string;
 
   /** Current status in the order lifecycle */
   status: OrderStatus;

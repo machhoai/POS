@@ -1,4 +1,4 @@
-import type { OrderStatus } from "../types/order";
+import type { OrderKind, OrderStatus } from "../types/order";
 
 /**
  * Remote synchronization starts only after a locally verified payment.
@@ -7,6 +7,9 @@ import type { OrderStatus } from "../types/order";
 export function shouldSynchronizeRemoteOrder(
   beforeStatus: OrderStatus,
   afterStatus: OrderStatus,
+  orderKind: OrderKind = "STANDARD",
 ): boolean {
-  return beforeStatus !== afterStatus && afterStatus === "LOCAL_PAID";
+  return orderKind !== "MEMBER_PACKAGE" &&
+    beforeStatus !== afterStatus &&
+    afterStatus === "LOCAL_PAID";
 }

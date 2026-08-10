@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IoDesktop, IoDocument, IoHome, IoSettings, IoTime } from "react-icons/io5";
+import { IoDesktop, IoDocument, IoHome, IoPeople, IoSettings, IoTime } from "react-icons/io5";
 
 interface SidebarProps {
     onLogout: () => void;
@@ -24,6 +24,11 @@ const NAV_ITEMS = [
         href: "/shift-close",
         label: "Kết ca",
         icon: <IoTime />
+    },
+    {
+        href: "/members",
+        label: "Thành viên",
+        icon: <IoPeople />
     },
 ];
 
