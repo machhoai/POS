@@ -10,7 +10,7 @@ import {
   canUseOfflineDeviceCredential,
   clearDeviceCredential,
   DeviceSessionError,
-  isTauriRuntime,
+  isDeviceEnrollmentRuntime,
   loadDeviceCredential,
   openDeviceSession,
   persistVerifiedDeviceSession,
@@ -93,7 +93,7 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
   );
 
   useEffect(() => {
-    if (!isTauriRuntime()) {
+    if (!isDeviceEnrollmentRuntime()) {
       queueMicrotask(() => setChecking(false));
       return;
     }
@@ -109,13 +109,13 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
   }, [syncDevice]);
 
   useEffect(() => {
-    if (!credential || !isTauriRuntime()) return;
+    if (!credential || !isDeviceEnrollmentRuntime()) return;
     const timer = window.setInterval(() => void syncDevice(credential), 60_000);
     return () => window.clearInterval(timer);
   }, [credential, syncDevice]);
 
   useEffect(() => {
-    if (!credential || blocked || !isTauriRuntime()) return;
+    if (!credential || blocked || !isDeviceEnrollmentRuntime()) return;
     let cancelled = false;
     let activeController: AbortController | null = null;
     const watch = async () => {
@@ -165,7 +165,7 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
       </main>
     );
   }
-  if (!isTauriRuntime()) return children;
+  if (!isDeviceEnrollmentRuntime()) return children;
   if (credential && !blocked) {
     return (
       <>

@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
+import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 import type {
   MemberLookupMode,
   MemberProfile,
@@ -131,13 +132,13 @@ export async function lookupMember(
   );
 
   try {
-    const result = await callable({
-      action: "lookupMember",
+    const result = await callable(await withDeviceAuth({
+      action: "lookupMember" as const,
       payload: {
         ...input,
         query: normalizeLookupQuery(input.mode, input.query),
       },
-    });
+    }));
     return result.data;
   } catch (error: unknown) {
     throw toMemberServiceError(error);
@@ -161,15 +162,15 @@ export async function registerMember(
   >(functions, "getPosAuthSession");
 
   try {
-    const result = await callable({
-      action: "registerMember",
+    const result = await callable(await withDeviceAuth({
+      action: "registerMember" as const,
       payload: {
         ...input,
         ...draft,
         birthDate: draft.birthDate || null,
         email: draft.email || null,
       },
-    });
+    }));
     return result.data;
   } catch (error: unknown) {
     throw toMemberServiceError(error);

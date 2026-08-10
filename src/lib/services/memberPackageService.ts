@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
+import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 import { toMemberServiceError } from "@/lib/services/memberService";
 import type { MemberPointPackage } from "@/lib/types/member";
 import type { OrderStatus } from "@/lib/types/order";
@@ -47,7 +48,7 @@ async function callMemberPackageAction<TPayload, TResult>(
     TResult
   >(functions, "getPosAuthSession");
   try {
-    const result = await callable({ action, payload });
+    const result = await callable(await withDeviceAuth({ action, payload }));
     return result.data;
   } catch (error: unknown) {
     throw toMemberServiceError(error);

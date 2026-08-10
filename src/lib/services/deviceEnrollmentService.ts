@@ -6,6 +6,13 @@ import type {
   PosDeviceSessionResult,
   PosReceiptSettingsWatchResult,
 } from "@/lib/types/deviceEnrollment";
+import {
+  clearWebDevDeviceCredential,
+  getOrCreateWebDevInstallationId,
+  isLocalWebDevelopmentRuntime,
+  loadWebDevDeviceCredential,
+  saveWebDevDeviceCredential,
+} from "@/lib/services/webDevDeviceCredentialService";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_JPULSE_API_URL || "http://api.wms.localhost";
@@ -21,24 +28,43 @@ interface ApiEnvelope<T> {
 export const isTauriRuntime = (): boolean =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+export const isDeviceEnrollmentRuntime = (): boolean =>
+  isTauriRuntime() || isLocalWebDevelopmentRuntime();
+
+const getRuntimeAppVersion = async (): Promise<string> =>
+  isTauriRuntime() ? getVersion() : "web-dev";
+
+const getRuntimeInstallationId = async (): Promise<string> =>
+  isTauriRuntime()
+    ? invoke<string>("get_or_create_pos_installation_id")
+    : getOrCreateWebDevInstallationId();
+
 export async function loadDeviceCredential(): Promise<PosDeviceCredential | null> {
-  if (!isTauriRuntime()) return null;
-  return invoke<PosDeviceCredential | null>("load_pos_device_credential");
+  if (isTauriRuntime()) {
+    return invoke<PosDeviceCredential | null>("load_pos_device_credential");
+  }
+  return loadWebDevDeviceCredential();
 }
 
 export async function clearDeviceCredential(): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await Promise.all([
-    invoke("clear_pos_device_credential"),
-    invoke("clear_pos_auth_session_cache"),
-  ]);
+  if (isTauriRuntime()) {
+    await Promise.all([
+      invoke("clear_pos_device_credential"),
+      invoke("clear_pos_auth_session_cache"),
+    ]);
+    return;
+  }
+  clearWebDevDeviceCredential();
 }
 
 export async function saveDeviceCredential(
   credential: PosDeviceCredential,
 ): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("save_pos_device_credential", { value: credential });
+  if (isTauriRuntime()) {
+    await invoke("save_pos_device_credential", { value: credential });
+    return;
+  }
+  saveWebDevDeviceCredential(credential);
 }
 
 export function canUseOfflineDeviceCredential(
@@ -71,15 +97,15 @@ export async function activateDevice(input: {
   pairingCode: string;
   deviceName: string;
 }): Promise<PosDeviceCredential> {
-  const fingerprint = await invoke<string>("get_or_create_pos_installation_id");
-  const appVersion = await getVersion();
+  const fingerprint = await getRuntimeInstallationId();
+  const appVersion = await getRuntimeAppVersion();
   const pendingCredential: PosDeviceCredential = {
     device_id: crypto.randomUUID(),
     device_credential: createDeviceCredential(),
     warehouse_id: "",
     last_verified_at: undefined,
   };
-  await invoke("save_pos_device_credential", { value: pendingCredential });
+  await saveDeviceCredential(pendingCredential);
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}/api/pos/devices/activate`, {
@@ -113,7 +139,7 @@ export async function activateDevice(input: {
     warehouse_id: envelope.data.device.warehouse_id,
     last_verified_at: new Date().toISOString(),
   };
-  await invoke("save_pos_device_credential", { value: credential });
+  await saveDeviceCredential(credential);
   return credential;
 }
 
@@ -127,7 +153,7 @@ export class DeviceSessionError extends Error {
 export async function openDeviceSession(
   credential: PosDeviceCredential,
 ): Promise<PosDeviceSessionResult> {
-  const appVersion = await getVersion();
+  const appVersion = await getRuntimeAppVersion();
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}/api/pos/devices/session`, {
@@ -160,7 +186,7 @@ export async function watchRemoteReceiptSettings(
   knownVersion: number | null,
   signal: AbortSignal,
 ): Promise<PosReceiptSettingsWatchResult> {
-  const appVersion = await getVersion();
+  const appVersion = await getRuntimeAppVersion();
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}/api/pos/devices/receipt-settings/watch`, {
