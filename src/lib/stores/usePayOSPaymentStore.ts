@@ -11,6 +11,7 @@ import {
   type CreatePayOSPaymentInput,
 } from "@/lib/services/payOSService";
 import type {
+  FixedTransferDetails,
   OrderStatus,
   PayOSManualConfirmation,
 } from "@/lib/types/order";
@@ -25,6 +26,7 @@ interface PayOSPaymentState {
   localOrderId: string | null;
   orderStatus: OrderStatus | null;
   session: PayOSPaymentSession | null;
+  fixedTransfer: FixedTransferDetails | null;
   nextAction: PayOSNextAction | null;
   remainingSeconds: number;
   serverClockOffsetMs: number;
@@ -59,6 +61,7 @@ const initialState = {
   localOrderId: null,
   orderStatus: null,
   session: null,
+  fixedTransfer: null,
   nextAction: null,
   remainingSeconds: 0,
   serverClockOffsetMs: 0,
@@ -74,6 +77,7 @@ const initialState = {
   | "localOrderId"
   | "orderStatus"
   | "session"
+  | "fixedTransfer"
   | "nextAction"
   | "remainingSeconds"
   | "serverClockOffsetMs"
@@ -126,6 +130,7 @@ function resultState(result: PayOSPaymentResult, receivedAtMs = Date.now()) {
     localOrderId: result.localOrderId,
     orderStatus: result.orderStatus,
     session: result.payment,
+    fixedTransfer: result.fixedTransfer,
     nextAction: result.nextAction,
     remainingSeconds,
     serverClockOffsetMs,

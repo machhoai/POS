@@ -5,35 +5,21 @@ export function filterAndSortOrders(
   orders: PosOrder[],
   filters: OrderFilterState,
 ): PosOrder[] {
-  let result = [...orders];
-
-  if (filters.dateFrom) {
-    const from = new Date(filters.dateFrom);
-    from.setHours(0, 0, 0, 0);
-    result = result.filter((order) => new Date(order.createdAt) >= from);
-  }
-  if (filters.dateTo) {
-    const to = new Date(filters.dateTo);
-    to.setHours(23, 59, 59, 999);
-    result = result.filter((order) => new Date(order.createdAt) <= to);
-  }
-
-  if (filters.hourFrom) {
-    const [hour, minute] = filters.hourFrom.split(":").map(Number);
-    result = result.filter((order) => {
-      const date = new Date(order.createdAt);
-      return date.getHours() > hour ||
-        (date.getHours() === hour && date.getMinutes() >= minute);
-    });
-  }
-  if (filters.hourTo) {
-    const [hour, minute] = filters.hourTo.split(":").map(Number);
-    result = result.filter((order) => {
-      const date = new Date(order.createdAt);
-      return date.getHours() < hour ||
-        (date.getHours() === hour && date.getMinutes() <= minute);
-    });
-  }
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const startOfTomorrow = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1,
+  ).getTime();
+  let result = orders.filter((order) => {
+    const createdAt = new Date(order.createdAt).getTime();
+    return createdAt >= startOfToday && createdAt < startOfTomorrow;
+  });
 
   if (filters.statusFilter !== "all") {
     result = result.filter(

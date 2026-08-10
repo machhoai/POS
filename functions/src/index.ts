@@ -35,6 +35,7 @@ import {
   joyworldUserSecret,
 } from "./services/joyworldCatalogService";
 import { mapSellableSouvenirs } from "./services/productCatalog";
+import { assertActivePosDevice } from "./services/posDeviceAccessService";
 import type { SyncProduct } from "./types/product";
 import {
   SOUVENIR_CATEGORY_ID,
@@ -48,6 +49,7 @@ import {
 export const getPosProducts = onCall(
   { region: "asia-southeast1", cors: true },
   async (request) => {
+    await assertActivePosDevice(request.data);
     if (!request.auth) {
       throw new HttpsError(
         "unauthenticated",
@@ -120,6 +122,7 @@ export const syncProducts = onCall(
     secrets: [joyworldUserSecret, joyworldPassSecret],
   },
   async (request) => {
+    await assertActivePosDevice(request.data);
     // Require authentication
     if (!request.auth) {
       throw new HttpsError(

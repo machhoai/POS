@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Check, ImagePlus, Info, RotateCcw, Settings2, Trash2 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
+import SettingsTabs from "@/components/settings/SettingsTabs";
 import ReceiptDocument from "@/features/receipt/components/ReceiptDocument";
 import ReceiptPrintButton from "@/features/receipt/components/ReceiptPrintButton";
 import {
@@ -106,6 +107,8 @@ export default function ReceiptSettingsPage() {
                         <button type="button" onClick={handleReset} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)]"><RotateCcw className="size-3.5" />Khôi phục mặc định</button>
                     </div>
                 </header>
+
+                <SettingsTabs />
 
                 <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto xl:grid-cols-[minmax(560px,1fr)_430px] xl:overflow-hidden">
                     <div className="space-y-4 p-4 xl:overflow-y-auto">

@@ -1,6 +1,8 @@
 import type {
+  FixedTransferDetails,
   OrderStatus,
   PaymentMethod,
+  PaymentVerificationStatus,
   PayOSManualConfirmation,
   PayOSPaymentStatus,
 } from "@/lib/types/order";
@@ -16,6 +18,7 @@ export type PayOSNextAction =
   | "WAIT"
   | "RETRY_DISPLAY"
   | "RECREATE"
+  | "FALLBACK"
   | "COMPLETED";
 
 export type PayOSErrorKind = "CONNECTION" | "GENERAL";
@@ -46,6 +49,8 @@ export interface PayOSPaymentResult {
   orderStatus: OrderStatus;
   totalAmount: number;
   payment: PayOSPaymentSession | null;
+  fixedTransfer: FixedTransferDetails | null;
+  paymentVerificationStatus: PaymentVerificationStatus;
   nextAction: PayOSNextAction;
   serverTime: string;
   manualConfirmation: PayOSManualConfirmation | null;
@@ -53,6 +58,7 @@ export interface PayOSPaymentResult {
 
 export interface PayOSCheckoutController {
   session: PayOSPaymentSession | null;
+  fixedTransfer: FixedTransferDetails | null;
   nextAction: PayOSNextAction | null;
   remainingSeconds: number;
   errorMessage: string | null;

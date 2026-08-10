@@ -4,7 +4,12 @@ import type {
   CustomerDisplayState,
   CustomerDisplayTransferPayment,
 } from "@/lib/types/customerDisplay";
-import type { OrderItem, OrderStatus, PaymentMethod } from "@/lib/types/order";
+import type {
+  FixedTransferDetails,
+  OrderItem,
+  OrderStatus,
+  PaymentMethod,
+} from "@/lib/types/order";
 import type {
   PayOSNextAction,
   PayOSPaymentSession,
@@ -12,6 +17,7 @@ import type {
 
 interface CustomerDisplayPaymentSource {
   session: PayOSPaymentSession | null;
+  fixedTransfer: FixedTransferDetails | null;
   nextAction: PayOSNextAction | null;
   remainingSeconds: number;
   errorMessage: string | null;
@@ -61,6 +67,25 @@ function createTransferPayment(
   source: CustomerDisplayPaymentSource,
 ): CustomerDisplayTransferPayment {
   const { session, nextAction } = source;
+  if (
+    source.fixedTransfer?.status === "AWAITING_MANUAL_CONFIRMATION"
+  ) {
+    return {
+      status: "AWAITING_PAYMENT",
+      qr: {
+        value: null,
+        imageUrl: source.fixedTransfer.qrImageUrl,
+        amount: source.fixedTransfer.amount,
+        description: source.fixedTransfer.description,
+        remainingSeconds: 0,
+        snapshotAt: Date.now(),
+        expiresAt: "",
+        accountName: source.fixedTransfer.accountName,
+        accountNumber: source.fixedTransfer.accountNumber,
+        manualConfirmationRequired: true,
+      },
+    };
+  }
   if (session?.status === "CANCELLED") return { status: "CANCELLED", qr: null };
   if (
     session?.status === "EXPIRED" ||
@@ -85,11 +110,15 @@ function createTransferPayment(
       status: "AWAITING_PAYMENT",
       qr: {
         value: session.qrCode,
+        imageUrl: null,
         amount: session.amount,
         description: session.description,
         remainingSeconds: Math.max(0, source.remainingSeconds),
         snapshotAt: Date.now(),
         expiresAt: session.displayExpiresAt,
+        accountName: session.accountName || "",
+        accountNumber: session.accountNumber || "",
+        manualConfirmationRequired: false,
       },
     };
   }
@@ -123,6 +152,7 @@ export function createCustomerDisplayState(
   const hasTransferSession =
     input.paymentMethod === "QR_CODE" &&
     (input.payment.session !== null ||
+      input.payment.fixedTransfer !== null ||
       input.payment.isBusy ||
       input.payment.isCartLocked ||
       input.payment.errorMessage !== null);

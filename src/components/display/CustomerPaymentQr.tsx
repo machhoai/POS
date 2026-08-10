@@ -1,4 +1,5 @@
-import { CircleX, Clock3, LoaderCircle, ReceiptText, ScanLine, TriangleAlert } from "lucide-react";
+/* eslint-disable @next/next/no-img-element */
+import { CircleX, Clock3, LoaderCircle, ScanLine, TriangleAlert } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { CustomerDisplayOrderSnapshot, CustomerDisplayTransferPayment } from "@/lib/types/customerDisplay";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
@@ -8,8 +9,6 @@ interface CustomerPaymentQrProps {
     remainingSeconds: number;
     order?: CustomerDisplayOrderSnapshot;
 }
-
-const RECIPIENT_NAME = "Công ty TNHH Joy World Entertainment";
 
 const STATUS_CONTENT = {
     CREATING: {
@@ -49,15 +48,15 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
     order,
 }) => {
     const hasLocallyExpired =
-        payment.status === "AWAITING_PAYMENT" && remainingSeconds <= 0;
+        payment.status === "AWAITING_PAYMENT" &&
+        !payment.qr.manualConfirmationRequired &&
+        remainingSeconds <= 0;
     const isReady = payment.status === "AWAITING_PAYMENT" && !hasLocallyExpired;
     const displayStatus = hasLocallyExpired ? "EXPIRED" : payment.status;
     const statusContent = displayStatus === "AWAITING_PAYMENT"
         ? null
         : STATUS_CONTENT[displayStatus];
     const StatusIcon = statusContent?.icon;
-
-    const itemCount = order?.items.reduce((total, item) => total + item.quantity, 0) ?? 0;
 
     return (
         <section className="flex flex-col h-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-md)]" aria-live="polite">
@@ -71,7 +70,7 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                         <p className="text-xs font-medium text-[var(--color-text-muted)]">Quét mã QR để hoàn tất thanh toán</p>
                     </div>
                 </div>
-                {isReady && (
+                {isReady && !payment.qr.manualConfirmationRequired && (
                     <div className="flex items-center gap-2 rounded-full bg-red-50 px-3.5 py-1.5 text-sm font-bold text-[var(--color-danger)] ring-1 ring-red-200">
                         <Clock3 className="size-4" aria-hidden="true" />
                         <strong className=" tabular-nums">{formatCountdown(remainingSeconds)}</strong>
@@ -87,14 +86,22 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                             <div className="flex flex-col gap-2 items-center w-full">
                                 {/* QR Code Display */}
                                 <div className="flex flex-col items-center justify-center w-full aspect-square max-w-[340px] p-3 rounded-2xl border border-slate-200 bg-white shadow-sm">
-                                    <QRCodeSVG
-                                        key={payment.qr.value}
-                                        value={payment.qr.value}
-                                        level="M"
-                                        marginSize={1}
-                                        className="w-full h-full"
-                                        aria-label="Mã QR thanh toán chuyển khoản"
-                                    />
+                                    {payment.qr.imageUrl ? (
+                                        <img
+                                            src={payment.qr.imageUrl}
+                                            alt="Mã QR chuyển khoản vào tài khoản cố định"
+                                            className="h-full w-full object-contain"
+                                        />
+                                    ) : payment.qr.value ? (
+                                        <QRCodeSVG
+                                            key={payment.qr.value}
+                                            value={payment.qr.value}
+                                            level="M"
+                                            marginSize={1}
+                                            className="w-full h-full"
+                                            aria-label="Mã QR thanh toán chuyển khoản"
+                                        />
+                                    ) : null}
                                 </div>
                                 <strong className="text-2xl font-black text-[var(--color-accent)]">
                                     {formatCurrency(isReady ? payment.qr.amount : (order?.totalAmount ?? 0))}
@@ -108,8 +115,13 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                                         Tên người nhận
                                     </p>
                                     <p className="mt-0.5 uppercase font-bold text-lg text-[var(--color-text-primary)]">
-                                        {RECIPIENT_NAME}
+                                        {payment.qr.accountName || "Đang cập nhật"}
                                     </p>
+                                    {payment.qr.accountNumber ? (
+                                        <p className="mt-0.5 font-mono text-sm font-bold text-[var(--color-text-secondary)]">
+                                            {payment.qr.accountNumber}
+                                        </p>
+                                    ) : null}
                                 </div>
 
                                 {/* Transfer Content */}
@@ -122,6 +134,11 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                                     </p>
                                 </div>
                             </div>
+                            {payment.qr.manualConfirmationRequired ? (
+                                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-sm font-semibold text-amber-900">
+                                    Vui lòng báo thu ngân sau khi chuyển khoản thành công.
+                                </p>
+                            ) : null}
                         </>
                     ) : (
                         <div className="flex flex-col items-center justify-center my-auto p-6 text-center">
@@ -137,4 +154,3 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
 };
 
 export default CustomerPaymentQr;
-

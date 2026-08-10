@@ -82,7 +82,10 @@ export default function OrderHistoryPage() {
 
     // Stats calculation
     const totalRevenue = useMemo(
-        () => filteredOrders.reduce((sum, o) => sum + o.totalAmount, 0),
+        () => filteredOrders.reduce(
+            (sum, order) => order.status === "SYNC_SUCCESS" ? sum + order.totalAmount : sum,
+            0,
+        ),
         [filteredOrders]
     );
 
@@ -122,7 +125,7 @@ export default function OrderHistoryPage() {
                                 </h1>
                             </div>
                             <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                                Theo dõi, tra cứu và xử lý danh sách đơn hàng POS theo thời gian thực
+                                Theo dõi và tra cứu đơn hàng POS của ngày hôm nay
                             </p>
                         </div>
 
@@ -171,7 +174,7 @@ export default function OrderHistoryPage() {
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase">Doanh thu lọc</p>
+                                    <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase">Doanh thu thành công</p>
                                     <p className="text-lg md:text-xl font-extrabold text-[var(--color-accent)]">
                                         {formatCurrency(totalRevenue)}
                                     </p>

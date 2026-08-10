@@ -59,7 +59,11 @@ export function usePayOSPaymentTimer(enabled = true): void {
   ]);
 
   useEffect(() => {
-    if (!enabled || nextAction === "COMPLETED") return;
+    if (
+      !enabled ||
+      nextAction === "COMPLETED" ||
+      nextAction === "FALLBACK"
+    ) return;
 
     let active = true;
     let timeoutId: number | undefined;

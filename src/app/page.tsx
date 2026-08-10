@@ -25,11 +25,15 @@ import { filterProducts } from "@/lib/utils/productSearch";
 import { usePayOSCheckoutController } from "@/lib/hooks/usePayOSCheckoutController";
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
 import { useCustomerDisplayPublisher } from "@/lib/hooks/useCustomerDisplayPublisher";
+import { recordPendingFailure } from "@/lib/services/checkoutJournalService";
 import TopNav from "@/components/pos/TopNav";
 import Sidebar from "@/components/layout/Sidebar";
 import ProductGrid from "@/components/pos/ProductGrid";
 import CartPanel from "@/components/pos/CartPanel";
 import StoreSelector from "@/components/pos/StoreSelector";
+import CheckoutRecoveryNotice from "@/components/resilience/CheckoutRecoveryNotice";
+import CheckoutSafetyBoundary from "@/components/resilience/CheckoutSafetyBoundary";
+import MinimalCheckoutFallback from "@/components/resilience/MinimalCheckoutFallback";
 import type { Product } from "@/lib/types/product";
 
 export default function CashierPage() {
@@ -83,6 +87,11 @@ export default function CashierPage() {
   const refreshCurrentOrderStatus = useCartStore((s) => s.refreshCurrentOrderStatus);
   const clearCart = useCartStore((s) => s.clearCart);
   const completePayOSCheckout = useCartStore((s) => s.completePayOSCheckout);
+  const setCheckoutContext = useCartStore((s) => s.setCheckoutContext);
+  const hydrateCheckoutJournal = useCartStore((s) => s.hydrateCheckoutJournal);
+  const recoveryNotice = useCartStore((s) => s.recoveryNotice);
+  const dismissRecoveryNotice = useCartStore((s) => s.dismissRecoveryNotice);
+  const markReceiptPrinted = useCartStore((s) => s.markReceiptPrinted);
   const receiptSettings = useReceiptSettingsStore((state) => state.settings);
   const paymentMethods = JPOS_PAYMENT_METHODS;
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
@@ -104,8 +113,10 @@ export default function CashierPage() {
 
     try {
       await printReceiptSilently(order, receiptSettings);
+      markReceiptPrinted(localOrderId);
     } catch (error: unknown) {
       console.error("[Biên lai] In tự động thất bại:", error);
+      void recordPendingFailure("PRINT_ERROR", error, { localOrderId });
       showError(
         "Thanh toán thành công nhưng chưa in được biên lai",
         describeReceiptPrintError(
@@ -114,7 +125,7 @@ export default function CashierPage() {
         ),
       );
     }
-  }, [receiptSettings]);
+  }, [markReceiptPrinted, receiptSettings]);
 
   const handlePayOSCompleted = useCallback((localOrderId: string, status: Parameters<typeof completePayOSCheckout>[1]) => {
     completePayOSCheckout(localOrderId, status);
@@ -129,6 +140,12 @@ export default function CashierPage() {
     onCompleted: handlePayOSCompleted,
   });
   useCustomerDisplayPublisher(payOSPayment);
+
+  useEffect(() => {
+    if (!effectiveWarehouseId) return;
+    setCheckoutContext(shopId, effectiveWarehouseId);
+    void hydrateCheckoutJournal();
+  }, [effectiveWarehouseId, hydrateCheckoutJournal, setCheckoutContext, shopId]);
 
   // ── Auth Guard ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -283,7 +300,36 @@ export default function CashierPage() {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-[var(--color-background)]">
+    <CheckoutSafetyBoundary
+      fallback={(retry) => (
+        <div className="h-screen bg-[var(--color-background)]">
+          <MinimalCheckoutFallback
+            totalAmount={totalAmount}
+            itemCount={itemCount}
+            isBusy={isCheckingOut || payOSPayment.isBusy}
+            onRetryInterface={retry}
+            onCashPayment={() => {
+              setPaymentMethod("CASH");
+              void handleCheckout();
+            }}
+            onTransferPayment={() => {
+              setPaymentMethod("QR_CODE");
+              void payOSPayment.createPayment();
+            }}
+            onOpenOrders={() => router.push("/orders")}
+            payment={payOSPayment}
+          />
+        </div>
+      )}
+    >
+      <div className="h-screen flex overflow-hidden bg-[var(--color-background)]">
+      {recoveryNotice ? (
+        <CheckoutRecoveryNotice
+          checkpoint={recoveryNotice}
+          onDismiss={dismissRecoveryNotice}
+          onOpenOrders={() => router.push("/orders")}
+        />
+      ) : null}
       <Sidebar onLogout={logout} />
 
       {/* Center: welcome, search, categories and products */}
@@ -311,25 +357,47 @@ export default function CashierPage() {
 
       {/* Right: fixed order panel */}
       <div className="w-[350px] xl:w-[380px] shrink-0">
-        <CartPanel
-          items={cartItems}
-          paymentMethod={paymentMethod}
-          paymentMethods={paymentMethods}
-          payOSPayment={payOSPayment}
-          isCheckingOut={isCheckingOut}
-          isPaymentLocked={isPaymentLocked}
-          currentOrderId={currentOrderId}
-          currentHkOrderNumber={currentHkOrderNumber}
-          currentOrderStatus={currentOrderStatus}
-          totalAmount={totalAmount}
-          itemCount={itemCount}
-          onUpdateQuantity={updateQuantity}
-          onRemoveItem={removeItem}
-          onSetPaymentMethod={setPaymentMethod}
-          onCheckout={handleCheckout}
-          onClearCart={clearCart}
-        />
+        <CheckoutSafetyBoundary
+          fallback={(retry) => (
+            <MinimalCheckoutFallback
+              totalAmount={totalAmount}
+              itemCount={itemCount}
+              isBusy={isCheckingOut || payOSPayment.isBusy}
+              onRetryInterface={retry}
+              onCashPayment={() => {
+                setPaymentMethod("CASH");
+                void handleCheckout();
+              }}
+              onTransferPayment={() => {
+                setPaymentMethod("QR_CODE");
+                void payOSPayment.createPayment();
+              }}
+              onOpenOrders={() => router.push("/orders")}
+              payment={payOSPayment}
+            />
+          )}
+        >
+          <CartPanel
+            items={cartItems}
+            paymentMethod={paymentMethod}
+            paymentMethods={paymentMethods}
+            payOSPayment={payOSPayment}
+            isCheckingOut={isCheckingOut}
+            isPaymentLocked={isPaymentLocked}
+            currentOrderId={currentOrderId}
+            currentHkOrderNumber={currentHkOrderNumber}
+            currentOrderStatus={currentOrderStatus}
+            totalAmount={totalAmount}
+            itemCount={itemCount}
+            onUpdateQuantity={updateQuantity}
+            onRemoveItem={removeItem}
+            onSetPaymentMethod={setPaymentMethod}
+            onCheckout={handleCheckout}
+            onClearCart={clearCart}
+          />
+        </CheckoutSafetyBoundary>
       </div>
-    </div>
+      </div>
+    </CheckoutSafetyBoundary>
   );
 }

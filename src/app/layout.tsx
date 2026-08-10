@@ -5,6 +5,8 @@ import "goey-toast/styles.css";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
 import ToastProvider from "@/components/providers/ToastProvider";
+import ResilienceProvider from "@/components/resilience/ResilienceProvider";
+import DeviceActivationGate from "@/components/device/DeviceActivationGate";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -24,7 +26,11 @@ export default function RootLayout({
   return (
     <html lang="vi" data-scroll-behavior="smooth">
       <body className={`${inter.className} antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+        <ResilienceProvider>
+          <DeviceActivationGate>
+            <AuthProvider>{children}</AuthProvider>
+          </DeviceActivationGate>
+        </ResilienceProvider>
         <ToastProvider />
         <Script
           type="module"

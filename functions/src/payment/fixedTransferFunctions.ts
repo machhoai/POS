@@ -1,0 +1,307 @@
+import type { DocumentReference } from "firebase-admin/firestore";
+import { HttpsError } from "firebase-functions/v2/https";
+import { db } from "../config/firebase";
+import { POS_COLLECTIONS } from "../config/collections";
+import { getPosAuthSession } from "../services/posAuthService";
+import type {
+  FixedTransferDetails,
+  FixedTransferReason,
+  PosOrder,
+} from "../types/order";
+import type {
+  FixedTransferSettings,
+  FixedTransferSettingsInput,
+} from "../types/paymentSettings";
+import { buildPayOSPaymentDescription } from "./payosPolicy";
+import {
+  buildVietQrQuickLink,
+  normalizeFixedTransferSettings,
+} from "./fixedTransferPolicy";
+
+const MANAGE_PAYMENT_SETTINGS_PERMISSION = "pos.settings.manage";
+
+function readWarehouseId(data: unknown): string {
+  const warehouseId = data && typeof data === "object"
+    ? (data as { warehouseId?: unknown }).warehouseId
+    : undefined;
+  if (typeof warehouseId !== "string" || !warehouseId.trim()) {
+    throw new HttpsError("invalid-argument", "Điểm bán không hợp lệ.");
+  }
+  return warehouseId.trim();
+}
+
+function hasScopedPermission(
+  permissions: Record<string, Record<string, unknown>>,
+  key: string,
+  warehouseId: string,
+): boolean {
+  const globalPermissions = permissions.global ?? {};
+  const warehousePermissions = permissions[warehouseId] ?? {};
+  return globalPermissions["*"] === true ||
+    globalPermissions[key] === true ||
+    warehousePermissions["*"] === true ||
+    warehousePermissions[key] === true;
+}
+
+async function requireAccessibleWarehouse(userId: string, warehouseId: string) {
+  const session = await getPosAuthSession(userId);
+  const warehouse = session.warehouses.find((item) => item.id === warehouseId);
+  if (!warehouse) {
+    throw new HttpsError(
+      "permission-denied",
+      "Bạn không có quyền truy cập cấu hình thanh toán của điểm bán này.",
+    );
+  }
+  return { session, warehouse };
+}
+
+export function isFixedTransferActive(order: PosOrder): boolean {
+  return order.fixedTransferDetails?.status ===
+    "AWAITING_MANUAL_CONFIRMATION";
+}
+
+export async function getFixedTransferSettingsForUser(
+  userId: string,
+  data: unknown,
+) {
+  const warehouseId = readWarehouseId(data);
+  await requireAccessibleWarehouse(userId, warehouseId);
+  const snapshot = await db
+    .collection(POS_COLLECTIONS.paymentSettings)
+    .doc(warehouseId)
+    .get();
+  return {
+    settings: snapshot.exists
+      ? snapshot.data() as FixedTransferSettings
+      : null,
+  };
+}
+
+export async function saveFixedTransferSettingsForUser(
+  userId: string,
+  data: unknown,
+) {
+  const rawInput = data && typeof data === "object"
+    ? data as Partial<FixedTransferSettingsInput>
+    : {};
+  const warehouseId = readWarehouseId(rawInput);
+  const { session } = await requireAccessibleWarehouse(userId, warehouseId);
+  if (
+    !hasScopedPermission(
+      session.permissions,
+      MANAGE_PAYMENT_SETTINGS_PERMISSION,
+      warehouseId,
+    )
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Bạn không có quyền thay đổi cấu hình thanh toán.",
+    );
+  }
+
+  let normalized: FixedTransferSettingsInput;
+  try {
+    normalized = normalizeFixedTransferSettings({
+      warehouseId,
+      enabled: rawInput.enabled === true,
+      bankBin: typeof rawInput.bankBin === "string" ? rawInput.bankBin : "",
+      accountNumber: typeof rawInput.accountNumber === "string"
+        ? rawInput.accountNumber
+        : "",
+      accountName: typeof rawInput.accountName === "string"
+        ? rawInput.accountName
+        : "",
+    });
+  } catch (error: unknown) {
+    throw new HttpsError(
+      "invalid-argument",
+      error instanceof Error ? error.message : "Cấu hình thanh toán không hợp lệ.",
+    );
+  }
+
+  const docRef = db
+    .collection(POS_COLLECTIONS.paymentSettings)
+    .doc(warehouseId);
+  const settings = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    const currentVersion = snapshot.exists
+      ? Number((snapshot.data() as Partial<FixedTransferSettings>).version) || 0
+      : 0;
+    const nextSettings: FixedTransferSettings = {
+      ...normalized,
+      version: currentVersion + 1,
+      updatedAt: new Date().toISOString(),
+      updatedByUid: userId,
+    };
+    transaction.set(docRef, nextSettings);
+    return nextSettings;
+  });
+  return { settings };
+}
+
+export async function activateFixedTransferForOrder(
+  userId: string,
+  docRef: DocumentReference,
+  reason: FixedTransferReason,
+): Promise<PosOrder> {
+  const snapshot = await docRef.get();
+  if (!snapshot.exists) {
+    throw new HttpsError("not-found", "Không tìm thấy đơn hàng.");
+  }
+  const order = snapshot.data() as PosOrder;
+  if (isFixedTransferActive(order)) return order;
+  if (order.status !== "DRAFT" || order.createdBy !== userId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Đơn hàng không thể chuyển sang mã QR tài khoản cố định.",
+    );
+  }
+  const { warehouse } = await requireAccessibleWarehouse(
+    userId,
+    order.warehouseId,
+  );
+  const settingsSnapshot = await db
+    .collection(POS_COLLECTIONS.paymentSettings)
+    .doc(order.warehouseId)
+    .get();
+  if (!settingsSnapshot.exists) {
+    throw new HttpsError(
+      "failed-precondition",
+      "PayOS không tạo được mã và điểm bán chưa cấu hình tài khoản chuyển khoản dự phòng.",
+    );
+  }
+  const settings = settingsSnapshot.data() as FixedTransferSettings;
+  if (!settings.enabled) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Mã QR tài khoản cố định đang bị tắt trong cài đặt thanh toán.",
+    );
+  }
+
+  const description = buildPayOSPaymentDescription(
+    warehouse.code,
+    order.localOrderId,
+  );
+  const qrImageUrl = buildVietQrQuickLink({
+    bankBin: settings.bankBin,
+    accountNumber: settings.accountNumber,
+    accountName: settings.accountName,
+    amount: order.totalAmount,
+    description,
+  });
+
+  return db.runTransaction(async (transaction) => {
+    const freshSnapshot = await transaction.get(docRef);
+    if (!freshSnapshot.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy đơn hàng.");
+    }
+    const freshOrder = freshSnapshot.data() as PosOrder;
+    if (isFixedTransferActive(freshOrder)) return freshOrder;
+    if (freshOrder.status !== "DRAFT" || freshOrder.createdBy !== userId) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Đơn hàng không còn chờ thanh toán.",
+      );
+    }
+    const now = new Date().toISOString();
+    const fixedTransferDetails: FixedTransferDetails = {
+      provider: "vietqr_quicklink",
+      status: "AWAITING_MANUAL_CONFIRMATION",
+      reason,
+      bankBin: settings.bankBin,
+      accountNumber: settings.accountNumber,
+      accountName: settings.accountName,
+      amount: freshOrder.totalAmount,
+      description,
+      qrImageUrl,
+      settingsVersion: settings.version,
+      createdAt: now,
+      updatedAt: now,
+    };
+    transaction.update(docRef, {
+      fixedTransferDetails,
+      updatedAt: now,
+    });
+    return { ...freshOrder, fixedTransferDetails, updatedAt: now };
+  });
+}
+
+export async function confirmFixedTransferForOrder(
+  userId: string,
+  docRef: DocumentReference,
+  operatorName: string,
+): Promise<PosOrder> {
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy đơn hàng.");
+    }
+    const order = snapshot.data() as PosOrder;
+    if (order.status !== "DRAFT") return order;
+    if (order.createdBy !== userId || !isFixedTransferActive(order)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Đơn hàng chưa có mã QR tài khoản cố định đang chờ xác nhận.",
+      );
+    }
+    const confirmedAt = new Date().toISOString();
+    const fixedTransferDetails: FixedTransferDetails = {
+      ...order.fixedTransferDetails!,
+      status: "MANUALLY_CONFIRMED",
+      confirmedAt,
+      confirmedByUid: userId,
+      confirmedByName: operatorName,
+      updatedAt: confirmedAt,
+    };
+    const nextOrder: PosOrder = {
+      ...order,
+      status: "LOCAL_PAID",
+      paymentMethod: "QR_CODE",
+      paymentMethodId: "QR_CODE",
+      paymentMethodName: "Chuyển khoản (chưa xác nhận)",
+      paymentVerificationStatus: "UNVERIFIED",
+      fixedTransferDetails,
+      paidAt: confirmedAt,
+      updatedAt: confirmedAt,
+    };
+    transaction.update(docRef, {
+      status: nextOrder.status,
+      paymentMethod: nextOrder.paymentMethod,
+      paymentMethodId: nextOrder.paymentMethodId,
+      paymentMethodName: nextOrder.paymentMethodName,
+      paymentVerificationStatus: nextOrder.paymentVerificationStatus,
+      fixedTransferDetails,
+      paidAt: confirmedAt,
+      updatedAt: confirmedAt,
+    });
+    return nextOrder;
+  });
+}
+
+export async function cancelFixedTransferForOrder(
+  userId: string,
+  docRef: DocumentReference,
+): Promise<PosOrder> {
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy đơn hàng.");
+    }
+    const order = snapshot.data() as PosOrder;
+    if (!isFixedTransferActive(order)) return order;
+    if (order.createdBy !== userId || order.status !== "DRAFT") {
+      throw new HttpsError(
+        "permission-denied",
+        "Bạn không có quyền hủy mã QR tài khoản cố định này.",
+      );
+    }
+    const updatedAt = new Date().toISOString();
+    const fixedTransferDetails: FixedTransferDetails = {
+      ...order.fixedTransferDetails!,
+      status: "CANCELLED",
+      updatedAt,
+    };
+    transaction.update(docRef, { fixedTransferDetails, updatedAt });
+    return { ...order, fixedTransferDetails, updatedAt };
+  });
+}

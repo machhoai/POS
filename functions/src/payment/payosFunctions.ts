@@ -28,10 +28,29 @@ import {
   PAYOS_DISPLAY_WINDOW_MS,
   type PayOSNextAction,
 } from "./payosPolicy";
+import {
+  activateFixedTransferForOrder,
+  cancelFixedTransferForOrder,
+  confirmFixedTransferForOrder,
+  isFixedTransferActive,
+} from "./fixedTransferFunctions";
 
 const PAYMENT_LINK_LIFETIME_SECONDS = 15 * 60;
 const STALE_CREATION_MS = 2 * 60 * 1000;
 const LOCAL_ORDER_ID_PATTERN = /^ORD-\d{10,13}-[A-Z0-9]{6}$/;
+
+function hasScopedPermission(
+  permissions: Record<string, Record<string, unknown>>,
+  permission: string,
+  warehouseId: string,
+): boolean {
+  return (
+    permissions.global?.["*"] === true ||
+    permissions.global?.[permission] === true ||
+    permissions[warehouseId]?.["*"] === true ||
+    permissions[warehouseId]?.[permission] === true
+  );
+}
 
 interface VerifiedPayment {
   code: string;
@@ -84,6 +103,8 @@ function inferNextAction(
   order: PosOrder,
   attempt: PayOSPaymentAttempt | null,
 ): PayOSNextAction {
+  if (isCompletedOrderStatus(order.status)) return "COMPLETED";
+  if (isFixedTransferActive(order)) return "FALLBACK";
   return inferPayOSNextAction({
     orderStatus: order.status,
     paymentStatus: attempt?.status,
@@ -120,6 +141,9 @@ function buildPaymentResult(order: PosOrder) {
       reference: attempt.reference ?? null,
       error: attempt.error ?? null,
     } : null,
+    fixedTransfer: order.fixedTransferDetails ?? null,
+    paymentVerificationStatus:
+      order.paymentVerificationStatus ?? "VERIFIED",
     nextAction: inferNextAction(order, attempt),
     serverTime,
     manualConfirmation: order.paymentDetails?.manualConfirmation ?? null,
@@ -592,6 +616,55 @@ async function createPaymentLinkForOrder(
   return createdOrder;
 }
 
+async function createPayOSOrFallback(
+  userId: string,
+  order: PosOrder,
+): Promise<PosOrder> {
+  const docRef = db.collection(POS_COLLECTIONS.orders).doc(order.localOrderId);
+  let createdOrder: PosOrder;
+  try {
+    createdOrder = await createPaymentLinkForOrder(userId, order);
+  } catch (error: unknown) {
+    if (!(error instanceof HttpsError) || error.code !== "unavailable") {
+      throw error;
+    }
+    logger.warn("[PayOS] Chuyển sang QR tài khoản cố định", {
+      localOrderId: order.localOrderId,
+      reason: "PAYOS_CREATE_FAILED",
+    });
+    return activateFixedTransferForOrder(
+      userId,
+      docRef,
+      "PAYOS_CREATE_FAILED",
+    );
+  }
+
+  const attempt = getCurrentAttempt(createdOrder);
+  if (!attempt || attempt.qrCode) return createdOrder;
+
+  if (isPayOSActive(attempt.status)) {
+    try {
+      createdOrder = await cancelAttemptSafely(
+        docRef,
+        attempt,
+        "PayOS không trả về dữ liệu QR; chuyển sang tài khoản cố định",
+      );
+      if (isCompletedOrderStatus(createdOrder.status)) return createdOrder;
+    } catch (error: unknown) {
+      logger.warn("[PayOS] Không thể hủy attempt thiếu dữ liệu QR", {
+        localOrderId: order.localOrderId,
+        error,
+      });
+    }
+  }
+
+  return activateFixedTransferForOrder(
+    userId,
+    docRef,
+    "PAYOS_QR_MISSING",
+  );
+}
+
 export async function createPayOSPaymentForUser(
   userId: string,
   data: unknown,
@@ -606,6 +679,7 @@ export async function createPayOSPaymentForUser(
     if (isCompletedOrderStatus(order.status)) {
       return buildPaymentResult(order);
     }
+    if (isFixedTransferActive(order)) return buildPaymentResult(order);
     const currentAttempt = getCurrentAttempt(order);
     if (currentAttempt && isPayOSActive(currentAttempt.status)) {
       const synchronized = await syncPayOSOrder(docRef, order);
@@ -621,7 +695,7 @@ export async function createPayOSPaymentForUser(
   }
 
   const stagedOrder = await stagePosOrderForPayOS(userId, data);
-  const createdOrder = await createPaymentLinkForOrder(userId, stagedOrder);
+  const createdOrder = await createPayOSOrFallback(userId, stagedOrder);
   return buildPaymentResult(createdOrder);
 }
 
@@ -631,6 +705,7 @@ export async function getPayOSPaymentStatusForUser(
 ) {
   const localOrderId = readLocalOrderId(data);
   const { docRef, order } = await getAuthorizedOrder(userId, localOrderId);
+  if (isFixedTransferActive(order)) return buildPaymentResult(order);
   try {
     const synchronized = await syncPayOSOrder(docRef, order);
     return buildPaymentResult(synchronized);
@@ -659,6 +734,7 @@ export async function handlePayOSPaymentTimeoutForUser(
 ) {
   const localOrderId = readLocalOrderId(data);
   const { docRef, order } = await getAuthorizedOrder(userId, localOrderId);
+  if (isFixedTransferActive(order)) return buildPaymentResult(order);
   try {
     const synchronized = await syncPayOSOrder(docRef, order);
     return buildPaymentResult(synchronized);
@@ -682,6 +758,27 @@ export async function confirmPayOSPaymentManuallyForUser(
 ) {
   const localOrderId = readLocalOrderId(data);
   const authorized = await getAuthorizedOrder(userId, localOrderId);
+  const session = await getPosAuthSession(userId);
+  if (
+    !hasScopedPermission(
+      session.permissions,
+      "pos.payments.manual_confirm",
+      authorized.order.warehouseId,
+    )
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Bạn không có quyền xác nhận thanh toán chuyển khoản thủ công.",
+    );
+  }
+  if (isFixedTransferActive(authorized.order)) {
+    const confirmedOrder = await confirmFixedTransferForOrder(
+      userId,
+      authorized.docRef,
+      authorized.operatorName,
+    );
+    return buildPaymentResult(confirmedOrder);
+  }
   const confirmedOrder = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(authorized.docRef);
     if (!snapshot.exists) {
@@ -729,6 +826,7 @@ export async function confirmPayOSPaymentManuallyForUser(
       paymentMethod: "QR_CODE",
       paymentMethodId: "QR_CODE",
       paymentMethodName: "Chuyển khoản (xác nhận thủ công)",
+      paymentVerificationStatus: "UNVERIFIED",
       paymentDetails,
       paidAt: confirmedAt,
       updatedAt: confirmedAt,
@@ -738,6 +836,7 @@ export async function confirmPayOSPaymentManuallyForUser(
       paymentMethod: nextOrder.paymentMethod,
       paymentMethodId: nextOrder.paymentMethodId,
       paymentMethodName: nextOrder.paymentMethodName,
+      paymentVerificationStatus: nextOrder.paymentVerificationStatus,
       paymentDetails,
       paidAt: confirmedAt,
       updatedAt: confirmedAt,
@@ -753,6 +852,9 @@ export async function resumePayOSPaymentForUser(
 ) {
   const localOrderId = readLocalOrderId(data);
   const authorized = await getAuthorizedOrder(userId, localOrderId);
+  if (isFixedTransferActive(authorized.order)) {
+    return buildPaymentResult(authorized.order);
+  }
   const synchronized = await syncPayOSOrder(authorized.docRef, authorized.order);
   const attempt = getCurrentAttempt(synchronized);
   if (!attempt || inferNextAction(synchronized, attempt) === "RECREATE") {
@@ -884,6 +986,9 @@ export async function recreatePayOSPaymentForUser(
 ) {
   const localOrderId = readLocalOrderId(data);
   const authorized = await getAuthorizedOrder(userId, localOrderId);
+  if (isFixedTransferActive(authorized.order)) {
+    return buildPaymentResult(authorized.order);
+  }
   const synchronized = await syncPayOSOrder(authorized.docRef, authorized.order);
   const attempt = getCurrentAttempt(synchronized);
   const action = inferNextAction(synchronized, attempt);
@@ -905,7 +1010,7 @@ export async function recreatePayOSPaymentForUser(
     }
   }
   const freshSnapshot = await authorized.docRef.get();
-  const createdOrder = await createPaymentLinkForOrder(
+  const createdOrder = await createPayOSOrFallback(
     userId,
     freshSnapshot.data() as PosOrder,
   );
@@ -918,6 +1023,13 @@ export async function cancelPayOSPaymentForUser(
 ) {
   const localOrderId = readLocalOrderId(data);
   const authorized = await getAuthorizedOrder(userId, localOrderId);
+  if (isFixedTransferActive(authorized.order)) {
+    const cancelledOrder = await cancelFixedTransferForOrder(
+      userId,
+      authorized.docRef,
+    );
+    return buildPaymentResult(cancelledOrder);
+  }
   const synchronized = await syncPayOSOrder(authorized.docRef, authorized.order);
   const attempt = getCurrentAttempt(synchronized);
   if (!attempt || inferNextAction(synchronized, attempt) === "COMPLETED") {

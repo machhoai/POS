@@ -152,7 +152,7 @@ export default function CartPanel({
                     <span className="text-sm font-bold text-[var(--color-text-primary)]">
                         Tổng cộng
                     </span>
-                    <span className="text-xl font-extrabold tracking-[-0.03em] text-[var(--color-text-primary)]">
+                    <span className="text-xl font-extrabold text-[var(--color-text-primary)]">
                         {formatCurrency(finalAmount)}
                     </span>
                 </div>

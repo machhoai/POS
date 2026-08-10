@@ -55,7 +55,8 @@ export interface CustomerDisplayOrderSnapshot {
 
 /** Dữ liệu QR hiện tại; value là chuỗi QR có thể hiển thị cho khách. */
 export interface CustomerDisplayQr {
-  value: string;
+  value: string | null;
+  imageUrl: string | null;
   /** Số tiền chính xác của attempt PayOS đang hoạt động. */
   amount: number;
   /** Nội dung chuyển khoản do PayOS cấp cho attempt hiện tại. */
@@ -66,6 +67,9 @@ export interface CustomerDisplayQr {
   snapshotAt: number;
   /** Thời điểm QR ngừng hiển thị, định dạng ISO 8601. */
   expiresAt: string;
+  accountName: string;
+  accountNumber: string;
+  manualConfirmationRequired: boolean;
 }
 
 export type CustomerDisplayTransferPayment =

@@ -4,6 +4,7 @@ import type {
   OrderItem,
 } from "@/lib/types/order";
 import type { PayOSPaymentResult } from "@/lib/types/payment";
+import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 
 export interface CreatePayOSPaymentInput {
   localOrderId: string;
@@ -36,16 +37,17 @@ async function callOrderAction(
   localOrderId: string,
 ): Promise<PayOSPaymentResult> {
   const response = await callPayOSPayment({
-    action,
-    payload: { localOrderId },
-  });
+    ...(await withDeviceAuth({ action, payload: { localOrderId } })),
+  } as PayOSCallableRequest);
   return response.data;
 }
 
 export async function createPayOSPayment(
   input: CreatePayOSPaymentInput,
 ): Promise<PayOSPaymentResult> {
-  const response = await callPayOSPayment({ action: "create", payload: input });
+  const response = await callPayOSPayment(
+    (await withDeviceAuth({ action: "create" as const, payload: input })) as PayOSCallableRequest,
+  );
   return response.data;
 }
 

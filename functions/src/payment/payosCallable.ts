@@ -14,6 +14,11 @@ import {
   recreatePayOSPaymentForUser,
   resumePayOSPaymentForUser,
 } from "./payosFunctions";
+import {
+  getFixedTransferSettingsForUser,
+  saveFixedTransferSettingsForUser,
+} from "./fixedTransferFunctions";
+import { assertActivePosDevice } from "../services/posDeviceAccessService";
 
 export const payosPayment = onCall(
   {
@@ -28,6 +33,7 @@ export const payosPayment = onCall(
     ],
   },
   async (request) => {
+    const device = await assertActivePosDevice(request.data);
     if (!request.auth) {
       throw new HttpsError(
         "unauthenticated",
@@ -37,9 +43,21 @@ export const payosPayment = onCall(
 
     const action = request.data?.action;
     const payload = request.data?.payload;
+    if (
+      typeof payload?.warehouseId === "string" &&
+      payload.warehouseId !== device.warehouseId
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        "Máy POS không được phép thanh toán tại cửa hàng này.",
+      );
+    }
     try {
       if (action === "create") {
-        return await createPayOSPaymentForUser(request.auth.uid, payload);
+        return await createPayOSPaymentForUser(request.auth.uid, {
+          ...payload,
+          deviceId: device.id,
+        });
       }
       if (action === "status") {
         return await getPayOSPaymentStatusForUser(request.auth.uid, payload);
@@ -61,6 +79,18 @@ export const payosPayment = onCall(
       }
       if (action === "manual-confirm") {
         return await confirmPayOSPaymentManuallyForUser(
+          request.auth.uid,
+          payload,
+        );
+      }
+      if (action === "get-fallback-settings") {
+        return await getFixedTransferSettingsForUser(
+          request.auth.uid,
+          payload,
+        );
+      }
+      if (action === "save-fallback-settings") {
+        return await saveFixedTransferSettingsForUser(
           request.auth.uid,
           payload,
         );

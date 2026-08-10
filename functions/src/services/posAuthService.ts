@@ -233,6 +233,7 @@ export async function resolvePosLoginEmail(
 
 export async function getPosAuthSession(
   userId: string,
+  deviceWarehouseId?: string,
 ): Promise<PosAuthSessionData> {
   const user = await getUserById(userId);
   if (!user) throw new PosAuthDomainError("USER_NOT_FOUND");
@@ -265,10 +266,22 @@ export async function getPosAuthSession(
       .map((role) => [role.id, role]),
   );
 
+  const permissions = buildScopedPermissions(assignments, rolesById);
+  const hasPosLogin = (warehouseId: string) =>
+    permissions.global?.["*"] === true ||
+    permissions.global?.["pos.login"] === true ||
+    permissions[warehouseId]?.["*"] === true ||
+    permissions[warehouseId]?.["pos.login"] === true;
+  const accessibleWarehouses = warehouses.filter(
+    (warehouse) =>
+      (!deviceWarehouseId || warehouse.id === deviceWarehouseId) &&
+      hasPosLogin(warehouse.id),
+  );
+
   return {
     user,
     roles: assignments,
-    permissions: buildScopedPermissions(assignments, rolesById),
-    warehouses,
+    permissions,
+    warehouses: accessibleWarehouses,
   };
 }

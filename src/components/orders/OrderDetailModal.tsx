@@ -38,6 +38,7 @@ export default function OrderDetailModal({
 }: OrderDetailModalProps) {
     const status = STATUS_LABELS[order.status] || STATUS_LABELS.DRAFT;
     const finalAmount = order.totalAmount - (order.voucherDiscount || 0);
+    const isPaymentUnverified = order.paymentVerificationStatus === "UNVERIFIED";
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -64,6 +65,19 @@ export default function OrderDetailModal({
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                    {isPaymentUnverified && (
+                        <div className="rounded-xl border border-amber-500/60 bg-amber-500/15 p-3 text-amber-300">
+                            <p className="text-sm font-extrabold">Chưa được xác nhận thanh toán</p>
+                            <p className="mt-1 text-xs leading-relaxed">
+                                Đơn được nhân viên hoàn tất thủ công khi hệ thống chưa thể xác nhận giao dịch. Hãy kiểm tra giao dịch ngân hàng khi cần.
+                            </p>
+                            {order.fixedTransferDetails?.confirmedByName && (
+                                <p className="mt-2 text-xs font-semibold">
+                                    Nhân viên xác nhận: {order.fixedTransferDetails.confirmedByName}
+                                </p>
+                            )}
+                        </div>
+                    )}
                     {/* Thông tin chung */}
                     <div className="grid grid-cols-2 gap-3">
                         <InfoRow label="Trạng thái" value={status.label} className={status.color} />

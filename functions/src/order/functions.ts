@@ -34,6 +34,7 @@ interface OrderInput {
   localOrderId: string;
   shopId: number;
   warehouseId: string;
+  deviceId?: string;
   items: OrderItemInput[];
 }
 
@@ -43,6 +44,13 @@ interface CheckoutInput extends OrderInput {
 
 interface OrderListInput {
   limit?: number;
+}
+
+interface CloseoutOrderListInput {
+  startAt: string;
+  endAt: string;
+  warehouseId: string;
+  scope: "CURRENT_USER" | "ALL_USERS";
 }
 
 interface LatestOrderInput {
@@ -131,6 +139,10 @@ function validateOrderInput(data: unknown): OrderInput {
     localOrderId: input.localOrderId,
     shopId: Number(input.shopId),
     warehouseId: input.warehouseId.trim(),
+    deviceId:
+      typeof input.deviceId === "string" && input.deviceId.length <= 80
+        ? input.deviceId
+        : undefined,
     items,
   };
 }
@@ -140,7 +152,10 @@ async function assertWarehouseAccess(
   warehouseId: string,
 ): Promise<OperatorInfo> {
   const session = await getPosAuthSession(userId);
-  if (!session.warehouses.some((warehouse) => warehouse.id === warehouseId)) {
+  if (
+    !session.warehouses.some((warehouse) => warehouse.id === warehouseId) ||
+    !hasScopedPermission(session.permissions, "pos.sales.create", warehouseId)
+  ) {
     throw new HttpsError(
       "permission-denied",
       "Bạn không có quyền tạo đơn tại điểm bán này.",
@@ -228,6 +243,7 @@ function createDraftOrder(
     invoiceRequestCreatedAt: now,
     shopId: input.shopId,
     warehouseId: input.warehouseId,
+    ...(input.deviceId ? { deviceId: input.deviceId } : {}),
     createdBy: operator.firebaseUid,
     operatorId: operator.employeeId,
     operatorFirebaseUid: operator.firebaseUid,
@@ -246,6 +262,19 @@ function createDraftOrder(
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function hasScopedPermission(
+  permissions: Record<string, Record<string, unknown>>,
+  permission: string,
+  warehouseId: string,
+): boolean {
+  return (
+    permissions.global?.["*"] === true ||
+    permissions.global?.[permission] === true ||
+    permissions[warehouseId]?.["*"] === true ||
+    permissions[warehouseId]?.[permission] === true
+  );
 }
 
 /**
@@ -571,7 +600,8 @@ export async function getPosOrderForUser(
   );
   if (
     order.createdBy !== userId &&
-    !warehouseIds.has(order.warehouseId)
+    (!warehouseIds.has(order.warehouseId) ||
+      !hasScopedPermission(session.permissions, "pos.orders.read", order.warehouseId))
   ) {
     throw new HttpsError(
       "permission-denied",
@@ -621,7 +651,11 @@ async function loadAccessibleOrders(
 ): Promise<PosOrder[]> {
   const session = await getPosAuthSession(userId);
   const warehouseIds = new Set(
-    session.warehouses.map((warehouse) => warehouse.id),
+    session.warehouses
+      .filter((warehouse) =>
+        hasScopedPermission(session.permissions, "pos.orders.read", warehouse.id),
+      )
+      .map((warehouse) => warehouse.id),
   );
   const snapshot = await db
     .collection(POS_COLLECTIONS.orders)
@@ -650,6 +684,96 @@ export async function listPosOrdersForUser(
     ? Math.min(Math.max(Number(rawLimit), 1), 500)
     : 500;
   const orders = await loadAccessibleOrders(userId, requestedLimit);
+
+  return {
+    orders,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+function validateCloseoutOrderListInput(data: unknown): CloseoutOrderListInput {
+  if (!data || typeof data !== "object") {
+    throw new HttpsError("invalid-argument", "Khoảng thời gian báo cáo không hợp lệ.");
+  }
+
+  const input = data as Partial<CloseoutOrderListInput>;
+  const startAt = typeof input.startAt === "string" ? input.startAt : "";
+  const endAt = typeof input.endAt === "string" ? input.endAt : "";
+  const warehouseId = typeof input.warehouseId === "string"
+    ? input.warehouseId.trim()
+    : "";
+  const startTime = Date.parse(startAt);
+  const endTime = Date.parse(endAt);
+
+  if (
+    !Number.isFinite(startTime) ||
+    !Number.isFinite(endTime) ||
+    startTime >= endTime ||
+    endTime - startTime > 48 * 60 * 60 * 1000
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Báo cáo phải có thời gian bắt đầu trước thời gian kết thúc và không dài quá 48 giờ.",
+    );
+  }
+  if (!warehouseId) {
+    throw new HttpsError("invalid-argument", "Điểm bán không hợp lệ.");
+  }
+  if (input.scope !== "CURRENT_USER" && input.scope !== "ALL_USERS") {
+    throw new HttpsError("invalid-argument", "Phạm vi tài khoản không hợp lệ.");
+  }
+
+  return {
+    startAt: new Date(startTime).toISOString(),
+    endAt: new Date(endTime).toISOString(),
+    warehouseId,
+    scope: input.scope,
+  };
+}
+
+/**
+ * Load every paid order in a closeout period. This intentionally uses the
+ * authoritative paidAt timestamp and fails instead of silently truncating a
+ * financial report.
+ */
+export async function listCloseoutOrdersForUser(
+  userId: string,
+  data: unknown,
+) {
+  const input = validateCloseoutOrderListInput(data);
+  const session = await getPosAuthSession(userId);
+  if (
+    !session.warehouses.some((warehouse) => warehouse.id === input.warehouseId) ||
+    !hasScopedPermission(session.permissions, "pos.shift.close", input.warehouseId)
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Bạn không có quyền xem báo cáo tại điểm bán này.",
+    );
+  }
+
+  const snapshot = await db
+    .collection(POS_COLLECTIONS.orders)
+    .where("paidAt", ">=", input.startAt)
+    .where("paidAt", "<", input.endAt)
+    .orderBy("paidAt", "desc")
+    .limit(5_001)
+    .get();
+
+  if (snapshot.size > 5_000) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Báo cáo có quá nhiều đơn hàng. Vui lòng chia nhỏ khoảng thời gian.",
+    );
+  }
+
+  const orders = snapshot.docs
+    .map((document) => document.data() as PosOrder)
+    .filter((order) =>
+      order.warehouseId === input.warehouseId &&
+      order.status !== "DRAFT" &&
+      (input.scope === "ALL_USERS" || order.createdBy === userId)
+    );
 
   return {
     orders,
@@ -709,8 +833,12 @@ export async function retryPosOrderSyncForUser(
 
   const order = snapshot.data() as PosOrder;
   if (
-    order.createdBy !== userId &&
-    !warehouseIds.has(order.warehouseId)
+    !warehouseIds.has(order.warehouseId) ||
+    !hasScopedPermission(
+      session.permissions,
+      "pos.orders.retry_sync",
+      order.warehouseId,
+    )
   ) {
     throw new HttpsError(
       "permission-denied",
@@ -848,6 +976,51 @@ async function synchronizeRemoteOrder(
   }
 }
 
+async function recordPosOrderAudit(
+  orderId: string,
+  before: PosOrder,
+  after: PosOrder,
+): Promise<void> {
+  const initialPayment = before.status === "DRAFT";
+  const auditId = initialPayment
+    ? `pos-order-paid-${orderId}`
+    : `pos-order-retry-${orderId}-${after.sync?.retryCount ?? 0}`;
+  try {
+    await db.collection("audit_logs").doc(auditId).create({
+      id: auditId,
+      entity_type: "POS_ORDER",
+      entity_id: orderId,
+      entity_name: orderId,
+      warehouse_id: after.warehouseId,
+      action: initialPayment ? "CREATE" : "UPDATE",
+      user_id: after.createdBy,
+      user_name: after.operatorName,
+      action_time: new Date(after.updatedAt),
+      sync_time: new Date(),
+      old_value: {
+        status: before.status,
+        payment_method: before.paymentMethodId,
+      },
+      new_value: {
+        status: after.status,
+        payment_method: after.paymentMethodId,
+        total_amount: after.totalAmount,
+        payment_verification_status: after.paymentVerificationStatus ?? "VERIFIED",
+      },
+      ip_address: null,
+      device_id: after.deviceId ?? null,
+      session_token: null,
+      notes: initialPayment
+        ? "Completed basic JPOS checkout"
+        : "Queued JPOS order synchronization retry",
+    });
+  } catch (error: unknown) {
+    const code = (error as { code?: number | string }).code;
+    if (code === 6 || code === "already-exists") return;
+    throw error;
+  }
+}
+
 export const onOrderLocalPaid = onDocumentUpdated(
   {
     document: `${POS_COLLECTIONS.orders}/{orderId}`,
@@ -867,6 +1040,8 @@ export const onOrderLocalPaid = onDocumentUpdated(
     if (!shouldSynchronizeRemoteOrder(before.status, after.status)) {
       return;
     }
+
+    await recordPosOrderAudit(event.params.orderId, before, after);
 
     const docRef = db
       .collection(POS_COLLECTIONS.orders)

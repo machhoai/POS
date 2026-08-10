@@ -30,6 +30,7 @@ export function usePayOSCheckoutController({
   onCompleted,
 }: PayOSCheckoutInput): PayOSCheckoutController {
   const session = usePayOSPaymentStore((state) => state.session);
+  const fixedTransfer = usePayOSPaymentStore((state) => state.fixedTransfer);
   const nextAction = usePayOSPaymentStore((state) => state.nextAction);
   const remainingSeconds = usePayOSPaymentStore(
     (state) => state.remainingSeconds,
@@ -94,10 +95,13 @@ export function usePayOSCheckoutController({
     ) return;
     completedOrderRef.current = localOrderId;
     onCompleted(localOrderId, orderStatus ?? "LOCAL_PAID");
-    if (manualConfirmation) {
+    if (
+      manualConfirmation ||
+      fixedTransfer?.status === "MANUALLY_CONFIRMED"
+    ) {
       showWarning(
         "Đã xác nhận chuyển khoản thủ công",
-        "Đơn đã hoàn thành và được đánh dấu để kiểm tra đối soát riêng.",
+        "Đơn đã hoàn thành và được đánh dấu Chưa được xác nhận thanh toán.",
       );
     } else {
       showSuccess(
@@ -109,6 +113,7 @@ export function usePayOSCheckoutController({
   }, [
     localOrderId,
     manualConfirmation,
+    fixedTransfer,
     nextAction,
     onCompleted,
     orderStatus,
@@ -141,6 +146,11 @@ export function usePayOSCheckoutController({
       });
       if (result.nextAction === "WAIT") {
         showSuccess("Đã tạo mã thanh toán", "Mời khách quét mã QR để chuyển khoản.");
+      } else if (result.nextAction === "FALLBACK") {
+        showWarning(
+          "Đang dùng QR tài khoản cố định",
+          "PayOS không tạo được mã. Giao dịch này cần nhân viên xác nhận thủ công.",
+        );
       }
     } catch {
       // Store logs the technical error; the error effect shows friendly UI text.
@@ -191,10 +201,10 @@ export function usePayOSCheckoutController({
 
   const confirmManually = useCallback(async () => {
     const accepted = window.confirm(
-      "Chỉ xác nhận khi đã kiểm tra tài khoản ngân hàng và chắc chắn khách đã chuyển đủ tiền. Đơn sẽ được đánh dấu xác nhận thủ công để đối soát. Bạn có tiếp tục không?",
+      "Chỉ xác nhận khi đã kiểm tra tài khoản ngân hàng và chắc chắn khách đã chuyển đủ tiền. Đơn sẽ được đánh dấu Chưa được xác nhận thanh toán. Bạn có tiếp tục không?",
     );
     if (!accepted) return;
-    showInfo("Đang xác nhận thủ công", "Hệ thống đang lưu dấu vết kiểm toán cho đơn hàng.");
+    showInfo("Đang xác nhận thủ công", "Hệ thống đang hoàn tất và đánh dấu đơn hàng.");
     try {
       await confirmPayOSManually();
     } catch {
@@ -204,6 +214,7 @@ export function usePayOSCheckoutController({
 
   const cancelPayment = useCallback(async () => {
     const orderId = localOrderId;
+    const isFixedTransfer = fixedTransfer?.status === "AWAITING_MANUAL_CONFIRMATION";
     if (!orderId) {
       showError(
         "Không thể hủy mã thanh toán",
@@ -212,10 +223,15 @@ export function usePayOSCheckoutController({
       return;
     }
     const accepted = window.confirm(
-      "Mã thanh toán phải được hủy trên PayOS trước khi có thể sửa giỏ hàng. Bạn có chắc muốn hủy không?",
+      isFixedTransfer
+        ? "Bạn có chắc muốn hủy mã chuyển khoản dự phòng và quay lại giỏ hàng không?"
+        : "Mã thanh toán phải được hủy trên PayOS trước khi có thể sửa giỏ hàng. Bạn có chắc muốn hủy không?",
     );
     if (!accepted) return;
-    showInfo("Đang hủy mã thanh toán", "Vui lòng chờ PayOS xác nhận.");
+    showInfo(
+      "Đang hủy mã thanh toán",
+      isFixedTransfer ? "Vui lòng chờ hệ thống xử lý." : "Vui lòng chờ PayOS xác nhận.",
+    );
     try {
       const result = await cancelPayOS();
       if (!result) return;
@@ -236,13 +252,22 @@ export function usePayOSCheckoutController({
     } catch {
       showError(
         "Chưa thể hủy mã thanh toán",
-        "Không kết nối được PayOS nên giỏ hàng vẫn được khóa. Vui lòng thử lại, đơn hàng không bị mất.",
+        isFixedTransfer
+          ? "Hệ thống chưa hủy được mã dự phòng. Vui lòng thử lại, đơn hàng không bị mất."
+          : "Không kết nối được PayOS nên giỏ hàng vẫn được khóa. Vui lòng thử lại, đơn hàng không bị mất.",
       );
     }
-  }, [cancelPayOS, localOrderId, resetPayment, unlockCartAfterCancellation]);
+  }, [
+    cancelPayOS,
+    fixedTransfer?.status,
+    localOrderId,
+    resetPayment,
+    unlockCartAfterCancellation,
+  ]);
 
   return {
     session,
+    fixedTransfer,
     nextAction,
     remainingSeconds,
     errorMessage: errorKind === "CONNECTION"
@@ -250,7 +275,9 @@ export function usePayOSCheckoutController({
       : error
         ? "Không thể xử lý thanh toán. Vui lòng thử lại."
         : null,
-    canConfirmManually: errorKind === "CONNECTION" && Boolean(session),
+    canConfirmManually:
+      fixedTransfer?.status === "AWAITING_MANUAL_CONFIRMATION" ||
+      (errorKind === "CONNECTION" && Boolean(session)),
     isCartLocked,
     isBusy: isCreating || isChecking,
     createPayment,

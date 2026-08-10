@@ -6,6 +6,7 @@
 
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
+import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 import type {
   PosOrder,
   OrderStatus,
@@ -63,7 +64,9 @@ export async function prepareOrder(
     functions,
     "getPosAuthSession",
   );
-  const result = await callable({ action: "prepareOrder", payload: input });
+  const result = await callable(
+    await withDeviceAuth({ action: "prepareOrder" as const, payload: input }),
+  );
   return result.data;
 }
 
@@ -78,7 +81,9 @@ export async function checkoutOrder(
     },
     CheckoutOrderResult
   >(functions, "getPosAuthSession");
-  const result = await callable({ action: "checkoutOrder", payload: input });
+  const result = await callable(
+    await withDeviceAuth({ action: "checkoutOrder" as const, payload: input }),
+  );
   return result.data;
 }
 
@@ -93,10 +98,10 @@ export async function fetchOrderSyncStatus(
     },
     OrderSyncStatusResult
   >(functions, "getPosAuthSession");
-  const result = await callable({
-    action: "getOrderStatus",
+  const result = await callable(await withDeviceAuth({
+    action: "getOrderStatus" as const,
     payload: { localOrderId },
-  });
+  }));
   return result.data;
 }
 
@@ -111,16 +116,25 @@ export async function fetchOrderForReceipt(
     },
     { order: PosOrder }
   >(functions, "getPosAuthSession");
-  const result = await callable({
-    action: "getOrder",
+  const result = await callable(await withDeviceAuth({
+    action: "getOrder" as const,
     payload: { localOrderId },
-  });
+  }));
   return result.data.order;
 }
 
 export interface OrderHistoryResult {
   orders: PosOrder[];
   fetchedAt: string;
+}
+
+export type CloseoutAccountScope = "CURRENT_USER" | "ALL_USERS";
+
+export interface CloseoutOrderQuery {
+  startAt: string;
+  endAt: string;
+  warehouseId: string;
+  scope: CloseoutAccountScope;
 }
 
 export async function fetchOrderHistory(
@@ -130,11 +144,38 @@ export async function fetchOrderHistory(
     { action: "getOrders"; payload: { limit: number } },
     OrderHistoryResult
   >(functions, "getPosAuthSession");
-  const result = await callable({
-    action: "getOrders",
+  const result = await callable(await withDeviceAuth({
+    action: "getOrders" as const,
     payload: { limit: requestedLimit },
-  });
+  }));
   return result.data;
+}
+
+export async function fetchCloseoutOrders(
+  query: CloseoutOrderQuery,
+): Promise<OrderHistoryResult> {
+  const callable = httpsCallable<
+    { action: "getCloseoutOrders"; payload: CloseoutOrderQuery },
+    OrderHistoryResult
+  >(functions, "getPosAuthSession");
+  const result = await callable(await withDeviceAuth({
+    action: "getCloseoutOrders" as const,
+    payload: query,
+  }));
+  const response: unknown = result.data;
+  if (
+    !response ||
+    typeof response !== "object" ||
+    !("orders" in response) ||
+    !Array.isArray(response.orders) ||
+    !("fetchedAt" in response) ||
+    typeof response.fetchedAt !== "string"
+  ) {
+    throw new Error(
+      "Cloud Function kết ca chưa được cập nhật. Vui lòng deploy Functions rồi tải lại ứng dụng.",
+    );
+  }
+  return response as OrderHistoryResult;
 }
 
 export async function retryOrderSync(
@@ -147,10 +188,10 @@ export async function retryOrderSync(
     },
     { localOrderId: string; status: OrderStatus; queued: boolean }
   >(functions, "getPosAuthSession");
-  const result = await callable({
-    action: "retryOrderSync",
+  const result = await callable(await withDeviceAuth({
+    action: "retryOrderSync" as const,
     payload: { localOrderId },
-  });
+  }));
   return result.data;
 }
 

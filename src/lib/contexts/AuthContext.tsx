@@ -21,7 +21,14 @@ import {
   createPosAuthSession,
   resolveLoginEmail,
 } from "@/lib/services/authService";
+import {
+  cacheAuthSession,
+  clearCachedAuthSession,
+  loadUsableCachedAuthSession,
+} from "@/lib/services/authSessionCacheService";
+import { loadDeviceCredential } from "@/lib/services/deviceEnrollmentService";
 import type {
+  AuthSessionData,
   PermissionMap,
   UserDoc,
   UserWarehouseRole,
@@ -133,7 +140,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (sessionSyncRef.current) return sessionSyncRef.current;
 
     const syncPromise = (async () => {
-      const session = await createPosAuthSession(firebaseUser);
+      let session: AuthSessionData;
+      try {
+        session = await createPosAuthSession(firebaseUser);
+        await cacheAuthSession(session).catch((error: unknown) =>
+          console.warn("[Auth] Không thể cache phiên quyền POS:", error),
+        );
+      } catch (error: unknown) {
+        if (!(error instanceof AuthServiceError) || error.code !== "network") {
+          throw error;
+        }
+        const deviceCredential = await loadDeviceCredential();
+        const cachedSession = deviceCredential?.warehouse_id
+          ? await loadUsableCachedAuthSession(
+              firebaseUser.uid,
+              deviceCredential.warehouse_id,
+            )
+          : null;
+        if (!cachedSession) throw error;
+        session = cachedSession;
+      }
       if (session.user.id !== firebaseUser.uid) {
         throw new AuthServiceError(
           "Phiên đăng nhập không khớp với hồ sơ người dùng.",
@@ -215,6 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       void syncUserSession(firebaseUser).catch(async (error: unknown) => {
         console.error("[Auth] Không thể đồng bộ phiên bduck-system:", error);
+        await clearCachedAuthSession().catch(() => undefined);
         await signOut(auth).catch(() => undefined);
         setState({
           ...EMPTY_AUTH_STATE,
@@ -224,6 +251,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return unsubscribe;
+  }, [syncUserSession]);
+
+  useEffect(() => {
+    const handleWarehouseChange = () => {
+      const firebaseUser = auth.currentUser;
+      if (firebaseUser) void syncUserSession(firebaseUser);
+    };
+    window.addEventListener("jpos:device-warehouse-changed", handleWarehouseChange);
+    return () =>
+      window.removeEventListener("jpos:device-warehouse-changed", handleWarehouseChange);
   }, [syncUserSession]);
 
   const login = useCallback(
@@ -250,6 +287,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    await clearCachedAuthSession().catch((error) => {
+      console.error("[Auth] Không thể xóa phiên quyền POS đã cache:", error);
+    });
     await signOut(auth).catch((error) => {
       console.error("[Auth] Không thể đăng xuất Firebase:", error);
     });

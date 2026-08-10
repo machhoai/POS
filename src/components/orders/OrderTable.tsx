@@ -45,7 +45,7 @@ export default function OrderTable({
                 </div>
                 <h3 className="text-base font-bold text-[var(--color-text-primary)]">Chưa có đơn hàng nào</h3>
                 <p className="text-xs text-[var(--color-text-muted)] max-w-sm mt-1">
-                    Không tìm thấy đơn hàng phù hợp với điều kiện lọc hiện tại. Thử chọn mốc thời gian khác hoặc bỏ tìm kiếm.
+                    Không tìm thấy đơn hàng hôm nay phù hợp với trạng thái hoặc nội dung tìm kiếm.
                 </p>
             </div>
         );

@@ -19,4 +19,6 @@ export const SHARED_AUTH_COLLECTIONS = {
 export const POS_COLLECTIONS = {
   products: "jpos_products",
   orders: "pos_orders",
+  paymentSettings: "pos_payment_settings",
+  devices: "pos_devices",
 } as const;

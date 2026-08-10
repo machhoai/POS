@@ -3,6 +3,7 @@
 // =============================================================================
 
 use serde::Serialize;
+mod secure_credential;
 #[cfg(windows)]
 use std::{sync::mpsc, time::Duration};
 use tauri::{
@@ -351,7 +352,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_customer_display,
-            print_receipt_silent
+            print_receipt_silent,
+            secure_credential::get_or_create_pos_installation_id,
+            secure_credential::save_pos_device_credential,
+            secure_credential::load_pos_device_credential,
+            secure_credential::clear_pos_device_credential,
+            secure_credential::save_pos_auth_session_cache,
+            secure_credential::load_pos_auth_session_cache,
+            secure_credential::clear_pos_auth_session_cache
         ])
         .run(tauri::generate_context!())
         .expect("Không thể khởi chạy ứng dụng Tauri");

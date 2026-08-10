@@ -28,6 +28,7 @@ export function useCustomerDisplayPublisher(
     createIdleCustomerDisplayState("CONNECTED"),
   );
   const session = payOSPayment.session;
+  const fixedTransfer = payOSPayment.fixedTransfer;
   const nextAction = payOSPayment.nextAction;
   const remainingSeconds = payOSPayment.remainingSeconds;
   const errorMessage = payOSPayment.errorMessage;
@@ -43,6 +44,7 @@ export function useCustomerDisplayPublisher(
       orderStatus,
       payment: {
         session,
+        fixedTransfer,
         nextAction,
         remainingSeconds,
         errorMessage,
@@ -57,6 +59,7 @@ export function useCustomerDisplayPublisher(
     });
   }, [
     errorMessage,
+    fixedTransfer,
     isBusy,
     isCartLocked,
     items,

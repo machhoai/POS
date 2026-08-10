@@ -16,12 +16,14 @@ import {
 import {
   checkoutPosOrderForUser,
   getLatestPosOrderForUser,
+  listCloseoutOrdersForUser,
   getPosOrderForUser,
   getPosOrderStatusForUser,
   listPosOrdersForUser,
   preparePosOrderForUser,
   retryPosOrderSyncForUser,
 } from "../order/functions";
+import { assertActivePosDevice } from "../services/posDeviceAccessService";
 const CALLABLE_OPTIONS = {
   region: "asia-southeast1",
   cors: true,
@@ -33,6 +35,7 @@ const CALLABLE_OPTIONS = {
 export const resolvePosLoginIdentifier = onCall(
   CALLABLE_OPTIONS,
   async (request) => {
+    await assertActivePosDevice(request.data);
     const identifier = request.data?.identifier;
     if (
       typeof identifier !== "string" ||
@@ -68,6 +71,7 @@ export const resolvePosLoginIdentifier = onCall(
 export const getPosAuthSession = onCall(
   CALLABLE_OPTIONS,
   async (request) => {
+    const device = await assertActivePosDevice(request.data);
     if (!request.auth) {
       throw new HttpsError(
         "unauthenticated",
@@ -76,12 +80,23 @@ export const getPosAuthSession = onCall(
     }
 
     const action = request.data?.action;
+    const requestedWarehouseId = request.data?.payload?.warehouseId;
+    if (
+      typeof requestedWarehouseId === "string" &&
+      requestedWarehouseId !== device.warehouseId
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        "Máy POS không được phép thao tác tại cửa hàng này.",
+      );
+    }
     if (
       action === "prepareOrder" ||
       action === "checkoutOrder" ||
       action === "getOrder" ||
       action === "getOrderStatus" ||
       action === "getOrders" ||
+      action === "getCloseoutOrders" ||
       action === "getLatestOrder" ||
       action === "retryOrderSync"
     ) {
@@ -89,17 +104,23 @@ export const getPosAuthSession = onCall(
         if (action === "prepareOrder") {
           return await preparePosOrderForUser(
             request.auth.uid,
-            request.data?.payload,
+            { ...request.data?.payload, deviceId: device.id },
           );
         }
         if (action === "checkoutOrder") {
           return await checkoutPosOrderForUser(
             request.auth.uid,
-            request.data?.payload,
+            { ...request.data?.payload, deviceId: device.id },
           );
         }
         if (action === "getOrders") {
           return await listPosOrdersForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "getCloseoutOrders") {
+          return await listCloseoutOrdersForUser(
             request.auth.uid,
             request.data?.payload,
           );
@@ -170,8 +191,15 @@ export const getPosAuthSession = onCall(
       }
     }
 
+    if (typeof action === "string") {
+      throw new HttpsError(
+        "invalid-argument",
+        `Chức năng ${action} chưa được hỗ trợ trên phiên bản máy chủ này.`,
+      );
+    }
+
     try {
-      return await loadPosAuthSession(request.auth.uid);
+      return await loadPosAuthSession(request.auth.uid, device.warehouseId);
     } catch (error: unknown) {
       if (error instanceof PosAuthDomainError) {
         if (error.code === "USER_NOT_FOUND") {

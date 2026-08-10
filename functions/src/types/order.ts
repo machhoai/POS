@@ -93,6 +93,35 @@ export interface PayOSManualConfirmation {
   previousPaymentStatus: PayOSPaymentStatus;
 }
 
+export type PaymentVerificationStatus = "VERIFIED" | "UNVERIFIED";
+
+export type FixedTransferStatus =
+  | "AWAITING_MANUAL_CONFIRMATION"
+  | "MANUALLY_CONFIRMED"
+  | "CANCELLED";
+
+export type FixedTransferReason =
+  | "PAYOS_CREATE_FAILED"
+  | "PAYOS_QR_MISSING";
+
+export interface FixedTransferDetails {
+  provider: "vietqr_quicklink";
+  status: FixedTransferStatus;
+  reason: FixedTransferReason;
+  bankBin: string;
+  accountNumber: string;
+  accountName: string;
+  amount: number;
+  description: string;
+  qrImageUrl: string;
+  settingsVersion: number;
+  createdAt: string;
+  updatedAt: string;
+  confirmedAt?: string;
+  confirmedByUid?: string;
+  confirmedByName?: string;
+}
+
 /** The POS order document in Firestore. */
 export interface PosOrder {
   localOrderId: string;
@@ -103,6 +132,7 @@ export interface PosOrder {
   invoiceRequestCreatedAt?: string;
   shopId: number;
   warehouseId: string;
+  deviceId?: string;
   createdBy: string;
   operatorId: string;
   operatorFirebaseUid: string;
@@ -118,6 +148,8 @@ export interface PosOrder {
   /** Every PayOS order code ever created for this order, used by the webhook. */
   payosOrderCodes?: number[];
   paymentDetails?: PayOSPaymentDetails;
+  fixedTransferDetails?: FixedTransferDetails;
+  paymentVerificationStatus?: PaymentVerificationStatus;
   sync: SyncMetadata;
   createdAt: string;
   updatedAt: string;

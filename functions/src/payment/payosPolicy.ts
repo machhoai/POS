@@ -4,6 +4,7 @@ export type PayOSNextAction =
   | "WAIT"
   | "RETRY_DISPLAY"
   | "RECREATE"
+  | "FALLBACK"
   | "COMPLETED";
 
 export const PAYOS_DISPLAY_WINDOW_MS = 5 * 60 * 1000;

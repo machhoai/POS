@@ -19,9 +19,24 @@ import {
   prepareOrder,
   type CheckoutOrderResult,
 } from "@/lib/services/orderService";
+import {
+  clearCheckoutJournal,
+  loadCheckoutJournal,
+  recordPendingFailure,
+  saveCheckoutJournal,
+} from "@/lib/services/checkoutJournalService";
+import type {
+  CheckoutCheckpoint,
+  CheckoutJournalRecord,
+} from "@/lib/types/checkoutRecovery";
+
+interface CheckoutContext {
+  shopId: number;
+  warehouseId: string;
+}
 
 /** The shape of the cart store. */
-interface CartState {
+export interface CartState {
   // ── State ──────────────────────────────────────────────────────────────────
   items: OrderItem[];
   paymentMethod: PaymentMethod;
@@ -32,6 +47,10 @@ interface CartState {
   isCheckingOut: boolean;
   isPaymentLocked: boolean;
   paymentLockOrderId: string | null;
+  checkoutContext: CheckoutContext | null;
+  checkoutCheckpoint: CheckoutCheckpoint | null;
+  journalHydrated: boolean;
+  recoveryNotice: CheckoutCheckpoint | null;
 
   // ── Computed (derived in selectors, not stored) ────────────────────────────
   // Use `useCartStore(selectTotalAmount)` to get the total.
@@ -50,6 +69,10 @@ interface CartState {
   ) => void;
   lockCartForPayOS: (localOrderId: string) => boolean;
   unlockCartAfterPayOSCancellation: (localOrderId: string) => void;
+  setCheckoutContext: (shopId: number, warehouseId: string) => void;
+  hydrateCheckoutJournal: () => Promise<void>;
+  dismissRecoveryNotice: () => void;
+  markReceiptPrinted: (localOrderId: string) => void;
 
   /**
    * Complete the checkout flow:
@@ -74,6 +97,36 @@ export const selectTotalAmount = (state: CartState): number =>
 export const selectItemCount = (state: CartState): number =>
   state.items.reduce((sum, item) => sum + item.quantity, 0);
 
+function saveCartCheckpoint(
+  state: CartState,
+  checkpoint: CheckoutCheckpoint,
+  overrides: Partial<CheckoutJournalRecord> = {},
+): void {
+  const context = state.checkoutContext;
+  if (!context) return;
+  const now = new Date().toISOString();
+  const items = overrides.items ?? state.items;
+  void saveCheckoutJournal({
+    id: "active-checkout",
+    schemaVersion: 1,
+    checkpoint,
+    localOrderId:
+      overrides.localOrderId ?? state.currentOrderId ?? state.draftOrderId,
+    shopId: context.shopId,
+    warehouseId: context.warehouseId,
+    items,
+    paymentMethod: overrides.paymentMethod ?? state.paymentMethod,
+    totalAmount:
+      overrides.totalAmount ??
+      items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    orderStatus: overrides.orderStatus ?? state.currentOrderStatus,
+    startedAt: overrides.startedAt ?? now,
+    updatedAt: now,
+    lastError: overrides.lastError ?? null,
+    recoveryCount: overrides.recoveryCount ?? 0,
+  });
+}
+
 /**
  * The main cart store.
  * Operates entirely in local memory — Firestore writes only happen on checkout.
@@ -89,10 +142,14 @@ export const useCartStore = create<CartState>((set, get) => ({
   isCheckingOut: false,
   isPaymentLocked: false,
   paymentLockOrderId: null,
+  checkoutContext: null,
+  checkoutCheckpoint: null,
+  journalHydrated: false,
+  recoveryNotice: null,
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  addItem: (item) =>
+  addItem: (item) => {
     set((state) => {
       if (state.isPaymentLocked) return {};
       const existing = state.items.find((i) => i.goodsId === item.goodsId);
@@ -118,14 +175,20 @@ export const useCartStore = create<CartState>((set, get) => ({
             }
           : {}),
       };
-    }),
+    });
+    saveCartCheckpoint(get(), "CART_READY");
+  },
 
-  removeItem: (goodsId) =>
+  removeItem: (goodsId) => {
     set((state) => state.isPaymentLocked
       ? {}
-      : { items: state.items.filter((i) => i.goodsId !== goodsId) }),
+      : { items: state.items.filter((i) => i.goodsId !== goodsId) });
+    const current = get();
+    if (current.items.length === 0) void clearCheckoutJournal();
+    else saveCartCheckpoint(current, "CART_READY");
+  },
 
-  updateQuantity: (goodsId, quantity) =>
+  updateQuantity: (goodsId, quantity) => {
     set((state) => {
       if (state.isPaymentLocked) return {};
       if (quantity <= 0) {
@@ -136,11 +199,16 @@ export const useCartStore = create<CartState>((set, get) => ({
           i.goodsId === goodsId ? { ...i, quantity } : i
         ),
       };
-    }),
+    });
+    const current = get();
+    if (current.items.length === 0) void clearCheckoutJournal();
+    else saveCartCheckpoint(current, "CART_READY");
+  },
 
   setPaymentMethod: (method) => {
     if (get().isPaymentLocked) return;
     set({ paymentMethod: method });
+    if (get().items.length > 0) saveCartCheckpoint(get(), "CART_READY");
   },
 
   clearCart: () => {
@@ -153,7 +221,71 @@ export const useCartStore = create<CartState>((set, get) => ({
       currentHkOrderNumber: null,
       currentOrderStatus: null,
       isCheckingOut: false,
+      checkoutCheckpoint: null,
+      recoveryNotice: null,
     });
+    void clearCheckoutJournal();
+  },
+
+  setCheckoutContext: (shopId, warehouseId) => {
+    set({ checkoutContext: { shopId, warehouseId } });
+    const current = get();
+    if (current.journalHydrated && current.items.length > 0) {
+      saveCartCheckpoint(current, "CART_READY");
+    }
+  },
+
+  hydrateCheckoutJournal: async () => {
+    if (get().journalHydrated) return;
+    const context = get().checkoutContext;
+    if (!context) return;
+    const journal = await loadCheckoutJournal();
+    if (!journal || journal.checkpoint === "COMPLETED") {
+      set({ journalHydrated: true });
+      if (journal?.checkpoint === "COMPLETED") void clearCheckoutJournal();
+      return;
+    }
+    if (journal.warehouseId !== context.warehouseId) {
+      set({ journalHydrated: true });
+      return;
+    }
+
+    const recoveryCount = journal.recoveryCount + 1;
+    const paymentPending = journal.checkpoint === "PAYMENT_INITIATED";
+    const paymentFinished = [
+      "PAYMENT_CONFIRMED",
+      "RECEIPT_PENDING",
+      "SYNC_PENDING",
+    ].includes(journal.checkpoint);
+    set({
+      items: paymentFinished ? [] : journal.items,
+      paymentMethod: journal.paymentMethod,
+      draftOrderId: paymentFinished ? null : journal.localOrderId,
+      currentOrderId: journal.localOrderId,
+      currentOrderStatus: journal.orderStatus,
+      isPaymentLocked: paymentPending && journal.paymentMethod === "QR_CODE",
+      paymentLockOrderId:
+        paymentPending && journal.paymentMethod === "QR_CODE"
+          ? journal.localOrderId
+          : null,
+      checkoutCheckpoint: journal.checkpoint,
+      journalHydrated: true,
+      recoveryNotice: journal.checkpoint,
+    });
+    void saveCheckoutJournal({
+      ...journal,
+      recoveryCount,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  dismissRecoveryNotice: () => set({ recoveryNotice: null }),
+
+  markReceiptPrinted: (localOrderId) => {
+    const state = get();
+    if (state.currentOrderId !== localOrderId) return;
+    set({ checkoutCheckpoint: "SYNC_PENDING" });
+    saveCartCheckpoint(get(), "SYNC_PENDING", { localOrderId });
   },
 
   prepareCurrentOrder: async (shopId, warehouseId) => {
@@ -164,6 +296,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     const localOrderId = generateLocalOrderId();
     set({ draftOrderId: localOrderId });
+    saveCartCheckpoint(get(), "CART_READY", { localOrderId });
 
     try {
       const prepared = await prepareOrder({
@@ -202,12 +335,25 @@ export const useCartStore = create<CartState>((set, get) => ({
         currentHkOrderNumber: result.hkOrderNumber,
         currentOrderStatus: result.status,
       });
+      if (
+        result.status === "SYNC_SUCCESS" &&
+        get().checkoutCheckpoint === "SYNC_PENDING"
+      ) {
+        set({ checkoutCheckpoint: "COMPLETED" });
+        void clearCheckoutJournal();
+      }
     } catch (error: unknown) {
       console.error("[Giỏ hàng] Không thể tải trạng thái đồng bộ đơn:", error);
     }
   },
 
-  completePayOSCheckout: (localOrderId, status) =>
+  completePayOSCheckout: (localOrderId, status) => {
+    const previous = get();
+    saveCartCheckpoint(previous, "RECEIPT_PENDING", {
+      localOrderId,
+      orderStatus: status,
+      items: previous.items,
+    });
     set({
       items: [],
       paymentMethod: "CASH",
@@ -218,7 +364,9 @@ export const useCartStore = create<CartState>((set, get) => ({
       isCheckingOut: false,
       isPaymentLocked: false,
       paymentLockOrderId: null,
-    }),
+      checkoutCheckpoint: "RECEIPT_PENDING",
+    });
+  },
 
   lockCartForPayOS: (localOrderId) => {
     const state = get();
@@ -232,13 +380,20 @@ export const useCartStore = create<CartState>((set, get) => ({
       isPaymentLocked: true,
       paymentLockOrderId: localOrderId,
       draftOrderId: localOrderId,
+      checkoutCheckpoint: "PAYMENT_INITIATED",
     });
+    saveCartCheckpoint(get(), "PAYMENT_INITIATED", { localOrderId });
     return true;
   },
 
   unlockCartAfterPayOSCancellation: (localOrderId) => {
     if (get().paymentLockOrderId !== localOrderId) return;
-    set({ isPaymentLocked: false, paymentLockOrderId: null });
+    set({
+      isPaymentLocked: false,
+      paymentLockOrderId: null,
+      checkoutCheckpoint: "CART_READY",
+    });
+    saveCartCheckpoint(get(), "CART_READY", { localOrderId });
   },
 
   checkout: async (shopId, warehouseId) => {
@@ -250,10 +405,18 @@ export const useCartStore = create<CartState>((set, get) => ({
       throw new Error("Không thể thanh toán khi giỏ hàng trống.");
     }
 
-    set({ isCheckingOut: true });
+    const localOrderId = state.draftOrderId || generateLocalOrderId();
+    set({
+      isCheckingOut: true,
+      draftOrderId: localOrderId,
+      checkoutCheckpoint: "PAYMENT_INITIATED",
+    });
+    saveCartCheckpoint(get(), "PAYMENT_INITIATED", {
+      localOrderId,
+      items: state.items,
+    });
 
     try {
-      const localOrderId = state.draftOrderId || generateLocalOrderId();
       const result = await checkoutOrder({
         localOrderId,
         shopId,
@@ -265,6 +428,17 @@ export const useCartStore = create<CartState>((set, get) => ({
         })),
       });
 
+      saveCartCheckpoint(get(), "RECEIPT_PENDING", {
+        localOrderId: result.localOrderId,
+        items: state.items,
+        paymentMethod: state.paymentMethod,
+        totalAmount: state.items.reduce(
+          (sum, item) => sum + item.price * item.quantity,
+          0,
+        ),
+        orderStatus: result.status,
+      });
+
       set({
         items: [],
         paymentMethod: "CASH",
@@ -273,12 +447,22 @@ export const useCartStore = create<CartState>((set, get) => ({
         currentHkOrderNumber: result.hkOrderNumber,
         currentOrderStatus: result.status,
         isCheckingOut: false,
+        checkoutCheckpoint: "RECEIPT_PENDING",
       });
 
       return result;
     } catch (error: unknown) {
       console.error("[Giỏ hàng] Thanh toán Firebase thất bại:", error);
-      set({ isCheckingOut: false });
+      set({
+        isCheckingOut: false,
+        checkoutCheckpoint: "PAYMENT_INITIATED",
+      });
+      saveCartCheckpoint(get(), "PAYMENT_INITIATED", {
+        localOrderId,
+        items: state.items,
+        lastError: error instanceof Error ? error.message : "PAYMENT_ERROR",
+      });
+      void recordPendingFailure("PAYMENT_ERROR", error, { localOrderId });
       throw error;
     }
   },

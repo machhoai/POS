@@ -4,6 +4,7 @@
 
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
+import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 
 /** Result returned by the syncProducts callable function. */
 export interface SyncProductsResult {
@@ -44,7 +45,9 @@ export async function getProducts(): Promise<GetProductsResult> {
     "getPosAuthSession"
   );
 
-  const result = await callable({ action: "getProducts" });
+  const result = await callable(
+    await withDeviceAuth({ action: "getProducts" as const }),
+  );
   return result.data;
 }
 
@@ -60,6 +63,8 @@ export async function syncProducts(): Promise<SyncProductsResult> {
     "getPosAuthSession"
   );
 
-  const result = await callable({ action: "syncProducts" });
+  const result = await callable(
+    await withDeviceAuth({ action: "syncProducts" as const }),
+  );
   return result.data;
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { QRCodeSVG } from "qrcode.react";
 import type { PayOSCheckoutController } from "@/lib/types/payment";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
@@ -40,7 +41,70 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function FixedTransferPanel({ payment }: PayOSQrPanelProps) {
+  const transfer = payment.fixedTransfer;
+  if (!transfer || transfer.status !== "AWAITING_MANUAL_CONFIRMATION") {
+    return null;
+  }
+
+  return (
+    <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(280px,0.85fr)_minmax(360px,1.15fr)]">
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-amber-300 bg-amber-50 p-5">
+        <div className="rounded-2xl bg-white p-3 shadow-sm">
+          <img
+            src={transfer.qrImageUrl}
+            width={300}
+            height={356}
+            alt="Mã QR chuyển khoản vào tài khoản cố định"
+            className="h-auto w-[300px] max-w-full"
+          />
+        </div>
+        <p className="mt-3 text-center text-sm font-bold text-amber-900">
+          QR tài khoản cố định · Không kiểm tra tự động
+        </p>
+      </div>
+
+      <div className="flex min-h-0 flex-col gap-3">
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          PayOS không cung cấp được mã QR. Sau khi khách chuyển khoản, nhân viên phải kiểm tra thông tin và xác nhận thủ công.
+        </div>
+        <dl className="rounded-2xl border border-slate-200 bg-white px-4">
+          <DetailRow label="Số tiền" value={formatCurrency(transfer.amount)} />
+          <DetailRow label="Chủ tài khoản" value={transfer.accountName} />
+          <DetailRow label="Số tài khoản" value={transfer.accountNumber} />
+          <DetailRow label="Ngân hàng (BIN)" value={transfer.bankBin} />
+          <DetailRow label="Nội dung" value={transfer.description} />
+        </dl>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => void payment.confirmManually()}
+            disabled={payment.isBusy}
+            className="min-h-12 rounded-xl bg-amber-600 px-4 text-sm font-bold text-white transition hover:bg-amber-700 disabled:opacity-50"
+          >
+            {payment.isBusy ? "Đang hoàn tất..." : "Xác nhận khách đã chuyển khoản"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void payment.cancelPayment()}
+            disabled={payment.isBusy}
+            className="min-h-12 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            Hủy thanh toán và sửa giỏ
+          </button>
+        </div>
+        <p className="text-xs font-semibold leading-5 text-red-600">
+          Đơn sau khi hoàn tất sẽ được đánh dấu “Chưa được xác nhận thanh toán” trong lịch sử.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export default function PayOSQrPanel({ payment }: PayOSQrPanelProps) {
+  if (payment.fixedTransfer?.status === "AWAITING_MANUAL_CONFIRMATION") {
+    return <FixedTransferPanel payment={payment} />;
+  }
   const session = payment.session;
   if (!session) {
     return (
@@ -127,7 +191,7 @@ export default function PayOSQrPanel({ payment }: PayOSQrPanelProps) {
         </div>
         {payment.canConfirmManually && (
           <p className="text-xs leading-5 text-red-600">
-            Chỉ dùng sau khi đã kiểm tra giao dịch thực tế. Đơn sẽ được lưu ý xác nhận thủ công để đối soát.
+            Chỉ dùng sau khi đã kiểm tra giao dịch thực tế. Đơn sẽ được đánh dấu “Chưa được xác nhận thanh toán”.
           </p>
         )}
       </div>

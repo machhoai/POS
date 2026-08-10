@@ -3,6 +3,8 @@ import { FirebaseError } from "firebase/app";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import type { AuthSessionData } from "@/lib/types/user";
+import type { PosDeviceCredential } from "@/lib/types/deviceEnrollment";
+import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 
 interface ResolveLoginIdentifierRequest {
   identifier: string;
@@ -39,7 +41,9 @@ export async function resolveLoginEmail(identifier: string): Promise<string> {
   >(functions, "resolvePosLoginIdentifier");
 
   try {
-    const result = await resolveIdentifier({ identifier: identifier.trim() });
+    const result = await resolveIdentifier(
+      await withDeviceAuth({ identifier: identifier.trim() }),
+    );
     if (!result.data.email) {
       throw new AuthServiceError(
         "Thông tin đăng nhập không chính xác.",
@@ -71,7 +75,10 @@ export async function resolveLoginEmail(identifier: string): Promise<string> {
 export async function createPosAuthSession(
   firebaseUser: User,
 ): Promise<AuthSessionData> {
-  const getSession = httpsCallable<Record<string, never>, AuthSessionData>(
+  const getSession = httpsCallable<
+    { device_auth: PosDeviceCredential },
+    AuthSessionData
+  >(
     functions,
     "getPosAuthSession",
   );
@@ -79,7 +86,7 @@ export async function createPosAuthSession(
   try {
     // Ensure the callable request carries a current Firebase ID token.
     await firebaseUser.getIdToken();
-    const result = await getSession({});
+    const result = await getSession(await withDeviceAuth({}));
     return result.data;
   } catch (error: unknown) {
     if (

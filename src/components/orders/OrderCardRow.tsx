@@ -67,6 +67,7 @@ function formatDate(iso: string) {
 
 export default function OrderCardRow({ order, onSelectOrder, onRetrySync }: OrderCardRowProps) {
     const status = STATUS_CONFIG[order.status] || STATUS_CONFIG.DRAFT;
+    const isPaymentUnverified = order.paymentVerificationStatus === "UNVERIFIED";
     const shortId = order.localOrderId.split("-").pop() || order.localOrderId;
     const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
     const hdId = order.hkOrderNumber;
@@ -81,12 +82,21 @@ export default function OrderCardRow({ order, onSelectOrder, onRetrySync }: Orde
     return (
         <div
             onClick={() => onSelectOrder(order)}
-            className={`group relative flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 md:px-5 md:py-2 bg-[var(--color-surface)] border border-[var(--color-border)] ${status.borderLeftClass} border-l-4 rounded-2xl transition-all duration-200 hover:shadow-md hover:border-[var(--color-border-subtle)] hover:translate-y-[-1px] cursor-pointer`}
+            className={`group relative flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 md:px-5 md:py-2 border border-l-4 rounded-2xl transition-all duration-200 hover:shadow-md hover:translate-y-[-1px] cursor-pointer ${
+                isPaymentUnverified
+                    ? "bg-amber-500/15 border-amber-500/60 border-l-amber-500 hover:border-amber-500"
+                    : `bg-[var(--color-surface)] border-[var(--color-border)] ${status.borderLeftClass} hover:border-[var(--color-border-subtle)]`
+            }`}
         >
             {/* Left Section: Order Info & Customer */}
             <div className="flex flex-col items-start justify-center flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold font-mono text-[var(--color-text-primary)]">{shortId}</span>
+                    {isPaymentUnverified && (
+                        <span className="inline-flex rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-black">
+                            Chưa được xác nhận thanh toán
+                        </span>
+                    )}
                     {/* Created Time */}
                     <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

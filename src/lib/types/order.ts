@@ -89,6 +89,35 @@ export interface PayOSManualConfirmation {
   previousPaymentStatus: PayOSPaymentStatus;
 }
 
+export type PaymentVerificationStatus = "VERIFIED" | "UNVERIFIED";
+
+export type FixedTransferStatus =
+  | "AWAITING_MANUAL_CONFIRMATION"
+  | "MANUALLY_CONFIRMED"
+  | "CANCELLED";
+
+export type FixedTransferReason =
+  | "PAYOS_CREATE_FAILED"
+  | "PAYOS_QR_MISSING";
+
+export interface FixedTransferDetails {
+  provider: "vietqr_quicklink";
+  status: FixedTransferStatus;
+  reason: FixedTransferReason;
+  bankBin: string;
+  accountNumber: string;
+  accountName: string;
+  amount: number;
+  description: string;
+  qrImageUrl: string;
+  settingsVersion: number;
+  createdAt: string;
+  updatedAt: string;
+  confirmedAt?: string;
+  confirmedByUid?: string;
+  confirmedByName?: string;
+}
+
 /**
  * The primary order document stored in Firestore `pos_orders` collection.
  *
@@ -142,6 +171,12 @@ export interface PosOrder {
 
   /** PayOS QR session data. Present only for transfer payments. */
   paymentDetails?: PayOSPaymentDetails;
+
+  /** QR tài khoản cố định được dùng khi PayOS không thể cung cấp mã. */
+  fixedTransferDetails?: FixedTransferDetails;
+
+  /** UNVERIFIED means a cashier completed a fixed-account transfer manually. */
+  paymentVerificationStatus?: PaymentVerificationStatus;
 
   /** Tên khách hàng (nếu là thành viên) */
   customerName?: string;
