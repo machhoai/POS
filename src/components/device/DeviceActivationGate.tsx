@@ -14,6 +14,7 @@ import {
   loadDeviceCredential,
   openDeviceSession,
   persistVerifiedDeviceSession,
+  watchRemoteReceiptSettings,
 } from "@/lib/services/deviceEnrollmentService";
 import type { PosDeviceCredential } from "@/lib/types/deviceEnrollment";
 
@@ -31,6 +32,9 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
   const [warning, setWarning] = useState("");
   const applyRemoteSettings = useReceiptSettingsStore(
     (state) => state.applyRemoteSettings,
+  );
+  const remoteReceiptVersion = useReceiptSettingsStore(
+    (state) => state.remoteVersion,
   );
 
   const syncDevice = useCallback(
@@ -109,6 +113,50 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
     const timer = window.setInterval(() => void syncDevice(credential), 60_000);
     return () => window.clearInterval(timer);
   }, [credential, syncDevice]);
+
+  useEffect(() => {
+    if (!credential || blocked || !isTauriRuntime()) return;
+    let cancelled = false;
+    let activeController: AbortController | null = null;
+    const watch = async () => {
+      while (!cancelled) {
+        activeController = new AbortController();
+        try {
+          const result = await watchRemoteReceiptSettings(
+            credential,
+            remoteReceiptVersion,
+            activeController.signal,
+          );
+          if (cancelled) return;
+          if (result.changed && result.receipt_settings) {
+            applyRemoteSettings(
+              result.receipt_settings.warehouse_id,
+              result.receipt_settings.version,
+              mapRemoteReceiptSettings(result.receipt_settings),
+            );
+          }
+        } catch (reason: unknown) {
+          if (cancelled) return;
+          if (reason instanceof DeviceSessionError && reason.revoked) {
+            void syncDevice(credential);
+            return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 3_000));
+        }
+      }
+    };
+    void watch();
+    return () => {
+      cancelled = true;
+      activeController?.abort();
+    };
+  }, [
+    applyRemoteSettings,
+    blocked,
+    credential,
+    remoteReceiptVersion,
+    syncDevice,
+  ]);
 
   if (checking) {
     return (

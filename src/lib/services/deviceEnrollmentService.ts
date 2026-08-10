@@ -4,6 +4,7 @@ import type {
   PosDeviceActivationResult,
   PosDeviceCredential,
   PosDeviceSessionResult,
+  PosReceiptSettingsWatchResult,
 } from "@/lib/types/deviceEnrollment";
 
 const API_BASE_URL =
@@ -148,6 +149,42 @@ export async function openDeviceSession(
   if (!response.ok || !envelope.data) {
     throw new DeviceSessionError(
       envelope.messages?.vi || "Máy POS không còn quyền truy cập.",
+      response.status === 401 || response.status === 403,
+    );
+  }
+  return envelope.data;
+}
+
+export async function watchRemoteReceiptSettings(
+  credential: PosDeviceCredential,
+  knownVersion: number | null,
+  signal: AbortSignal,
+): Promise<PosReceiptSettingsWatchResult> {
+  const appVersion = await getVersion();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/pos/devices/receipt-settings/watch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_id: credential.device_id,
+        device_credential: credential.device_credential,
+        app_version: appVersion,
+        known_version: knownVersion,
+      }),
+      signal,
+    });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new DeviceSessionError(
+      "Không thể theo dõi cấu hình hóa đơn mới. JPOS sẽ tự kết nối lại.",
+      false,
+    );
+  }
+  const envelope = (await response.json()) as ApiEnvelope<PosReceiptSettingsWatchResult>;
+  if (!response.ok || !envelope.data) {
+    throw new DeviceSessionError(
+      envelope.messages?.vi || "Không thể nhận cấu hình hóa đơn POS.",
       response.status === 401 || response.status === 403,
     );
   }

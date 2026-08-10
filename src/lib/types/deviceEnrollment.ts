@@ -44,6 +44,12 @@ export interface RemotePosReceiptSettings {
   default_tax_rate: number;
 }
 
+export interface PosReceiptSettingsWatchResult {
+  changed: boolean;
+  receipt_settings: RemotePosReceiptSettings | null;
+  server_time: string;
+}
+
 export interface PosDeviceSessionResult {
   device: PosDeviceActivationResult["device"];
   receipt_settings: RemotePosReceiptSettings | null;

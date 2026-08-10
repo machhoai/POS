@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, ReceiptText, type LucideIcon } from "lucide-react";
+import { CreditCard, type LucideIcon } from "lucide-react";
 
 type SettingsTab = {
   href: string;
@@ -12,11 +12,6 @@ type SettingsTab = {
 
 // Add future settings pages here to expose them in the shared tab bar.
 const SETTINGS_TABS: readonly SettingsTab[] = [
-  {
-    href: "/settings/receipt",
-    label: "In bill",
-    icon: ReceiptText,
-  },
   {
     href: "/settings/payment",
     label: "Thanh toán",

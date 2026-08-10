@@ -67,12 +67,13 @@ export function useMemberPackageCustomerDisplayPublisher({
         paymentMethod,
         orderStatus: "DRAFT",
         payment: {
-          session: paymentSession,
-          nextAction: paymentNextAction,
-          remainingSeconds: paymentRemainingSeconds,
-          errorMessage: paymentErrorMessage,
-          isCartLocked: paymentIsCartLocked,
-          isBusy: paymentIsBusy,
+            session: paymentSession,
+            nextAction: paymentNextAction,
+            remainingSeconds: paymentRemainingSeconds,
+            errorMessage: paymentErrorMessage,
+            isCartLocked: paymentIsCartLocked,
+            isBusy: paymentIsBusy,
+            fixedTransfer: null
         },
         lastOrder: order,
       });

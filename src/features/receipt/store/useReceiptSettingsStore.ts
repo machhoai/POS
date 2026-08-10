@@ -32,7 +32,7 @@ export const useReceiptSettingsStore = create<ReceiptSettingsState>()(
       applyRemoteSettings: (warehouseId, version, settings) =>
         set((state) => {
           const isNewerWarehouse = state.remoteWarehouseId !== warehouseId;
-          if (!isNewerWarehouse && (state.remoteVersion ?? 0) >= version) {
+          if (!isNewerWarehouse && (state.remoteVersion ?? 0) > version) {
             return state;
           }
           return {
