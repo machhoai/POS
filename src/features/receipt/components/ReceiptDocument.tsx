@@ -415,7 +415,7 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                                 fontWeight: fontWeights.invoiceQrHint,
                             }}
                         >
-                            Thông tin hóa đơn được tiếp nhận trước 22h của ngày lập hóa đơn.
+                            Vui lòng điền thông tin xuất hóa đơn trước 22:30 cùng ngày.
                         </div>
                     </section>
                 )}
