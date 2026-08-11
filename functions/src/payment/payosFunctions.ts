@@ -621,6 +621,25 @@ async function createPayOSOrFallback(
   order: PosOrder,
 ): Promise<PosOrder> {
   const docRef = db.collection(POS_COLLECTIONS.orders).doc(order.localOrderId);
+  const settingsSnapshot = await db
+    .collection(POS_COLLECTIONS.paymentSettings)
+    .doc(order.warehouseId)
+    .get();
+  const fixedTransferOnly = settingsSnapshot.exists &&
+    settingsSnapshot.data()?.enabled === true &&
+    settingsSnapshot.data()?.fixedTransferOnly === true;
+  if (fixedTransferOnly) {
+    logger.info("[Thanh toán] Dùng QR tài khoản cố định theo cấu hình", {
+      localOrderId: order.localOrderId,
+      warehouseId: order.warehouseId,
+    });
+    return activateFixedTransferForOrder(
+      userId,
+      docRef,
+      "FIXED_TRANSFER_ONLY",
+    );
+  }
+
   let createdOrder: PosOrder;
   try {
     createdOrder = await createPaymentLinkForOrder(userId, order);
@@ -798,12 +817,10 @@ export async function confirmPayOSPaymentManuallyForUser(
       orderStatus: order.status,
       isOrderCreator: order.createdBy === userId,
       paymentStatus: attempt.status,
-      lastConnectionErrorAt: details.lastConnectionErrorAt,
-      nowMs: Date.now(),
     })) {
       throw new HttpsError(
         "failed-precondition",
-        "Chỉ được xác nhận thủ công sau khi không thể kết nối PayOS để kiểm tra.",
+        "Đơn hàng không ở trạng thái cho phép xác nhận chuyển khoản thủ công.",
       );
     }
 
@@ -815,8 +832,8 @@ export async function confirmPayOSPaymentManuallyForUser(
         confirmedAt,
         confirmedByUid: userId,
         confirmedByName: authorized.operatorName,
-        reason: "PAYOS_UNAVAILABLE",
-        note: "Khách đã chuyển khoản; thu ngân xác nhận thủ công khi PayOS không khả dụng.",
+        reason: "PAYOS_NOT_CONFIRMED",
+        note: "Khách đã chuyển khoản; nhân viên xác nhận ngoại lệ khi hệ thống chưa ghi nhận thanh toán.",
         previousPaymentStatus: attempt.status,
       },
     };

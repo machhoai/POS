@@ -21,6 +21,24 @@ import {
   type SyncProduct,
 } from "../types/product";
 const BATCH_LIMIT = 500;
+const POINT_PACKAGE_CATEGORY_IDS = new Set([1, 2, 6]);
+
+interface ProductVisualMetadata {
+  foreColor?: string;
+  backColor?: string;
+  ticketsPerUnit?: number;
+  principalPoints?: number;
+  bonusPoints?: number;
+}
+
+function toNonNegativeNumber(...values: unknown[]): number {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return 0;
+}
 
 export interface ProductSyncResult {
   success: true;
@@ -55,7 +73,7 @@ function extractList<T>(
 function mapProductVisualMetadata(items: HKProductVisualItem[]) {
   const metadataByGoodsId = new Map<
     string,
-    { foreColor?: string; backColor?: string; ticketsPerUnit?: number }
+    ProductVisualMetadata
   >();
 
   for (const item of items) {
@@ -86,12 +104,9 @@ function mapProductVisualMetadata(items: HKProductVisualItem[]) {
   return metadataByGoodsId;
 }
 
-async function loadProductDetailVisualColors(
+async function loadProductDetailMetadata(
   items: HKGoodsItem[],
-  colorsByGoodsId: Map<
-    string,
-    { foreColor?: string; backColor?: string; ticketsPerUnit?: number }
-  >,
+  metadataByGoodsId: Map<string, ProductVisualMetadata>,
 ): Promise<void> {
   const goodsIds = Array.from(new Set(items.flatMap((item) => {
     const goodsId = (item.GoodsId || item.goodsId || "").trim();
@@ -113,16 +128,24 @@ async function loadProductDetailVisualColors(
     const detail = result.value.response.data;
     const foreColor = detail?.foreColor?.trim() || "";
     const backColor = detail?.backColor?.trim() || "";
-    if (!foreColor && !backColor) continue;
-
-    colorsByGoodsId.set(result.value.goodsId, {
+    const principalPoints = toNonNegativeNumber(detail?.amount, detail?.Amount);
+    const bonusPoints = (detail?.giveConfigs ?? []).reduce((total, config) => {
+      const giveAmount = Number(config.giveAmount);
+      return Number.isFinite(giveAmount) && giveAmount > 0
+        ? total + giveAmount
+        : total;
+    }, 0);
+    metadataByGoodsId.set(result.value.goodsId, {
+      ...metadataByGoodsId.get(result.value.goodsId),
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
+      principalPoints,
+      bonusPoints,
     });
     loadedCount += 1;
   }
 
-  logger.info("[productSync] Product detail colors loaded", {
+  logger.info("[productSync] Product detail metadata loaded", {
     requestedCount: goodsIds.length,
     loadedCount,
     failedCount,
@@ -188,6 +211,12 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       subCategory: data.subCategory ? String(data.subCategory) : "",
       ...(data.foreColor ? { foreColor: String(data.foreColor) } : {}),
       ...(data.backColor ? { backColor: String(data.backColor) } : {}),
+      ...(Number.isFinite(Number(data.principalPoints)) && Number(data.principalPoints) >= 0
+        ? { principalPoints: Number(data.principalPoints) }
+        : {}),
+      ...(Number.isFinite(Number(data.bonusPoints)) && Number(data.bonusPoints) >= 0
+        ? { bonusPoints: Number(data.bonusPoints) }
+        : {}),
       ...(Number.isInteger(Number(data.ticketsPerUnit)) && Number(data.ticketsPerUnit) >= 0
         ? { ticketsPerUnit: Number(data.ticketsPerUnit) }
         : {}),
@@ -217,7 +246,7 @@ export async function synchronizePosProducts(
   const visualResponse = await fetchProductVisualCatalog();
   const visualColorsByGoodsId = visualResponse.success
     ? mapProductVisualMetadata(extractList<HKProductVisualItem>(visualResponse.data))
-    : new Map<string, { foreColor?: string; backColor?: string; ticketsPerUnit?: number }>();
+    : new Map<string, ProductVisualMetadata>();
 
   if (!visualResponse.success) {
     logger.warn("[productSync] Product visual catalog request failed", {
@@ -260,8 +289,8 @@ export async function synchronizePosProducts(
       response.data,
       ["goodsItems"],
     );
-    if (categoryId === 1) {
-      await loadProductDetailVisualColors(
+    if (POINT_PACKAGE_CATEGORY_IDS.has(categoryId)) {
+      await loadProductDetailMetadata(
         ungroupedItems,
         visualColorsByGoodsId,
       );

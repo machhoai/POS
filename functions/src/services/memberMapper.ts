@@ -241,25 +241,31 @@ export function mapMemberPointPackage(input: {
     }];
   });
 
-  const principalPoints = credits
-    .filter((credit) => credit.bucket === "PRINCIPAL_VND")
-    .reduce((total, credit) => total + credit.amount, 0);
-  const bonusBucketPoints = credits
-    .filter((credit) => credit.bucket === "BONUS")
-    .reduce((total, credit) => total + credit.amount, 0);
+  const principalPoints =
+    toFiniteNumber(input.detail.amount) ??
+    toFiniteNumber(input.detail.Amount) ??
+    0;
+  const bonusBucketPoints = (input.detail.giveConfigs ?? [])
+    .reduce((total, config) => {
+      const giveAmount = toFiniteNumber(config.giveAmount);
+      return giveAmount !== null && giveAmount > 0
+        ? total + giveAmount
+        : total;
+    }, 0);
   const totalPoints = principalPoints + bonusBucketPoints;
 
-  if (totalPoints <= 0) return null;
+  if (principalPoints < 0 || bonusBucketPoints < 0 || totalPoints <= 0) return null;
 
+  const paymentAmountVnd = toRequiredNumber(
+    input.precalculation.totalMoney,
+    "order_precalculate.data.totalMoney",
+  );
   return {
     goodsId,
     name: toOptionalString(input.listItem.goodsName ?? input.detail.setMealName),
     description: toOptionalString(input.listItem.remark),
     badge: toOptionalString(input.listItem.badge),
-    paymentAmountVnd: toRequiredNumber(
-      input.precalculation.totalMoney,
-      "order_precalculate.data.totalMoney",
-    ),
+    paymentAmountVnd,
     originalAmountVnd:
       toFiniteNumber(input.precalculation.totalOriginalMoney) ??
       toRequiredNumber(input.precalculation.totalMoney, "totalMoney"),

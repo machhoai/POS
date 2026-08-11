@@ -69,6 +69,7 @@ export function useMemberCompensationController({
     }
     const operationId = operationIdRef.current ?? crypto.randomUUID();
     operationIdRef.current = operationId;
+    const isDeduction = normalized.amount < 0;
     startMutation("COMPENSATION_TOP_UP");
     try {
       const result = await showPromise(compensateMemberBalance({
@@ -82,9 +83,9 @@ export function useMemberCompensationController({
         reason: normalized.reason,
         actionTime: new Date().toISOString(),
       }), {
-        loading: "Đang nạp bù qua OpenAPI...",
-        success: "Nạp bù thành công",
-        error: "Không thể nạp bù",
+        loading: isDeduction ? "Đang trừ điểm qua OpenAPI..." : "Đang nạp bù qua OpenAPI...",
+        success: isDeduction ? "Trừ điểm thành công" : "Nạp bù thành công",
+        error: isDeduction ? "Không thể trừ điểm" : "Không thể nạp bù",
         successDescription: "Số dư và lịch sử thành viên đang được cập nhật.",
         errorDescription: "Yêu cầu được giữ nguyên mã để có thể thử lại an toàn.",
         onRetry: retryCompensation,

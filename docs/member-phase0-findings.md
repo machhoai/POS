@@ -19,8 +19,8 @@ Phạm vi: chỉ đọc, không tạo đơn, không thanh toán và không thay 
 3. `setmeal_getsellgoods` chỉ trả tên, `goodsId`, category và giá; không trả cấu hình điểm thưởng.
 4. Phải gọi `setmeal_passticket_details` bằng `goodsId` để lấy `giveConfigs`.
 5. Tiền khách thực trả phải lấy từ `order_precalculate.data.totalMoney`. Trên dữ liệu hiện tại, giá này bằng `afterTaxPrice`; trường `price` trong response chi tiết là giá trước thuế.
-6. Giá trị được cấp khi mua gói nằm trong `giveConfigs[].giveAmount`, không nằm trong các trường top-level `nativecoin1`, `givecoin1`, `coinbal2` hoặc `integral`.
-7. Toàn bộ gói thành viên hiện tại đều cấp vào account `赠币` (tiền thưởng), không cấp trực tiếp vào account `VND`.
+6. Công thức hiển thị của gói lấy từ response chi tiết: `amount` là giá trị gốc và tổng `giveConfigs[].giveAmount` là giá trị thưởng.
+7. Tổng giá trị gói phải tính bằng `amount + sum(giveConfigs[].giveAmount)`; các trường top-level `givecoin1`, `nativecoin1`, `coinbal2` và `integral` hiện đều bằng `0`.
 
 ## Mapping bucket đã xác minh
 
@@ -60,27 +60,27 @@ Không dùng `integral`/category `105` làm số dư chính của chức năng t
 | Diamond x2 thưởng | 4.070.000 đ | +3.267 | 6.534 | Tiền thưởng |
 | Gói Diamond x2 ONLINE | 4.070.000 đ | +3.267 | 6.534 | Tiền thưởng |
 
-Hai cột có nhãn **(API)** là giá trị lấy trực tiếp từ response. Cột **Thưởng tăng thêm (đối chiếu)** là chênh lệch so với gói cơ sở cùng hạng và khớp với tên gói hiện tại; OpenAPI không có field riêng cho giá trị này.
+Giá trị gốc và thưởng phải lấy trực tiếp từ `amount` và tổng `giveConfigs[].giveAmount`; không suy ra từ giá thanh toán hoặc tên gói.
 
-`Gói sinh nhật 12 bé` cũng thuộc category 1 nhưng không có `giveConfigs`, vì vậy không được coi là gói top-up thành viên trong giao diện.
+`Gói sinh nhật 12 bé` cũng thuộc category 1 nhưng không có tổng `amount + sum(giveAmount)` dương, vì vậy không được coi là gói top-up thành viên trong giao diện.
 
 ## Quy tắc mapper cần triển khai
 
 ```ts
 customerPaysVnd = precalculation.totalMoney;
+principalPoints = detail.amount;
+bonusPoints = sum(detail.giveConfigs.map(config => config.giveAmount));
+totalPoints = principalPoints + bonusPoints;
 creditedAccounts = detail.giveConfigs.map(config => ({
   accountId: config.shopAcctId,
   amount: config.giveAmount,
 }));
 
-vndCredit = sum(config.giveAmount where account.extendAttr === 1);
-bonusCredit = sum(config.giveAmount where account.extendAttr === 2);
-totalPlayableCredit = vndCredit + bonusCredit;
+configuredVndCredit = sum(config.giveAmount where account.extendAttr === 1);
+configuredBonusCredit = sum(config.giveAmount where account.extendAttr === 2);
 ```
 
-Với cấu hình hiện tại, `vndCredit = 0` và `bonusCredit = giveAmount` cho các gói top-up.
-
-Không suy ra “thưởng thêm” bằng cách parse tên như `+50`, `+100`, `+150` hoặc `x2`. API chỉ trả tổng lượng cấp vào từng account, không trả quan hệ giữa gói khuyến mãi và gói cơ sở. Nếu UI cần tách riêng “phần cơ sở” và “phần thưởng tăng thêm”, cần thêm cấu hình nghiệp vụ do quản trị cung cấp hoặc yêu cầu phía OpenAPI bổ sung trường.
+Số hiển thị gốc/thưởng trên catalog chỉ lấy từ `amount` và tổng `giveConfigs[].giveAmount`.
 
 ## Công cụ tái kiểm tra
 

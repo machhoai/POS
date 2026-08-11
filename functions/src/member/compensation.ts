@@ -272,11 +272,12 @@ export async function compensatePosMemberForUser(
 
   let response;
   try {
+    const remoteRemarkPrefix = input.amount < 0 ? "Điều chỉnh trừ điểm thẻ" : "Nạp bù thẻ";
     response = await compensateRemoteMemberBalance({
       uid: input.uid,
       operationId: input.operationId,
       amount: input.amount,
-      remark: `Nạp bù thẻ: ${input.reason}`,
+      remark: `${remoteRemarkPrefix}: ${input.reason}`,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Không rõ nguyên nhân";

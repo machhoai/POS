@@ -104,6 +104,7 @@ export async function saveFixedTransferSettingsForUser(
     normalized = normalizeFixedTransferSettings({
       warehouseId,
       enabled: rawInput.enabled === true,
+      fixedTransferOnly: rawInput.fixedTransferOnly === true,
       bankBin: typeof rawInput.bankBin === "string" ? rawInput.bankBin : "",
       accountNumber: typeof rawInput.accountNumber === "string"
         ? rawInput.accountNumber

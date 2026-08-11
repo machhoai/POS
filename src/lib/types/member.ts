@@ -67,6 +67,10 @@ export interface MemberPointPackage {
   principalPoints: number;
   bonusBucketPoints: number;
   totalPoints: number;
+  category?: number;
+  typeName?: string;
+  foreColor?: string;
+  backColor?: string;
   /** OpenAPI chưa trả trực tiếp trường thưởng tăng thêm. */
   extraBonusPoints: number | null;
   credits: MemberPackageCredit[];

@@ -1,3 +1,4 @@
+import * as logger from "firebase-functions/logger";
 import {
   fetchGoodsByCategory,
   fetchMemberAccounts,
@@ -7,11 +8,23 @@ import {
 } from "./hkApiService";
 import { mapMemberAccounts, mapMemberPointPackage } from "./memberMapper";
 import type {
+  HKMemberPackageDetailDto,
   HKMemberPackageListItemDto,
   MemberAccountDefinition,
   MemberPointPackage,
 } from "../types/member";
 import { MemberRemoteApiError } from "../member/functions";
+
+const PACKAGE_LOAD_CONCURRENCY = 3;
+
+function nonNegativePackageValue(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return null;
+}
 
 function remoteReason<T>(response: HKApiResponse<T>, fallback: string): string {
   return response.msg?.trim() || response.desc?.trim() || fallback;
@@ -37,6 +50,17 @@ function extractGoodsItems(data: Record<string, unknown> | null): HKMemberPackag
   if (!data) return [];
   const candidates = [data.goodsItems, data.items, data.list, data.data];
   return (candidates.find(Array.isArray) ?? []) as HKMemberPackageListItemDto[];
+}
+
+export function hasPlayableMemberPackageCredits(
+  detail: HKMemberPackageDetailDto,
+): boolean {
+  const amount = nonNegativePackageValue(detail.amount, detail.Amount);
+  const giveAmount = (detail.giveConfigs ?? []).reduce((total, config) => {
+    const parsed = Number(config.giveAmount);
+    return Number.isFinite(parsed) && parsed > 0 ? total + parsed : total;
+  }, 0);
+  return amount !== null && amount + giveAmount > 0;
 }
 
 async function loadPackageCatalogBase(): Promise<{
@@ -76,16 +100,10 @@ async function loadMappedPackage(
 ): Promise<MemberPointPackage | null> {
   const goodsId = listItem.goodsId?.trim();
   if (!goodsId) return null;
-  const [detailResponse, calculationResponse] = await Promise.all([
-    callRemote(
-      "setmeal_passticket_details",
-      () => fetchMemberPackageDetail(goodsId),
-    ),
-    callRemote("order_precalculate", () => precalculateOrder({
-      uid,
-      goodsItems: [{ goodsId, quantity: "1" }],
-    })),
-  ]);
+  const detailResponse = await callRemote(
+    "setmeal_passticket_details",
+    () => fetchMemberPackageDetail(goodsId),
+  );
 
   if (!detailResponse.success || !detailResponse.data) {
     throw new MemberRemoteApiError(
@@ -94,6 +112,17 @@ async function loadMappedPackage(
       remoteReason(detailResponse, `Không thể tải cấu hình gói ${goodsId}.`),
     );
   }
+  if (!hasPlayableMemberPackageCredits(detailResponse.data)) {
+    return null;
+  }
+
+  const calculationResponse = await callRemote(
+    "order_precalculate",
+    () => precalculateOrder({
+      uid,
+      goodsItems: [{ goodsId, quantity: "1" }],
+    }),
+  );
   if (!calculationResponse.success || !calculationResponse.data) {
     throw new MemberRemoteApiError(
       "order_precalculate",
@@ -114,12 +143,33 @@ export async function loadRemoteMemberPackages(
   uid: string,
 ): Promise<MemberPointPackage[]> {
   const { listItems, accounts } = await loadPackageCatalogBase();
-  const packages = await Promise.all(
-    listItems.map((listItem) => loadMappedPackage(uid, listItem, accounts)),
-  );
+  const packages: MemberPointPackage[] = [];
+  let firstFailure: unknown = null;
+
+  for (let index = 0; index < listItems.length; index += PACKAGE_LOAD_CONCURRENCY) {
+    const batch = listItems.slice(index, index + PACKAGE_LOAD_CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map((listItem) => loadMappedPackage(uid, listItem, accounts)),
+    );
+
+    results.forEach((result, resultIndex) => {
+      if (result.status === "fulfilled") {
+        if (result.value) packages.push(result.value);
+        return;
+      }
+      firstFailure ??= result.reason;
+      logger.warn("[Member packages] Bỏ qua gói không thể tải", {
+        goodsId: batch[resultIndex]?.goodsId?.trim() || null,
+        error: result.reason instanceof Error
+          ? result.reason.message
+          : String(result.reason),
+      });
+    });
+  }
+
+  if (packages.length === 0 && firstFailure) throw firstFailure;
 
   return packages
-    .filter((item): item is MemberPointPackage => item !== null)
     .sort((left, right) =>
       left.paymentAmountVnd - right.paymentAmountVnd ||
       left.totalPoints - right.totalPoints ||

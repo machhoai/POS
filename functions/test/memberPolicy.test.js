@@ -97,6 +97,13 @@ test("validates and normalizes a member compensation request", () => {
   assert.equal(input.amount, 50);
   assert.equal(input.reason, "Bù số dư do lỗi ghi thẻ");
   assert.equal(input.actionTime, "2026-08-10T03:30:20.000Z");
+
+  const deduction = validateMemberCompensationInput({
+    ...input,
+    operationId: "019fe98d-d856-7c63-9404-6c0587d0c4ad",
+    amount: -25,
+  });
+  assert.equal(deduction.amount, -25);
 });
 
 test("rejects invalid compensation amounts, reasons, and operation ids", () => {
@@ -112,7 +119,11 @@ test("rejects invalid compensation amounts, reasons, and operation ids", () => {
   };
   assert.throws(
     () => validateMemberCompensationInput({ ...base, amount: 0 }),
-    /Số điểm nạp bù không hợp lệ/,
+    /Số điểm điều chỉnh không hợp lệ/,
+  );
+  assert.throws(
+    () => validateMemberCompensationInput({ ...base, amount: -10_000_001 }),
+    /Số điểm điều chỉnh không hợp lệ/,
   );
   assert.throws(
     () => validateMemberCompensationInput({ ...base, reason: "lỗi" }),
@@ -140,6 +151,15 @@ test("builds the documented member_addstored idempotent payload", () => {
     bizCode: "019fe98d-d856-7c63-9404-6c0587d0c4ac",
     remark: "Nạp bù thẻ: Bù số dư do lỗi ghi thẻ",
   });
+});
+
+test("preserves a negative stored value for point deductions", () => {
+  assert.equal(buildRemoteMemberCompensationBody({
+    uid: "member-01",
+    operationId: "019fe98d-d856-7c63-9404-6c0587d0c4ad",
+    amount: -50,
+    remark: "Điều chỉnh trừ điểm thẻ: Thu hồi điểm nạp thừa",
+  }).storedValue, -50);
 });
 
 test("validates member stored-value history filters", () => {

@@ -19,7 +19,7 @@ export default function MemberCompensationPanel({
   compensation,
 }: MemberCompensationPanelProps) {
   return (
-    <div className="space-y-4">
+    <div className="scrollbar-thin min-w-0 space-y-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-1 lg:pr-1">
       <MemberProfileCard member={member} fetchedAt={fetchedAt} />
       <MemberCompensationForm draft={compensation.draft} mutation={compensation.mutation} onChange={compensation.updateDraft} onReview={compensation.openConfirmation} />
       <MemberStoredValueHistoryView status={activity.history.status} history={activity.history.data} error={activity.history.error} category={activity.storedCategory} startDate={activity.startDate} endDate={activity.endDate} onCategoryChange={activity.setStoredCategory} onStartDateChange={activity.setStartDate} onEndDateChange={activity.setEndDate} onReload={(page) => void activity.loadHistory(page)} />

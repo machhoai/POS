@@ -1,6 +1,7 @@
 export interface FixedTransferSettings {
   warehouseId: string;
   enabled: boolean;
+  fixedTransferOnly: boolean;
   bankBin: string;
   accountNumber: string;
   accountName: string;
@@ -12,6 +13,7 @@ export interface FixedTransferSettings {
 export interface FixedTransferSettingsInput {
   warehouseId: string;
   enabled: boolean;
+  fixedTransferOnly: boolean;
   bankBin: string;
   accountNumber: string;
   accountName: string;

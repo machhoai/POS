@@ -55,6 +55,10 @@ export interface Product {
     foreColor: string;
     /** Màu nền (hex) từ HK API — dùng cho card */
     backColor: string;
+    /** Giá trị gốc của gói từ trường `amount` tại lần đồng bộ gần nhất. */
+    principalPoints?: number;
+    /** Giá trị thưởng từ tổng `giveConfigs[].giveAmount` tại lần đồng bộ gần nhất. */
+    bonusPoints?: number;
     /** Thuế suất (%) */
     taxRate: number;
     /** Đang mở bán */

@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePayOSCheckoutController } from "@/lib/hooks/usePayOSCheckoutController";
 import { lookupMember, toMemberServiceError } from "@/lib/services/memberService";
 import {
-  fetchMemberPackages,
   finalizeMemberPackageSale,
   prepareMemberPackageOrder,
   sellMemberPackageForCash,
@@ -15,6 +14,7 @@ import {
   useMemberStore,
 } from "@/lib/stores/useMemberStore";
 import type { PaymentMethod } from "@/lib/types/order";
+import type { Product } from "@/lib/types/product";
 import { showPromise } from "@/lib/utils/toast";
 
 function clickButton(id: string): void {
@@ -25,11 +25,51 @@ function clickButton(id: string): void {
 interface MemberPackageSaleControllerInput {
   shopId: number;
   warehouseId: string | null;
+  products: Product[];
+  productsLoading: boolean;
+  productsError: string | null;
+  reloadProducts: () => Promise<void>;
+}
+
+const MEMBER_PACKAGE_CATEGORIES = new Set([1, 2, 6]);
+
+function toCachedMemberPackage(product: Product) {
+  const paymentAmountVnd = product.afterTaxPrice > 0
+    ? product.afterTaxPrice
+    : product.price;
+  const principalPoints = Math.max(0, product.principalPoints ?? 0);
+  const bonusPoints = Math.max(0, product.bonusPoints ?? 0);
+
+  return {
+    goodsId: product.goodsId,
+    name: product.goodsName,
+    description: product.description ?? "",
+    badge: product.badge ?? "",
+    paymentAmountVnd,
+    originalAmountVnd: product.underlinePrice > 0
+      ? product.underlinePrice
+      : paymentAmountVnd,
+    discountAmountVnd: 0,
+    priceBeforeTaxVnd: product.price,
+    principalPoints,
+    bonusBucketPoints: bonusPoints,
+    totalPoints: principalPoints + bonusPoints,
+    extraBonusPoints: null,
+    credits: [],
+    category: product.category,
+    typeName: product.typeName || product.subCategory,
+    foreColor: product.foreColor,
+    backColor: product.backColor,
+  };
 }
 
 export function useMemberPackageSaleController({
   shopId,
   warehouseId,
+  products,
+  productsLoading,
+  productsError,
+  reloadProducts,
 }: MemberPackageSaleControllerInput) {
   const member = useMemberStore((state) => state.currentMember);
   const packages = useMemberStore((state) => state.packages);
@@ -53,41 +93,39 @@ export function useMemberPackageSaleController({
   const [isCheckoutOpen, setCheckoutOpen] = useState(false);
   const [localOrderId, setLocalOrderId] = useState<string | null>(null);
   const [paymentCollected, setPaymentCollected] = useState(false);
-  const loadedKeyRef = useRef<string | null>(null);
+  const cachedPackages = useMemo(
+    () => products
+      .filter((product) => MEMBER_PACKAGE_CATEGORIES.has(product.category))
+      .map(toCachedMemberPackage),
+    [products],
+  );
 
   const loadPackages = useCallback(async () => {
-    if (!member || !warehouseId) return;
     startLoading();
-    try {
-      const result = await showPromise(
-        fetchMemberPackages({ shopId, warehouseId, uid: member.uid }),
-        {
-          loading: "Đang tải gói điểm từ OpenAPI...",
-          success: "Đã tải gói thành viên",
-          error: "Không thể tải gói thành viên",
-          successDescription: "Giá và số điểm đã được tính trực tiếp từ OpenAPI.",
-          errorDescription: "Danh sách chưa được cập nhật. Vui lòng thử lại.",
-          onRetry: () => clickButton("member-package-reload"),
-        },
-      );
-      setPackages(result.packages);
-    } catch (error: unknown) {
-      const serviceError = toMemberServiceError(error);
-      console.error("[Thành viên] Tải gói thất bại:", serviceError);
-      failLoading(serviceError.message, serviceError.code);
-    }
-  }, [failLoading, member, setPackages, shopId, startLoading, warehouseId]);
+    await reloadProducts();
+  }, [reloadProducts, startLoading]);
 
   useEffect(() => {
-    const key = member && warehouseId ? `${warehouseId}:${member.uid}` : null;
-    if (!key) {
-      loadedKeyRef.current = null;
+    if (!member || !warehouseId) return;
+    if (productsLoading) {
+      startLoading();
       return;
     }
-    if (loadedKeyRef.current === key) return;
-    loadedKeyRef.current = key;
-    void loadPackages();
-  }, [loadPackages, member, warehouseId]);
+    if (productsError) {
+      failLoading(productsError, "CATALOG_LOAD_FAILED");
+      return;
+    }
+    setPackages(cachedPackages);
+  }, [
+    cachedPackages,
+    failLoading,
+    member,
+    productsError,
+    productsLoading,
+    setPackages,
+    startLoading,
+    warehouseId,
+  ]);
 
   const refreshMember = useCallback(async () => {
     if (!member || !warehouseId) return;

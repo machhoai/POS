@@ -8,6 +8,7 @@ import MemberLookupPanel from "@/components/members/MemberLookupPanel";
 import MemberDetailsPanel from "@/components/members/MemberDetailsPanel";
 import MemberCompensationConfirmModal from "@/components/members/MemberCompensationConfirmModal";
 import MemberCompensationPanel from "@/components/members/MemberCompensationPanel";
+import MemberPackageCheckoutModal from "@/components/members/MemberPackageCheckoutModal";
 import MemberProductCatalog from "@/components/members/MemberProductCatalog";
 import MemberRegistrationForm from "@/components/members/MemberRegistrationForm";
 import StoreSelector from "@/components/pos/StoreSelector";
@@ -16,6 +17,8 @@ import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
 import { useMemberCustomerDisplayPublisher } from "@/lib/hooks/useMemberCustomerDisplayPublisher";
 import { useMemberActivityController } from "@/lib/hooks/useMemberActivityController";
 import { useMemberCompensationController } from "@/lib/hooks/useMemberCompensationController";
+import { useMemberPackageCustomerDisplayPublisher } from "@/lib/hooks/useMemberPackageCustomerDisplayPublisher";
+import { useMemberPackageSaleController } from "@/lib/hooks/useMemberPackageSaleController";
 import {
     lookupMember,
     registerMember,
@@ -137,13 +140,32 @@ export default function MembersPage() {
     });
 
     const canCompensate = auth.hasPermission("pos.members.compensate", auth.effectiveWarehouseId || undefined);
+    const memberPackageSale = useMemberPackageSaleController({
+        shopId,
+        warehouseId: operation === "LOOKUP" ? auth.effectiveWarehouseId : null,
+        products,
+        productsLoading,
+        productsError,
+        reloadProducts: fetchProducts,
+    });
+    const isMemberPackageDisplayEnabled = operation === "LOOKUP" &&
+        Boolean(member && memberPackageSale.selectedPackage);
 
     useMemberCustomerDisplayPublisher({
-        enabled: operation === "REGISTER" || (operation === "LOOKUP" && Boolean(member)),
+        enabled: operation === "REGISTER" ||
+            (operation === "LOOKUP" && Boolean(member) && !isMemberPackageDisplayEnabled),
+        suppressWhenDisabled: isMemberPackageDisplayEnabled,
         showLookupBalances: operation === "LOOKUP",
         draft,
         mutationStatus: mutation.status,
         member: operation === "LOOKUP" ? member : registrationMember,
+    });
+    useMemberPackageCustomerDisplayPublisher({
+        enabled: isMemberPackageDisplayEnabled,
+        selectedPackage: memberPackageSale.selectedPackage,
+        mutation: memberPackageSale.mutation,
+        paymentMethod: memberPackageSale.paymentMethod,
+        payment: memberPackageSale.payOSPayment,
     });
 
     useEffect(() => {
@@ -151,10 +173,17 @@ export default function MembersPage() {
     }, [auth.isLoading, auth.user, auth.userDoc, router]);
 
     useEffect(() => {
-        if (operation === "REGISTER" && auth.user && auth.userDoc && products.length === 0) {
+        if (
+            (operation === "REGISTER" || operation === "LOOKUP") &&
+            auth.user &&
+            auth.userDoc &&
+            products.length === 0 &&
+            !productsLoading &&
+            !productsError
+        ) {
             void fetchProducts();
         }
-    }, [auth.user, auth.userDoc, fetchProducts, operation, products.length]);
+    }, [auth.user, auth.userDoc, fetchProducts, operation, products.length, productsError, productsLoading]);
 
     useEffect(() => {
         if (!auth.effectiveWarehouseId) return;
@@ -461,7 +490,12 @@ export default function MembersPage() {
                                 onRegisterAndCheckout={() => void handleRegisterAndCheckout()}
                             />
                         ) : operation === "LOOKUP" && member ? (
-                            <MemberDetailsPanel member={member} fetchedAt={fetchedAt} activity={memberActivity} />
+                            <MemberDetailsPanel
+                                member={member}
+                                fetchedAt={fetchedAt}
+                                activity={memberActivity}
+                                packageSale={memberPackageSale}
+                            />
                         ) : operation === "COMPENSATION" && member ? (
                             <MemberCompensationPanel
                                 member={member}
@@ -509,6 +543,21 @@ export default function MembersPage() {
                     }
                     onClose={compensation.closeConfirmation}
                     onConfirm={() => void compensation.submit()}
+                />
+            ) : null}
+            {operation === "LOOKUP" && member && memberPackageSale.isCheckoutOpen && memberPackageSale.selectedPackage ? (
+                <MemberPackageCheckoutModal
+                    selectedPackage={memberPackageSale.selectedPackage}
+                    paymentMethod={memberPackageSale.paymentMethod}
+                    mutationBusy={
+                        memberPackageSale.mutation.kind === "PACKAGE_TOP_UP" &&
+                        ["WAITING_PAYMENT", "WAITING_API"].includes(memberPackageSale.mutation.status)
+                    }
+                    payOSPayment={memberPackageSale.payOSPayment}
+                    onPaymentMethodChange={memberPackageSale.setPaymentMethod}
+                    onClose={memberPackageSale.closeCheckout}
+                    onCashConfirm={() => void memberPackageSale.sellForCash()}
+                    onQrConfirm={() => void memberPackageSale.startQrPayment()}
                 />
             ) : null}
         </div>

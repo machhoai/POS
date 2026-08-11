@@ -8,7 +8,6 @@ export type PayOSNextAction =
   | "COMPLETED";
 
 export const PAYOS_DISPLAY_WINDOW_MS = 5 * 60 * 1000;
-export const MANUAL_CONFIRMATION_ERROR_WINDOW_MS = 10 * 60 * 1000;
 export const PAYOS_DESCRIPTION_MAX_LENGTH = 25;
 export const PAYOS_STORE_CODE_MAX_LENGTH = 6;
 export const PAYOS_PAYMENT_REFERENCE_LENGTH = 12;
@@ -121,20 +120,9 @@ export function canManuallyConfirmPayOSPayment(input: {
   orderStatus: OrderStatus;
   isOrderCreator: boolean;
   paymentStatus?: PayOSPaymentStatus;
-  lastConnectionErrorAt?: string;
-  nowMs: number;
 }): boolean {
-  if (
-    input.orderStatus !== "DRAFT" ||
-    !input.isOrderCreator ||
-    !input.paymentStatus ||
-    input.paymentStatus === "PAID" ||
-    !input.lastConnectionErrorAt
-  ) {
-    return false;
-  }
-  const errorAtMs = Date.parse(input.lastConnectionErrorAt);
-  return Number.isFinite(errorAtMs) &&
-    input.nowMs - errorAtMs >= 0 &&
-    input.nowMs - errorAtMs <= MANUAL_CONFIRMATION_ERROR_WINDOW_MS;
+  return input.orderStatus === "DRAFT" &&
+    input.isOrderCreator &&
+    Boolean(input.paymentStatus) &&
+    input.paymentStatus !== "PAID";
 }

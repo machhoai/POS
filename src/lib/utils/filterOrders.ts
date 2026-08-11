@@ -1,5 +1,6 @@
 import type { OrderFilterState } from "@/components/orders/OrderFilters";
 import type { PosOrder } from "@/lib/types/order";
+import { getOrderCustomerDisplay } from "@/lib/utils/orderCustomer";
 
 export function filterAndSortOrders(
   orders: PosOrder[],
@@ -29,16 +30,21 @@ export function filterAndSortOrders(
 
   const query = filters.searchQuery.toLowerCase().trim();
   if (query) {
-    result = result.filter(
-      (order) =>
+    result = result.filter((order) => {
+      const customer = getOrderCustomerDisplay(order);
+      return (
         order.localOrderId.toLowerCase().includes(query) ||
         order.hkOrderNumber?.toLowerCase().includes(query) ||
         order.items.some((item) =>
           item.goodsName.toLowerCase().includes(query)
         ) ||
-        order.customerName?.toLowerCase().includes(query) ||
-        order.customerPhone?.includes(query),
-    );
+        customer.name.toLowerCase().includes(query) ||
+        customer.phone.includes(query) ||
+        customer.memberCode.toLowerCase().includes(query) ||
+        customer.levelName.toLowerCase().includes(query) ||
+        customer.uid.toLowerCase().includes(query)
+      );
+    });
   }
 
   return result.sort((left, right) => {

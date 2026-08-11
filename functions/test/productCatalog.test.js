@@ -64,6 +64,19 @@ test("maps the authoritative ticket quantity from the management catalog", () =>
   assert.equal(products[0].amount, undefined);
 });
 
+test("keeps synchronized package principal and bonus values with its metadata", () => {
+  const products = mapGroupedGoods(
+    [{ goodsId: "POINT-01", goodsName: "Point package", price: 100000 }],
+    1,
+    "Member package",
+    "2026-08-11T00:00:00.000Z",
+    new Map([["POINT-01", { principalPoints: 1210, bonusPoints: 435 }]]),
+  );
+
+  assert.equal(products[0].principalPoints, 1210);
+  assert.equal(products[0].bonusPoints, 435);
+});
+
 test("maps only enabled souvenirs with a positive after-tax price", () => {
   const products = mapSellableSouvenirs(
     [

@@ -37,13 +37,14 @@ export function useMemberPackageCustomerDisplayPublisher({
   const paymentErrorMessage = payment.errorMessage;
   const paymentIsCartLocked = payment.isCartLocked;
   const paymentIsBusy = payment.isBusy;
+  const packageMutationStatus = mutation.kind === "PACKAGE_TOP_UP" ? mutation.status : "IDLE";
   const displayState = useMemo<CustomerDisplayState>(() => {
     if (!enabled || !selectedPackage) {
       return createIdleCustomerDisplayState("CONNECTED");
     }
-    const statusText = mutation.status === "WAITING_API"
+    const statusText = packageMutationStatus === "WAITING_API"
       ? " · Đang chờ OpenAPI cộng điểm"
-      : mutation.status === "SUCCEEDED"
+      : packageMutationStatus === "SUCCEEDED"
         ? " · Đã cộng điểm thành công"
         : "";
     const items = [{
@@ -53,7 +54,7 @@ export function useMemberPackageCustomerDisplayPublisher({
       quantity: 1,
     }];
     const order = createCustomerDisplayOrderSnapshot(items, paymentMethod)!;
-    if (mutation.status === "SUCCEEDED") {
+    if (packageMutationStatus === "SUCCEEDED") {
       return {
         mode: "SUCCESS",
         connectionStatus: "CONNECTED",
@@ -61,7 +62,7 @@ export function useMemberPackageCustomerDisplayPublisher({
         payment: { status: "PAID", qr: null },
       };
     }
-    if (mutation.status === "WAITING_PAYMENT" && paymentMethod === "QR_CODE") {
+    if (packageMutationStatus === "WAITING_PAYMENT" && paymentMethod === "QR_CODE") {
       return createCustomerDisplayState({
         items,
         paymentMethod,
@@ -86,7 +87,7 @@ export function useMemberPackageCustomerDisplayPublisher({
     };
   }, [
     enabled,
-    mutation.status,
+    packageMutationStatus,
     paymentErrorMessage,
     paymentIsBusy,
     paymentIsCartLocked,

@@ -10,6 +10,9 @@ const {
   mapMemberPointPackage,
   mapMemberStoredValueRecords,
 } = require("../lib/services/memberMapper");
+const {
+  hasPlayableMemberPackageCredits,
+} = require("../lib/services/memberPackageService");
 
 test("maps the confirmed member balance categories", () => {
   assert.deepEqual(
@@ -114,7 +117,7 @@ test("maps current cards and member pass tickets", () => {
   assert.equal(tickets[0].enabledAmount, 8);
 });
 
-test("maps a sellable point package without inventing extra bonus", () => {
+test("maps total points as package amount plus configured give amounts", () => {
   const accounts = mapMemberAccounts([
     { key: "principal", value: "VND", extendAttr: 1, unit: "Đồng" },
     { key: "bonus", value: "赠币", extendAttr: 2, unit: "Đồng" },
@@ -130,6 +133,8 @@ test("maps a sellable point package without inventing extra bonus", () => {
       setMealId: "silver-50",
       price: 1100000,
       afterTaxPrice: 1210000,
+      amount: 1210,
+      givecoin1: 0,
       giveConfigs: [
         { shopAcctId: "bonus", giveAmount: 435, effectiveMode: 1, effectiveDays: 0 },
       ],
@@ -143,8 +148,9 @@ test("maps a sellable point package without inventing extra bonus", () => {
   });
 
   assert.equal(result.paymentAmountVnd, 1210000);
+  assert.equal(result.principalPoints, 1210);
   assert.equal(result.bonusBucketPoints, 435);
-  assert.equal(result.totalPoints, 435);
+  assert.equal(result.totalPoints, 1645);
   assert.equal(result.extraBonusPoints, null);
 });
 
@@ -157,4 +163,18 @@ test("excludes category-one products that do not grant playable points", () => {
   });
 
   assert.equal(result, null);
+});
+
+test("checks playable package credits before requesting a price calculation", () => {
+  assert.equal(hasPlayableMemberPackageCredits({
+    amount: 1210,
+    giveConfigs: [{ shopAcctId: "bonus", giveAmount: 435 }],
+  }), true);
+  assert.equal(hasPlayableMemberPackageCredits({
+    giveConfigs: [],
+  }), false);
+  assert.equal(hasPlayableMemberPackageCredits({
+    amount: -1,
+    giveConfigs: [{ shopAcctId: "bonus", giveAmount: 50 }],
+  }), false);
 });

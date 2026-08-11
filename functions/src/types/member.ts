@@ -111,6 +111,11 @@ export interface HKMemberPackageDetailDto {
   category?: HKNumberish;
   price?: HKNumberish;
   afterTaxPrice?: HKNumberish;
+  amount?: HKNumberish;
+  Amount?: HKNumberish;
+  givecoin1?: HKNumberish;
+  giveCoin1?: HKNumberish;
+  GiveCoin1?: HKNumberish;
   foreColor?: string | null;
   backColor?: string | null;
   giveConfigs?: HKPackageGiveConfigDto[] | null;
@@ -248,6 +253,10 @@ export interface MemberPointPackage {
   principalPoints: number;
   bonusBucketPoints: number;
   totalPoints: number;
+  category?: number;
+  typeName?: string;
+  foreColor?: string;
+  backColor?: string;
   extraBonusPoints: number | null;
   credits: MemberPackageCredit[];
 }

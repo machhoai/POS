@@ -6,6 +6,7 @@
 
 import type { PosOrder } from "@/lib/types/order";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import { getOrderCustomerDisplay } from "@/lib/utils/orderCustomer";
 import ReceiptPrintButton from "@/features/receipt/components/ReceiptPrintButton";
 import TicketPrintButton from "@/features/ticket/components/TicketPrintButton";
 
@@ -40,6 +41,7 @@ export default function OrderDetailModal({
     const status = STATUS_LABELS[order.status] || STATUS_LABELS.DRAFT;
     const finalAmount = order.totalAmount - (order.voucherDiscount || 0);
     const isPaymentUnverified = order.paymentVerificationStatus === "UNVERIFIED";
+    const customer = getOrderCustomerDisplay(order);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -88,16 +90,35 @@ export default function OrderDetailModal({
                         {order.operatorName && <InfoRow label="Nhân viên" value={order.operatorName} />}
                     </div>
 
-                    {/* Khách hàng */}
-                    {order.customerName && (
+                    {/* Thành viên / khách hàng */}
+                    {customer.isMember ? (
+                        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <p className="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400">
+                                    Thành viên mua hàng
+                                </p>
+                                {customer.levelName && (
+                                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                        {customer.levelName}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                                <InfoRow label="Họ tên" value={customer.name || "Khách thành viên"} />
+                                {customer.phone && <InfoRow label="Số điện thoại" value={customer.phone} />}
+                                {customer.memberCode && <InfoRow label="Mã thành viên" value={customer.memberCode} />}
+                                {customer.uid && <InfoRow label="UID" value={customer.uid} />}
+                            </div>
+                        </div>
+                    ) : customer.name ? (
                         <div className="p-3 bg-[var(--color-surface-hover)] rounded-xl space-y-1">
                             <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase">Khách hàng</p>
-                            <p className="text-sm text-[var(--color-text-primary)]">{order.customerName}</p>
-                            {order.customerPhone && (
-                                <p className="text-xs text-[var(--color-text-muted)]">📞 {order.customerPhone}</p>
+                            <p className="text-sm text-[var(--color-text-primary)]">{customer.name}</p>
+                            {customer.phone && (
+                                <p className="text-xs text-[var(--color-text-muted)]">📞 {customer.phone}</p>
                             )}
                         </div>
-                    )}
+                    ) : null}
 
                     {/* Danh sách sản phẩm */}
                     <div>

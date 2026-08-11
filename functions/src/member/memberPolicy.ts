@@ -185,6 +185,21 @@ function positiveInteger(
   return Number(value);
 }
 
+function nonZeroInteger(
+  value: unknown,
+  label: string,
+  maximumAbsoluteValue: number,
+): number {
+  if (
+    !Number.isInteger(value) ||
+    Number(value) === 0 ||
+    Math.abs(Number(value)) > maximumAbsoluteValue
+  ) {
+    throw new MemberInputError(`${label} không hợp lệ.`);
+  }
+  return Number(value);
+}
+
 export function validateMemberLookupInput(data: unknown): MemberLookupInput {
   const input = inputRecord(data);
   const mode = input.mode;
@@ -296,7 +311,7 @@ export function validateMemberCompensationInput(
     uid: requiredString(input.uid, "UID thành viên", 128),
     memberCode: optionalString(input.memberCode, "Mã thẻ", 64),
     memberName: requiredString(input.memberName, "Tên thành viên", 120),
-    amount: positiveInteger(input.amount, "Số điểm nạp bù", 10_000_000),
+    amount: nonZeroInteger(input.amount, "Số điểm điều chỉnh", 10_000_000),
     reason,
     actionTime: parsedActionTime.toISOString(),
   };

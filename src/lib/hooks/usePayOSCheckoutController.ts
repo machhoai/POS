@@ -172,9 +172,12 @@ export function usePayOSCheckoutController({
       if (result.nextAction === "WAIT") {
         showSuccess("Đã tạo mã thanh toán", "Mời khách quét mã QR để chuyển khoản.");
       } else if (result.nextAction === "FALLBACK") {
+        const isFixedOnly = result.fixedTransfer?.reason === "FIXED_TRANSFER_ONLY";
         showWarning(
           "Đang dùng QR tài khoản cố định",
-          "PayOS không tạo được mã. Giao dịch này cần nhân viên xác nhận thủ công.",
+          isFixedOnly
+            ? "Điểm bán đang bật chế độ chỉ dùng QR cố định. Nhân viên cần xác nhận thủ công."
+            : "PayOS không tạo được mã. Giao dịch này cần nhân viên xác nhận thủ công.",
         );
       }
     } catch {
@@ -308,7 +311,7 @@ export function usePayOSCheckoutController({
         : null,
     canConfirmManually:
       fixedTransfer?.status === "AWAITING_MANUAL_CONFIRMATION" ||
-      (errorKind === "CONNECTION" && Boolean(session)),
+      (Boolean(session) && nextAction !== "COMPLETED"),
     isCartLocked,
     isBusy: isCreating || isChecking,
     createPayment,

@@ -75,6 +75,12 @@ function toProduct(source: StoredProduct): Product {
     typeName: source.typeName || source.subCategory || "",
     foreColor: source.foreColor || "#FFFFFF",
     backColor: source.backColor || "#F97316",
+    principalPoints: Number.isFinite(Number(source.principalPoints))
+      ? Math.max(0, Number(source.principalPoints))
+      : 0,
+    bonusPoints: Number.isFinite(Number(source.bonusPoints))
+      ? Math.max(0, Number(source.bonusPoints))
+      : 0,
     taxRate: 0,
     isOpenSales: true,
     isEnabled: true,

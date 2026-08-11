@@ -13,11 +13,11 @@ export function validateMemberCompensationDraft(
 ): { amount: number; reason: string } {
   if (
     !Number.isInteger(draft.amount) ||
-    Number(draft.amount) < 1 ||
-    Number(draft.amount) > 10_000_000
+    Number(draft.amount) === 0 ||
+    Math.abs(Number(draft.amount)) > 10_000_000
   ) {
     throw new MemberServiceError(
-      "Số điểm nạp bù phải là số nguyên từ 1 đến 10.000.000.",
+      "Số điểm điều chỉnh phải là số nguyên khác 0, từ -10.000.000 đến 10.000.000.",
       "invalid-compensation-amount",
     );
   }

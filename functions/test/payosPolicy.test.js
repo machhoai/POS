@@ -113,13 +113,11 @@ test("only accepts an exact positive integer payment amount", () => {
   assert.equal(isPayOSPaymentAmountValid(150000, 150000, 150000.5), false);
 });
 
-test("manual confirmation requires the creator and a recent PayOS outage", () => {
+test("manual confirmation requires the creator and an unverified PayOS status", () => {
   const validInput = {
     orderStatus: "DRAFT",
     isOrderCreator: true,
     paymentStatus: "PENDING",
-    lastConnectionErrorAt: "2026-08-03T01:55:00.000Z",
-    nowMs: NOW,
   };
   assert.equal(canManuallyConfirmPayOSPayment(validInput), true);
   assert.equal(canManuallyConfirmPayOSPayment({
@@ -128,11 +126,11 @@ test("manual confirmation requires the creator and a recent PayOS outage", () =>
   }), false);
   assert.equal(canManuallyConfirmPayOSPayment({
     ...validInput,
-    lastConnectionErrorAt: "2026-08-03T01:49:59.000Z",
+    orderStatus: "LOCAL_PAID",
   }), false);
   assert.equal(canManuallyConfirmPayOSPayment({
     ...validInput,
-    orderStatus: "LOCAL_PAID",
+    paymentStatus: "PAID",
   }), false);
 });
 

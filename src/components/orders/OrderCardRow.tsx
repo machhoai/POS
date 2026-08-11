@@ -6,6 +6,7 @@
 
 import type { PosOrder, OrderStatus } from "@/lib/types/order";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import { getOrderCustomerDisplay } from "@/lib/utils/orderCustomer";
 import { IoCash, IoQrCode } from "react-icons/io5";
 
 interface OrderCardRowProps {
@@ -71,6 +72,7 @@ export default function OrderCardRow({ order, onSelectOrder, onRetrySync }: Orde
     const shortId = order.localOrderId.split("-").pop() || order.localOrderId;
     const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
     const hdId = order.hkOrderNumber;
+    const customer = getOrderCustomerDisplay(order);
 
     const handleRetry = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -114,16 +116,32 @@ export default function OrderCardRow({ order, onSelectOrder, onRetrySync }: Orde
                     {/* Customer & Items Summary */}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm pt-0.5">
                         {/* Customer */}
-                        <div className="flex items-center gap-1.5 text-[var(--color-text-primary)] font-medium">
+                        <div className="flex min-w-0 items-center gap-1.5 text-[var(--color-text-primary)] font-medium">
                             <svg className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                             </svg>
-                            {order.customerName ? (
+                            {customer.isMember ? (
+                                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span className="font-semibold">
+                                        {customer.name || "Khách thành viên"}
+                                    </span>
+                                    <span className="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                        Thành viên{customer.levelName ? ` · ${customer.levelName}` : ""}
+                                    </span>
+                                    {(customer.phone || customer.memberCode || customer.uid) && (
+                                        <span className="text-xs font-normal text-[var(--color-text-muted)]">
+                                            {[customer.phone, customer.memberCode, !customer.phone && !customer.memberCode ? customer.uid : ""]
+                                                .filter(Boolean)
+                                                .join(" · ")}
+                                        </span>
+                                    )}
+                                </div>
+                            ) : customer.name ? (
                                 <span>
-                                    {order.customerName}
-                                    {order.customerPhone && (
+                                    {customer.name}
+                                    {customer.phone && (
                                         <span className="text-xs text-[var(--color-text-muted)] ml-1 font-normal">
-                                            ({order.customerPhone})
+                                            ({customer.phone})
                                         </span>
                                     )}
                                 </span>

@@ -6,12 +6,10 @@ import { formatCurrency } from "@/lib/utils/formatCurrency";
 interface PayOSQrPanelProps {
   payment: PayOSCheckoutController;
 }
-
 function formatCountdown(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
-
 function StatusMessage({ payment }: PayOSQrPanelProps) {
   if (payment.errorMessage) {
     return (
@@ -31,7 +29,6 @@ function StatusMessage({ payment }: PayOSQrPanelProps) {
   }
   return <div className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">Đang chờ khách hàng chuyển khoản...</div>;
 }
-
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid grid-cols-[120px_1fr] gap-3 border-b border-slate-100 py-2.5 last:border-0">
@@ -40,12 +37,12 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
 function FixedTransferPanel({ payment }: PayOSQrPanelProps) {
   const transfer = payment.fixedTransfer;
   if (!transfer || transfer.status !== "AWAITING_MANUAL_CONFIRMATION") {
     return null;
   }
+  const fixedOnly = transfer.reason === "FIXED_TRANSFER_ONLY";
 
   return (
     <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(280px,0.85fr)_minmax(360px,1.15fr)]">
@@ -60,13 +57,15 @@ function FixedTransferPanel({ payment }: PayOSQrPanelProps) {
           />
         </div>
         <p className="mt-3 text-center text-sm font-bold text-amber-900">
-          QR tài khoản cố định · Không kiểm tra tự động
+          QR tài khoản cố định · Xác nhận bằng nút bấm
         </p>
       </div>
 
       <div className="flex min-h-0 flex-col gap-3">
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-          PayOS không cung cấp được mã QR. Sau khi khách chuyển khoản, nhân viên phải kiểm tra thông tin và xác nhận thủ công.
+          {fixedOnly
+            ? "Điểm bán đang chỉ dùng QR cố định, không tạo mã PayOS và không xác nhận tự động."
+            : "PayOS không cung cấp được mã QR. Sau khi khách chuyển khoản, nhân viên phải kiểm tra thông tin và xác nhận thủ công."}
         </div>
         <dl className="rounded-2xl border border-slate-200 bg-white px-4">
           <DetailRow label="Số tiền" value={formatCurrency(transfer.amount)} />
@@ -180,7 +179,7 @@ export default function PayOSQrPanel({ payment }: PayOSQrPanelProps) {
           )}
           {payment.canConfirmManually && (
             <button type="button" onClick={() => void payment.confirmManually()} disabled={payment.isBusy} className="min-h-12 rounded-xl border border-red-300 bg-red-50 px-4 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50">
-              Xác nhận khách đã chuyển khoản
+              Xác nhận thủ công (ngoại lệ)
             </button>
           )}
           {payment.nextAction !== "COMPLETED" && (

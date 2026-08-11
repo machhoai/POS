@@ -30,7 +30,13 @@ export function mapGroupedGoods(
   lastSyncAt: string,
   visualColorsByGoodsId: ReadonlyMap<
     string,
-    { foreColor?: string; backColor?: string; ticketsPerUnit?: number }
+    {
+      foreColor?: string;
+      backColor?: string;
+      ticketsPerUnit?: number;
+      principalPoints?: number;
+      bonusPoints?: number;
+    }
   > = new Map(),
 ): SyncProduct[] {
   const normalizedTypeName = typeName.trim() || "Khác";
@@ -76,6 +82,12 @@ export function mapGroupedGoods(
       typeName: normalizedTypeName,
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
+      ...(visualColors?.principalPoints !== undefined
+        ? { principalPoints: visualColors.principalPoints }
+        : {}),
+      ...(visualColors?.bonusPoints !== undefined
+        ? { bonusPoints: visualColors.bonusPoints }
+        : {}),
       ...(ticketsPerUnit !== undefined ? { ticketsPerUnit } : {}),
       lastSyncAt,
     }];

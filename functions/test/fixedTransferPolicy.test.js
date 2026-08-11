@@ -11,6 +11,7 @@ test("normalizes fixed transfer settings before persistence", () => {
     normalizeFixedTransferSettings({
       warehouseId: " WH-01 ",
       enabled: true,
+      fixedTransferOnly: true,
       bankBin: "970 436",
       accountNumber: "123 456 789",
       accountName: "  CONG   TY POS  ",
@@ -18,6 +19,7 @@ test("normalizes fixed transfer settings before persistence", () => {
     {
       warehouseId: "WH-01",
       enabled: true,
+      fixedTransferOnly: true,
       bankBin: "970436",
       accountNumber: "123456789",
       accountName: "CONG TY POS",
@@ -29,6 +31,7 @@ test("rejects invalid bank and account identifiers", () => {
   const valid = {
     warehouseId: "WH-01",
     enabled: true,
+    fixedTransferOnly: false,
     bankBin: "970436",
     accountNumber: "123456789",
     accountName: "CONG TY POS",
@@ -41,6 +44,20 @@ test("rejects invalid bank and account identifiers", () => {
   assert.throws(
     () => normalizeFixedTransferSettings({ ...valid, accountNumber: "123" }),
     /6.*19/,
+  );
+});
+
+test("requires fixed transfer to be enabled for fixed-only mode", () => {
+  assert.throws(
+    () => normalizeFixedTransferSettings({
+      warehouseId: "WH-01",
+      enabled: false,
+      fixedTransferOnly: true,
+      bankBin: "970436",
+      accountNumber: "123456789",
+      accountName: "CONG TY POS",
+    }),
+    /Phải bật QR tài khoản cố định/,
   );
 });
 

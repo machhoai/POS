@@ -102,7 +102,7 @@ export interface PayOSManualConfirmation {
   confirmedAt: string;
   confirmedByUid: string;
   confirmedByName: string;
-  reason: "PAYOS_UNAVAILABLE";
+  reason: "PAYOS_UNAVAILABLE" | "PAYOS_NOT_CONFIRMED";
   note: string;
   previousPaymentStatus: PayOSPaymentStatus;
 }
@@ -116,7 +116,8 @@ export type FixedTransferStatus =
 
 export type FixedTransferReason =
   | "PAYOS_CREATE_FAILED"
-  | "PAYOS_QR_MISSING";
+  | "PAYOS_QR_MISSING"
+  | "FIXED_TRANSFER_ONLY";
 
 export interface FixedTransferDetails {
   provider: "vietqr_quicklink";

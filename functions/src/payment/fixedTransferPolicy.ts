@@ -9,12 +9,16 @@ export function normalizeFixedTransferSettings(
   const normalized = {
     warehouseId: input.warehouseId.trim(),
     enabled: input.enabled === true,
+    fixedTransferOnly: input.fixedTransferOnly === true,
     bankBin: input.bankBin.replace(/\s+/g, ""),
     accountNumber: input.accountNumber.replace(/\s+/g, ""),
     accountName: input.accountName.trim().replace(/\s+/g, " "),
   };
 
   if (!normalized.warehouseId) throw new Error("Điểm bán không hợp lệ.");
+  if (normalized.fixedTransferOnly && !normalized.enabled) {
+    throw new Error("Phải bật QR tài khoản cố định trước khi dùng chế độ chỉ QR cố định.");
+  }
   if (!BANK_BIN_PATTERN.test(normalized.bankBin)) {
     throw new Error("Mã BIN ngân hàng phải gồm đúng 6 chữ số.");
   }

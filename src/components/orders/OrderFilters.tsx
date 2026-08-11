@@ -78,7 +78,7 @@ const OrderFilters: React.FC<OrderFiltersProps> = ({ filters, onChange }) => {
                         type="search"
                         value={filters.searchQuery}
                         onChange={(event) => update({ searchQuery: event.target.value })}
-                        placeholder="Tìm đơn hôm nay theo mã đơn, sản phẩm, khách hàng, SĐT..."
+                        placeholder="Tìm theo mã đơn, sản phẩm, tên, SĐT hoặc mã thành viên..."
                         aria-label="Tìm đơn hàng hôm nay"
                         className="min-h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-2 pl-10 pr-3 text-xs text-[var(--color-text-primary)] transition-colors placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] md:text-sm"
                     />

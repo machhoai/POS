@@ -207,6 +207,7 @@ async function probeAllPackageDetails(goodsIds) {
           category: detail.relevantFields.category,
           price: detail.relevantFields.price,
           afterTaxPrice: detail.relevantFields.afterTaxPrice,
+          amount: detail.relevantFields.amount,
           nativecoin1: detail.relevantFields.nativecoin1,
           givecoin1: detail.relevantFields.givecoin1,
           coinbal2: detail.relevantFields.coinbal2,
