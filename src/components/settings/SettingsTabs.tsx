@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, ReceiptText, type LucideIcon } from "lucide-react";
+import { CreditCard, Megaphone, ReceiptText, TicketCheck, type LucideIcon } from "lucide-react";
 
 type SettingsTab = {
   href: string;
@@ -18,9 +18,19 @@ const SETTINGS_TABS: readonly SettingsTab[] = [
     icon: ReceiptText,
   },
   {
+    href: "/settings/ticket",
+    label: "In vé",
+    icon: TicketCheck,
+  },
+  {
     href: "/settings/payment",
     label: "Thanh toán",
     icon: CreditCard,
+  },
+  {
+    href: "/settings/advertising",
+    label: "Quảng cáo",
+    icon: Megaphone,
   },
 ];
 

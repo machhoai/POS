@@ -285,8 +285,14 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
                         <p className="text-base font-extrabold tracking-[-0.02em]" style={{ color: colors.accentText }}>
                             {displayPrice > 0 ? formatCurrency(displayPrice) : "Miễn phí"}
                         </p>
-                        <span className="text-[10px] font-medium text-[var(--color-text-muted)] whitespace-nowrap">
-                            {product.category === 10 ? `Tồn ${product.amount.toLocaleString("vi-VN")}` : `${product.amount || 1} lượt`}
+                        <span className={`text-[10px] font-medium whitespace-nowrap ${product.category === 4 && !product.ticketsPerUnit ? "text-red-600" : "text-[var(--color-text-muted)]"}`}>
+                            {product.category === 10
+                                ? `Tồn ${product.amount.toLocaleString("vi-VN")}`
+                                : product.category === 4
+                                    ? product.ticketsPerUnit
+                                        ? `${product.ticketsPerUnit} vé`
+                                        : "Chưa cấu hình vé"
+                                    : `${product.amount || 1} lượt`}
                         </span>
                     </div>
                 </div>

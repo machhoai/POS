@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { CreditCard, LoaderCircle, Search, UserRound, X } from "lucide-react";
 import CartItem, { EmptyCart } from "@/components/pos/CartItem";
 import CheckoutModal from "@/components/pos/CheckoutModal";
 import OrderNumberStatus from "@/components/pos/OrderNumberStatus";
 import type { AppliedVoucher } from "@/components/pos/VoucherInput";
+import type { ReceiptLanguage } from "@/features/receipt/types/receipt";
 import type {
     OrderItem,
+    OrderMemberSnapshot,
     OrderStatus,
     PaymentMethod,
 } from "@/lib/types/order";
@@ -17,8 +20,12 @@ import { showWarning } from "@/lib/utils/toast";
 
 interface CartPanelProps {
     items: OrderItem[];
+    member: OrderMemberSnapshot | null;
+    memberReadStatus: "IDLE" | "READING" | "LOOKING_UP" | "FAILED";
+    memberReadError: string | null;
     paymentMethod: PaymentMethod;
     paymentMethods: PaymentMethodOption[];
+    receiptLanguage: ReceiptLanguage;
     payOSPayment: PayOSCheckoutController;
     isCheckingOut: boolean;
     isPaymentLocked: boolean;
@@ -29,15 +36,26 @@ interface CartPanelProps {
     itemCount: number;
     onUpdateQuantity: (goodsId: string, quantity: number) => void;
     onRemoveItem: (goodsId: string) => void;
+    onReadMemberCard: () => void;
+    onCancelMemberCardRead: () => void;
+    onLookupMemberByPhone: (phone: string) => void | Promise<void>;
+    onRemoveMember: () => void;
     onSetPaymentMethod: (method: PaymentMethod) => void;
+    onSetReceiptLanguage: (language: ReceiptLanguage) => void;
     onCheckout: () => void | Promise<void>;
     onClearCart: () => void;
+    openCheckoutRequested: boolean;
+    onCheckoutOpened: () => void;
 }
 
 export default function CartPanel({
     items,
+    member,
+    memberReadStatus,
+    memberReadError,
     paymentMethod,
     paymentMethods,
+    receiptLanguage,
     payOSPayment,
     isCheckingOut,
     isPaymentLocked,
@@ -48,14 +66,27 @@ export default function CartPanel({
     itemCount,
     onUpdateQuantity,
     onRemoveItem,
+    onReadMemberCard,
+    onCancelMemberCardRead,
+    onLookupMemberByPhone,
+    onRemoveMember,
     onSetPaymentMethod,
+    onSetReceiptLanguage,
     onCheckout,
     onClearCart,
+    openCheckoutRequested,
+    onCheckoutOpened,
 }: CartPanelProps) {
-    const [modalCartKey, setModalCartKey] = useState<string | null>(null);
+    const currentCartKey = items
+        .map((item) => `${item.goodsId}:${item.quantity}`)
+        .join("|");
+    const [modalCartKey, setModalCartKey] = useState<string | null>(() =>
+        openCheckoutRequested && items.length > 0 ? currentCartKey : null,
+    );
     const [appliedVoucher, setAppliedVoucher] =
         useState<AppliedVoucher | null>(null);
     const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
+    const [memberPhone, setMemberPhone] = useState("");
 
     const handleApplyVoucher = useCallback(async (code: string) => {
         setIsValidatingVoucher(true);
@@ -80,16 +111,50 @@ export default function CartPanel({
     const clearCart = useCallback(() => {
         setModalCartKey(null);
         setAppliedVoucher(null);
+        setMemberPhone("");
         onClearCart();
     }, [onClearCart]);
+
+    const handleMemberAction = useCallback(async () => {
+        if (memberReadStatus === "READING") {
+            onCancelMemberCardRead();
+            return;
+        }
+        if (items.length === 0) {
+            showWarning(
+                "Đơn hàng chưa có sản phẩm",
+                "Vui lòng thêm ít nhất một sản phẩm trước khi tìm hoặc đọc thẻ thành viên.",
+            );
+            return;
+        }
+        const phone = memberPhone.trim();
+        if (phone) {
+            await onLookupMemberByPhone(phone);
+            return;
+        }
+        onReadMemberCard();
+    }, [items.length, memberPhone, memberReadStatus, onCancelMemberCardRead, onLookupMemberByPhone, onReadMemberCard]);
+
+    const removeMember = useCallback(() => {
+        setMemberPhone("");
+        onRemoveMember();
+    }, [onRemoveMember]);
 
     const finalAmount = appliedVoucher
         ? Math.max(0, totalAmount - appliedVoucher.discountAmount)
         : totalAmount;
-    const currentCartKey = items
-        .map((item) => `${item.goodsId}:${item.quantity}`)
-        .join("|");
     const isModalOpen = items.length > 0 && modalCartKey === currentCartKey;
+
+    useEffect(() => {
+        if (!openCheckoutRequested || items.length === 0) return;
+        onCheckoutOpened();
+    }, [items.length, onCheckoutOpened, openCheckoutRequested]);
+
+    useEffect(() => {
+        if (items.length === 0 && receiptLanguage !== "vi") {
+            onSetReceiptLanguage("vi");
+        }
+    }, [items.length, onSetReceiptLanguage, receiptLanguage]);
 
     return (
         <aside className="flex h-full min-h-0 flex-col py-2 gap-2">
@@ -126,6 +191,95 @@ export default function CartPanel({
                     </button>
                 )}
             </header>
+            {member ? (
+                <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-emerald-700 shadow-sm">
+                        <UserRound className="size-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-extrabold text-emerald-950">
+                            {member.fullName || "Khách thành viên"}
+                        </p>
+                        <p className="truncate text-xs font-medium text-emerald-800">
+                            {member.memberCode || member.phone || member.levelName}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={removeMember}
+                        disabled={isPaymentLocked}
+                        className="flex size-9 shrink-0 items-center justify-center rounded-lg text-emerald-800 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label="Gỡ thành viên khỏi đơn hàng"
+                        title="Gỡ thành viên"
+                    >
+                        <X className="size-4" />
+                    </button>
+                </div>
+            ) : (
+                <div className="space-y-1.5">
+                    <form
+                        className="flex items-stretch gap-2"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            void handleMemberAction();
+                        }}
+                    >
+                        <div className="relative min-w-0 flex-1">
+                            <input
+                                type="tel"
+                                inputMode="tel"
+                                autoComplete="tel"
+                                maxLength={20}
+                                value={memberPhone}
+                                onChange={(event) => setMemberPhone(event.target.value)}
+                                disabled={isPaymentLocked || memberReadStatus === "READING" || memberReadStatus === "LOOKING_UP"}
+                                placeholder="Số điện thoại thành viên"
+                                aria-label="Số điện thoại thành viên"
+                                className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white pl-3 pr-11 text-sm font-semibold text-[var(--color-text-primary)] outline-none transition-colors placeholder:font-normal placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:bg-slate-100"
+                            />
+                            {memberPhone ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setMemberPhone("")}
+                                    disabled={isPaymentLocked || memberReadStatus === "READING" || memberReadStatus === "LOOKING_UP"}
+                                    className="absolute right-0 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                    aria-label="Xóa số điện thoại"
+                                    title="Xóa số điện thoại"
+                                >
+                                    <X className="size-4" />
+                                </button>
+                            ) : null}
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={isPaymentLocked || memberReadStatus === "LOOKING_UP"}
+                            className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 text-sm font-bold text-[var(--color-accent)] transition-colors hover:bg-orange-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                            aria-label={memberPhone.trim() ? "Tìm thành viên bằng số điện thoại" : "Đọc thẻ thành viên"}
+                            title={memberPhone.trim() ? "Tìm bằng số điện thoại" : "Đọc thẻ thành viên"}
+                        >
+                            {memberReadStatus === "READING" || memberReadStatus === "LOOKING_UP" ? (
+                                <LoaderCircle className="size-4 animate-spin" />
+                            ) : memberPhone.trim() ? (
+                                <Search className="size-4" />
+                            ) : (
+                                <CreditCard className="size-4" />
+                            )}
+                            {memberReadStatus === "READING"
+                                ? "Hủy"
+                                : memberReadStatus === "LOOKING_UP"
+                                    ? "Đang tìm"
+                                    : memberPhone.trim()
+                                        ? "Tìm"
+                                        : "Đọc thẻ"}
+                        </button>
+                    </form>
+                    {memberReadStatus === "FAILED" && memberReadError ? (
+                        <p className="text-xs font-medium text-red-600" role="alert">
+                            {memberReadError}
+                        </p>
+                    ) : null}
+                </div>
+            )}
 
             <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 py-2 border border-[var(--color-border)] bg-white rounded-xl">
                 {items.length === 0 ? (
@@ -173,6 +327,7 @@ export default function CartPanel({
                 <CheckoutModal
                     paymentMethod={paymentMethod}
                     paymentMethods={paymentMethods}
+                    receiptLanguage={receiptLanguage}
                     payOSPayment={payOSPayment}
                     totalAmount={totalAmount}
                     finalAmount={finalAmount}
@@ -181,6 +336,7 @@ export default function CartPanel({
                     isValidatingVoucher={isValidatingVoucher}
                     isCheckingOut={isCheckingOut}
                     onSetPaymentMethod={onSetPaymentMethod}
+                    onSetReceiptLanguage={onSetReceiptLanguage}
                     onApplyVoucher={handleApplyVoucher}
                     onRemoveVoucher={() => setAppliedVoucher(null)}
                     onClose={closeModal}

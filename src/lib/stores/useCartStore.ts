@@ -9,6 +9,7 @@
 import { create } from "zustand";
 import type {
   OrderItem,
+  OrderMemberSnapshot,
   OrderStatus,
   PaymentMethod,
 } from "@/lib/types/order";
@@ -40,6 +41,7 @@ export interface CartState {
   // ── State ──────────────────────────────────────────────────────────────────
   items: OrderItem[];
   memberUid: string | null;
+  member: OrderMemberSnapshot | null;
   paymentMethod: PaymentMethod;
   draftOrderId: string | null;
   currentOrderId: string | null;
@@ -52,6 +54,7 @@ export interface CartState {
   checkoutCheckpoint: CheckoutCheckpoint | null;
   journalHydrated: boolean;
   recoveryNotice: CheckoutCheckpoint | null;
+  checkoutModalRequested: boolean;
 
   // ── Computed (derived in selectors, not stored) ────────────────────────────
   // Use `useCartStore(selectTotalAmount)` to get the total.
@@ -59,6 +62,7 @@ export interface CartState {
   // ── Actions ────────────────────────────────────────────────────────────────
   addItem: (item: OrderItem) => void;
   setMemberUid: (uid: string | null) => void;
+  setMember: (member: OrderMemberSnapshot | null) => void;
   removeItem: (goodsId: string) => void;
   updateQuantity: (goodsId: string, quantity: number) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
@@ -74,6 +78,8 @@ export interface CartState {
   setCheckoutContext: (shopId: number, warehouseId: string) => void;
   hydrateCheckoutJournal: () => Promise<void>;
   dismissRecoveryNotice: () => void;
+  requestCheckoutModal: () => void;
+  consumeCheckoutModalRequest: () => void;
   markReceiptPrinted: (localOrderId: string) => void;
 
   /**
@@ -117,6 +123,7 @@ function saveCartCheckpoint(
     shopId: context.shopId,
     warehouseId: context.warehouseId,
     memberUid: overrides.memberUid ?? state.memberUid,
+    member: overrides.member ?? state.member,
     items,
     paymentMethod: overrides.paymentMethod ?? state.paymentMethod,
     totalAmount:
@@ -138,6 +145,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   // ── Initial State ──────────────────────────────────────────────────────────
   items: [],
   memberUid: null,
+  member: null,
   paymentMethod: "CASH",
   draftOrderId: null,
   currentOrderId: null,
@@ -150,6 +158,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   checkoutCheckpoint: null,
   journalHydrated: false,
   recoveryNotice: null,
+  checkoutModalRequested: false,
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -185,7 +194,35 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   setMemberUid: (memberUid) => {
     if (get().isPaymentLocked) return;
-    set({ memberUid });
+    set((state) => ({
+      memberUid,
+      member: state.member?.uid === memberUid ? state.member : null,
+      ...(state.memberUid !== memberUid && state.items.length > 0
+        ? {
+            draftOrderId: null,
+            currentOrderId: null,
+            currentHkOrderNumber: null,
+            currentOrderStatus: null,
+          }
+        : {}),
+    }));
+    if (get().items.length > 0) saveCartCheckpoint(get(), "CART_READY");
+  },
+
+  setMember: (member) => {
+    if (get().isPaymentLocked) return;
+    set((state) => ({
+      member,
+      memberUid: member?.uid ?? null,
+      ...(state.memberUid !== (member?.uid ?? null) && state.items.length > 0
+        ? {
+            draftOrderId: null,
+            currentOrderId: null,
+            currentHkOrderNumber: null,
+            currentOrderStatus: null,
+          }
+        : {}),
+    }));
     if (get().items.length > 0) saveCartCheckpoint(get(), "CART_READY");
   },
 
@@ -226,6 +263,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     set({
       items: [],
       memberUid: null,
+      member: null,
       paymentMethod: "CASH",
       draftOrderId: null,
       currentOrderId: null,
@@ -234,6 +272,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       isCheckingOut: false,
       checkoutCheckpoint: null,
       recoveryNotice: null,
+      checkoutModalRequested: false,
     });
     void clearCheckoutJournal();
   },
@@ -271,6 +310,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     set({
       items: paymentFinished ? [] : journal.items,
       memberUid: paymentFinished ? null : journal.memberUid ?? null,
+      member: paymentFinished ? null : journal.member ?? null,
       paymentMethod: journal.paymentMethod,
       draftOrderId: paymentFinished ? null : journal.localOrderId,
       currentOrderId: journal.localOrderId,
@@ -292,6 +332,13 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   dismissRecoveryNotice: () => set({ recoveryNotice: null }),
+
+  requestCheckoutModal: () => {
+    if (get().items.length === 0) return;
+    set({ checkoutModalRequested: true });
+  },
+
+  consumeCheckoutModalRequest: () => set({ checkoutModalRequested: false }),
 
   markReceiptPrinted: (localOrderId) => {
     const state = get();
@@ -320,6 +367,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           quantity,
         })),
         ...(state.memberUid ? { uid: state.memberUid } : {}),
+        ...(state.member ? { member: state.member } : {}),
       });
 
       const current = get();
@@ -370,6 +418,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     set({
       items: [],
       memberUid: null,
+      member: null,
       paymentMethod: "CASH",
       draftOrderId: null,
       currentOrderId: localOrderId,
@@ -379,6 +428,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       isPaymentLocked: false,
       paymentLockOrderId: null,
       checkoutCheckpoint: "RECEIPT_PENDING",
+      checkoutModalRequested: false,
     });
   },
 
@@ -441,6 +491,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           quantity,
         })),
         ...(state.memberUid ? { uid: state.memberUid } : {}),
+        ...(state.member ? { member: state.member } : {}),
       });
 
       saveCartCheckpoint(get(), "RECEIPT_PENDING", {
@@ -457,6 +508,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       set({
         items: [],
         memberUid: null,
+        member: null,
         paymentMethod: "CASH",
         draftOrderId: null,
         currentOrderId: result.localOrderId,
@@ -464,6 +516,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         currentOrderStatus: result.status,
         isCheckingOut: false,
         checkoutCheckpoint: "RECEIPT_PENDING",
+        checkoutModalRequested: false,
       });
 
       return result;

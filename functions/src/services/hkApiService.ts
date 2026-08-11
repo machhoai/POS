@@ -678,7 +678,7 @@ export interface HKGoodsItem {
   backColor?: string;
 }
 
-/** Card colors returned by the package-management list endpoint. */
+/** Ticket metadata returned by the package-management list endpoint. */
 export interface HKProductVisualItem {
   SetMealId?: string;
   setMealId?: string;
@@ -688,6 +688,8 @@ export interface HKProductVisualItem {
   foreColor?: string;
   BackColor?: string;
   backColor?: string;
+  Amount?: number | string;
+  amount?: number | string;
 }
 
 /** Product classification returned by `setmeal_type_select`. */
@@ -736,8 +738,8 @@ export async function fetchGoodsByCategory(
 }
 
 /**
- * Fetch the package-management catalog that carries the card foreground and
- * background colors omitted by `setmeal_getsellgoods`.
+ * Fetch the package-management catalog that carries ticket quantity and card
+ * colors omitted by `setmeal_getsellgoods`.
  */
 export async function fetchProductVisualCatalog(): Promise<HKApiResponse> {
   return sendToHKApi(

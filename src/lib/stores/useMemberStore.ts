@@ -9,7 +9,6 @@ import type {
   MemberPointPackage,
   MemberProfile,
   MemberRegistrationDraft,
-  MemberRegistrationReviewStatus,
   RemoteRequestState,
 } from "@/lib/types/member";
 
@@ -21,7 +20,6 @@ interface MemberState {
   lookupRequest: RemoteRequestState;
   currentMember: MemberProfile | null;
   registrationDraft: MemberRegistrationDraft;
-  registrationReviewStatus: MemberRegistrationReviewStatus;
   compensationDraft: MemberCompensationDraft;
   packages: MemberPointPackage[];
   packagesRequest: RemoteRequestState;
@@ -36,9 +34,6 @@ interface MemberState {
   completeLookup: (member: MemberProfile) => void;
   failLookup: (message: string, code?: string) => void;
   updateRegistrationDraft: (values: Partial<MemberRegistrationDraft>) => void;
-  startRegistrationReview: () => void;
-  confirmRegistrationReview: () => void;
-  editRegistration: () => void;
   startNewRegistration: () => void;
   resetRegistrationDraft: () => void;
   updateCompensationDraft: (values: Partial<MemberCompensationDraft>) => void;
@@ -92,7 +87,6 @@ export const useMemberStore = create<MemberState>((set) => ({
   lookupRequest: idleRequest,
   currentMember: null,
   registrationDraft: emptyRegistrationDraft,
-  registrationReviewStatus: "EDITING",
   compensationDraft: emptyCompensationDraft,
   packages: [],
   packagesRequest: idleRequest,
@@ -141,24 +135,17 @@ export const useMemberStore = create<MemberState>((set) => ({
   }),
   updateRegistrationDraft: (values) => set((state) => ({
     registrationDraft: { ...state.registrationDraft, ...values },
-    registrationReviewStatus: "EDITING",
+    mutation: state.mutation.kind === "REGISTER" && state.mutation.status === "FAILED"
+      ? idleMutation
+      : state.mutation,
   })),
-  startRegistrationReview: () => set({
-    registrationReviewStatus: "AWAITING_CUSTOMER",
-  }),
-  confirmRegistrationReview: () => set({
-    registrationReviewStatus: "CUSTOMER_CONFIRMED",
-  }),
-  editRegistration: () => set({ registrationReviewStatus: "EDITING" }),
   startNewRegistration: () => set({
     registrationDraft: emptyRegistrationDraft,
-    registrationReviewStatus: "EDITING",
     mutation: idleMutation,
     currentMember: null,
   }),
   resetRegistrationDraft: () => set({
     registrationDraft: emptyRegistrationDraft,
-    registrationReviewStatus: "EDITING",
   }),
   updateCompensationDraft: (values) => set((state) => ({
     compensationDraft: { ...state.compensationDraft, ...values },
@@ -220,7 +207,6 @@ export const useMemberStore = create<MemberState>((set) => ({
     lookupRequest: idleRequest,
     currentMember: null,
     registrationDraft: emptyRegistrationDraft,
-    registrationReviewStatus: "EDITING",
     compensationDraft: emptyCompensationDraft,
     packages: [],
     packagesRequest: idleRequest,

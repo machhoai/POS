@@ -61,6 +61,8 @@ export interface Product {
     isOpenSales: boolean;
     /** Đang kích hoạt */
     isEnabled: boolean;
+    /** Số vé vật lý cần in cho mỗi đơn vị sản phẩm vé. */
+    ticketsPerUnit?: number;
     /** Số lượng tồn kho (nếu áp dụng) */
     amount: number;
     /** Badge hiển thị (nếu có) */

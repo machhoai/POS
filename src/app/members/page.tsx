@@ -30,9 +30,13 @@ import {
 import { useMemberStore } from "@/lib/stores/useMemberStore";
 import { useCartStore } from "@/lib/stores/useCartStore";
 import { useProductStore } from "@/lib/stores/useProductStore";
-import type { MemberCardLookupKind, MemberLookupMode } from "@/lib/types/member";
+import type {
+    MemberCardLookupKind,
+    MemberLookupMode,
+    MemberRegistrationDraft,
+} from "@/lib/types/member";
 import type { Product } from "@/lib/types/product";
-import { showError, showInfo, showPromise, showSuccess, showWarning } from "@/lib/utils/toast";
+import { showError, showPromise, showWarning } from "@/lib/utils/toast";
 
 type MemberOperation = "LOOKUP" | "REGISTER" | "COMPENSATION";
 
@@ -67,7 +71,6 @@ export default function MembersPage() {
     const cardReaderError = useMemberStore((state) => state.cardReaderError);
     const member = useMemberStore((state) => state.currentMember);
     const draft = useMemberStore((state) => state.registrationDraft);
-    const reviewStatus = useMemberStore((state) => state.registrationReviewStatus);
     const mutation = useMemberStore((state) => state.mutation);
     const products = useProductStore((state) => state.products);
     const productsLoading = useProductStore((state) => state.isLoading);
@@ -77,7 +80,8 @@ export default function MembersPage() {
     const isPaymentLocked = useCartStore((state) => state.isPaymentLocked);
     const addCartItem = useCartStore((state) => state.addItem);
     const updateCartQuantity = useCartStore((state) => state.updateQuantity);
-    const setCartMemberUid = useCartStore((state) => state.setMemberUid);
+    const setCartMember = useCartStore((state) => state.setMember);
+    const requestCheckoutModal = useCartStore((state) => state.requestCheckoutModal);
     const setCheckoutContext = useCartStore((state) => state.setCheckoutContext);
     const hydrateCheckoutJournal = useCartStore((state) => state.hydrateCheckoutJournal);
 
@@ -90,14 +94,10 @@ export default function MembersPage() {
     const completeLookup = useMemberStore((state) => state.completeLookup);
     const failLookup = useMemberStore((state) => state.failLookup);
     const updateDraft = useMemberStore((state) => state.updateRegistrationDraft);
-    const startReview = useMemberStore((state) => state.startRegistrationReview);
-    const confirmReview = useMemberStore((state) => state.confirmRegistrationReview);
-    const editRegistration = useMemberStore((state) => state.editRegistration);
     const startNewRegistration = useMemberStore((state) => state.startNewRegistration);
     const startMutation = useMemberStore((state) => state.startMutation);
     const completeMutation = useMemberStore((state) => state.completeMutation);
     const failMutation = useMemberStore((state) => state.failMutation);
-    const resetMutation = useMemberStore((state) => state.resetMutation);
     const resetSession = useMemberStore((state) => state.resetMemberSession);
 
     const registrationMember = mutation.kind === "REGISTER" && mutation.status === "SUCCEEDED" ? member : null;
@@ -139,10 +139,11 @@ export default function MembersPage() {
     const canCompensate = auth.hasPermission("pos.members.compensate", auth.effectiveWarehouseId || undefined);
 
     useMemberCustomerDisplayPublisher({
-        enabled: operation === "REGISTER",
+        enabled: operation === "REGISTER" || (operation === "LOOKUP" && Boolean(member)),
+        showLookupBalances: operation === "LOOKUP",
         draft,
         mutationStatus: mutation.status,
-        member: registrationMember,
+        member: operation === "LOOKUP" ? member : registrationMember,
     });
 
     useEffect(() => {
@@ -256,18 +257,19 @@ export default function MembersPage() {
         setQuery(nextQuery);
     }, [cardReaderStatus, setQuery]);
 
-    const handleStartReview = useCallback(() => {
-        try {
-            const normalized = validateMemberRegistrationDraft(draft);
-            resetMutation();
-            updateDraft(normalized);
-            startReview();
-            showInfo("Thông tin đã sẵn sàng xác nhận", "Màn hình khách đã được cập nhật liên tục trong lúc nhập.");
-        } catch (error: unknown) {
-            const memberError = toMemberServiceError(error);
-            showError("Thông tin chưa hợp lệ", memberError.message);
+    const handleOperationChange = useCallback((nextOperation: MemberOperation) => {
+        if (nextOperation === "REGISTER") {
+            if (isPaymentLocked) {
+                showWarning(
+                    "Giỏ hàng đang được khóa",
+                    "Hãy hoàn tất hoặc hủy thanh toán hiện tại trước khi tạo thành viên mới.",
+                );
+                return;
+            }
+            setCartMember(null);
         }
-    }, [draft, resetMutation, startReview, updateDraft]);
+        setOperation(nextOperation);
+    }, [isPaymentLocked, setCartMember]);
 
     const handleAddProduct = useCallback((product: Product) => {
         if (isPaymentLocked) {
@@ -282,16 +284,27 @@ export default function MembersPage() {
         });
     }, [addCartItem, isPaymentLocked]);
 
-    const handleRegister = useCallback(async () => {
+    const handleRegister = useCallback(async (): Promise<boolean> => {
         if (!auth.effectiveWarehouseId) {
             showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi đăng ký.");
-            return;
+            return false;
         }
+
+        let normalizedDraft: MemberRegistrationDraft;
+        try {
+            normalizedDraft = validateMemberRegistrationDraft(draft);
+            updateDraft(normalizedDraft);
+        } catch (error: unknown) {
+            const memberError = toMemberServiceError(error);
+            showError("Thông tin chưa hợp lệ", memberError.message);
+            return false;
+        }
+
         startMutation("REGISTER");
         try {
             const result = await showPromise(
                 registerMember({
-                    ...draft,
+                    ...normalizedDraft,
                     shopId,
                     warehouseId: auth.effectiveWarehouseId,
                 }),
@@ -306,14 +319,32 @@ export default function MembersPage() {
             );
             completeLookup(result.member);
             completeMutation();
-            setCartMemberUid(result.member.uid);
+            setCartMember({
+                uid: result.member.uid,
+                memberCode: result.member.memberCode,
+                fullName: result.member.fullName,
+                phone: result.member.phone,
+                levelName: result.member.levelName,
+            });
             setFetchedAt(result.createdAt);
+            return true;
         } catch (error: unknown) {
             const memberError = toMemberServiceError(error);
             console.error("[Thành viên] Đăng ký thất bại:", memberError);
             failMutation(memberError.message, memberError.code);
+            return false;
         }
-    }, [auth.effectiveWarehouseId, completeLookup, completeMutation, draft, failMutation, setCartMemberUid, shopId, startMutation]);
+    }, [auth.effectiveWarehouseId, completeLookup, completeMutation, draft, failMutation, setCartMember, shopId, startMutation, updateDraft]);
+
+    const handleRegisterAndCheckout = useCallback(async () => {
+        if (!registrationMember) {
+            const registered = await handleRegister();
+            if (!registered) return;
+        }
+
+        requestCheckoutModal();
+        router.push("/");
+    }, [handleRegister, registrationMember, requestCheckoutModal, router]);
 
     if (auth.isLoading || !auth.user || !auth.userDoc) {
         return (
@@ -356,7 +387,7 @@ export default function MembersPage() {
                                 <button
                                     key={item}
                                     type="button"
-                                    onClick={() => setOperation(item)}
+                                    onClick={() => handleOperationChange(item)}
                                     className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-bold ${operation === item
                                         ? "bg-white text-[var(--color-accent)] shadow-sm"
                                         : "text-[var(--color-text-secondary)]"
@@ -373,9 +404,9 @@ export default function MembersPage() {
                     </div>
                 </header>
 
-                <div className="scrollbar-thin flex-1 overflow-y-auto p-3">
-                    <div className="mx-auto grid gap-4 lg:grid-cols-[minmax(340px,440px)_1fr]">
-                        <div className="space-y-3">
+                <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-3 lg:overflow-hidden">
+                    <div className="mx-auto grid gap-4 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(340px,440px)_1fr]">
+                        <div className="space-y-3 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
                             {operation !== "REGISTER" ? (
                                 <MemberLookupPanel
                                     mode={mode}
@@ -392,22 +423,12 @@ export default function MembersPage() {
                             ) : (
                                 <MemberRegistrationForm
                                     draft={draft}
-                                    reviewStatus={reviewStatus}
                                     mutation={mutation}
                                     onChange={updateDraft}
-                                    onStartReview={handleStartReview}
-                                    onConfirmCustomer={() => {
-                                        confirmReview();
-                                        showSuccess("Khách đã xác nhận", "Có thể gửi yêu cầu đăng ký đến OpenAPI.");
-                                    }}
-                                    onEdit={() => {
-                                        resetMutation();
-                                        editRegistration();
-                                    }}
                                     onRegister={() => void handleRegister()}
                                     onStartNew={() => {
                                         startNewRegistration();
-                                        setCartMemberUid(null);
+                                        setCartMember(null);
                                         setFetchedAt(null);
                                     }}
                                 />
@@ -433,10 +454,11 @@ export default function MembersPage() {
                                 error={productsError}
                                 isPaymentLocked={isPaymentLocked}
                                 memberReady={Boolean(registrationMember)}
+                                isRegistering={mutation.kind === "REGISTER" && mutation.status === "WAITING_API"}
                                 onReload={() => void fetchProducts()}
                                 onAdd={handleAddProduct}
                                 onUpdateQuantity={updateCartQuantity}
-                                onContinueCheckout={() => router.push("/")}
+                                onRegisterAndCheckout={() => void handleRegisterAndCheckout()}
                             />
                         ) : operation === "LOOKUP" && member ? (
                             <MemberDetailsPanel member={member} fetchedAt={fetchedAt} activity={memberActivity} />

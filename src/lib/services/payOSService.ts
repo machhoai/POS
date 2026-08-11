@@ -2,6 +2,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import type {
   OrderItem,
+  OrderMemberSnapshot,
 } from "@/lib/types/order";
 import type { PayOSPaymentResult } from "@/lib/types/payment";
 import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
@@ -11,6 +12,7 @@ export interface CreatePayOSPaymentInput {
   shopId: number;
   warehouseId: string;
   uid?: string;
+  member?: OrderMemberSnapshot;
   items: Array<Pick<OrderItem, "goodsId" | "quantity">>;
 }
 

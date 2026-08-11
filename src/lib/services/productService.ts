@@ -26,6 +26,7 @@ export interface StoredProduct {
   subCategory: string;
   foreColor?: string;
   backColor?: string;
+  ticketsPerUnit?: number;
   amount?: number;
   giftNo?: string;
   typeName?: string;

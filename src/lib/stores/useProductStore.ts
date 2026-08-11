@@ -78,6 +78,9 @@ function toProduct(source: StoredProduct): Product {
     taxRate: 0,
     isOpenSales: true,
     isEnabled: true,
+    ticketsPerUnit: Number.isInteger(Number(source.ticketsPerUnit)) && Number(source.ticketsPerUnit) >= 0
+      ? Number(source.ticketsPerUnit)
+      : 0,
     amount: Number.isFinite(Number(source.amount))
       ? Number(source.amount)
       : 0,

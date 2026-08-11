@@ -22,6 +22,7 @@ import {
 } from "./invoiceRequestToken";
 import type {
   OrderItem,
+  OrderMemberSnapshot,
   PosOrder,
 } from "../types/order";
 
@@ -35,6 +36,7 @@ interface OrderInput {
   shopId: number;
   warehouseId: string;
   uid?: string;
+  member?: OrderMemberSnapshot;
   deviceId?: string;
   items: OrderItemInput[];
 }
@@ -74,6 +76,13 @@ const JPOS_PAYMENT_METHODS: Record<string, LocalPaymentMethod> = {
   CASH: { id: "CASH", methodName: "Tiền mặt" },
   QR_CODE: { id: "QR_CODE", methodName: "Chuyển khoản" },
 };
+
+const TICKET_PRODUCT_CATEGORY = 4;
+const MAX_TICKETS_PER_ORDER = 1_000;
+
+function createTicketCode(): string {
+  return `JT-${crypto.randomUUID().replace(/-/g, "").toUpperCase()}`;
+}
 
 function resolveJposPaymentMethod(paymentMethodId: string): LocalPaymentMethod {
   const method = JPOS_PAYMENT_METHODS[paymentMethodId];
@@ -115,6 +124,36 @@ function validateOrderInput(data: unknown): OrderInput {
   ) {
     throw new HttpsError("invalid-argument", "UID thành viên không hợp lệ.");
   }
+  const uid = typeof input.uid === "string" ? input.uid.trim() : undefined;
+  let member: OrderMemberSnapshot | undefined;
+  if (input.member !== undefined) {
+    if (!input.member || typeof input.member !== "object") {
+      throw new HttpsError("invalid-argument", "Thông tin thành viên không hợp lệ.");
+    }
+    const candidate = input.member as Partial<OrderMemberSnapshot>;
+    const memberCode = candidate.memberCode;
+    if (
+      typeof candidate.uid !== "string" ||
+      candidate.uid.trim() !== uid ||
+      (memberCode !== null &&
+        (typeof memberCode !== "string" || memberCode.trim().length > 128)) ||
+      typeof candidate.fullName !== "string" ||
+      candidate.fullName.trim().length > 120 ||
+      typeof candidate.phone !== "string" ||
+      candidate.phone.trim().length > 32 ||
+      typeof candidate.levelName !== "string" ||
+      candidate.levelName.trim().length > 120
+    ) {
+      throw new HttpsError("invalid-argument", "Thông tin thành viên không hợp lệ.");
+    }
+    member = {
+      uid: candidate.uid.trim(),
+      memberCode: memberCode?.trim() || null,
+      fullName: candidate.fullName.trim(),
+      phone: candidate.phone.trim(),
+      levelName: candidate.levelName.trim(),
+    };
+  }
   if (!Array.isArray(input.items) || input.items.length === 0) {
     throw new HttpsError("invalid-argument", "Đơn hàng chưa có sản phẩm.");
   }
@@ -148,7 +187,8 @@ function validateOrderInput(data: unknown): OrderInput {
     localOrderId: input.localOrderId,
     shopId: Number(input.shopId),
     warehouseId: input.warehouseId.trim(),
-    ...(typeof input.uid === "string" ? { uid: input.uid.trim() } : {}),
+    ...(uid ? { uid } : {}),
+    ...(member ? { member } : {}),
     deviceId:
       typeof input.deviceId === "string" && input.deviceId.length <= 80
         ? input.deviceId
@@ -186,7 +226,7 @@ async function loadAuthoritativeItems(
   );
   const snapshots = await db.getAll(...refs);
 
-  return snapshots.map((snapshot, index) => {
+  const items = snapshots.map((snapshot, index) => {
     if (!snapshot.exists) {
       throw new HttpsError(
         "failed-precondition",
@@ -220,6 +260,20 @@ async function loadAuthoritativeItems(
     const taxRate = unitPriceBeforeTax > 0
       ? Number(((unitTaxAmount / unitPriceBeforeTax) * 100).toFixed(2))
       : 0;
+    const category = Number(product?.category);
+    const rawTicketsPerUnit = Number(product?.ticketsPerUnit);
+    const ticketsPerUnit = category === TICKET_PRODUCT_CATEGORY &&
+      Number.isInteger(rawTicketsPerUnit) &&
+      rawTicketsPerUnit >= 0
+      ? rawTicketsPerUnit
+      : 0;
+    const ticketCount = ticketsPerUnit * itemInputs[index].quantity;
+    if (ticketCount > MAX_TICKETS_PER_ORDER) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Sản phẩm ${goodsName} tạo quá nhiều vé. Vui lòng giảm số lượng hoặc tách đơn.`,
+      );
+    }
 
     return {
       goodsId: snapshot.id,
@@ -229,8 +283,25 @@ async function loadAuthoritativeItems(
       unitPriceBeforeTax,
       taxRate,
       taxAmount: Math.round(unitTaxAmount * itemInputs[index].quantity),
+      ticketsPerUnit,
+      ...(ticketCount > 0
+        ? { ticketCodes: Array.from({ length: ticketCount }, createTicketCode) }
+        : {}),
     };
   });
+
+  const totalTicketCount = items.reduce(
+    (total, item) => total + (item.ticketCodes?.length ?? 0),
+    0,
+  );
+  if (totalTicketCount > MAX_TICKETS_PER_ORDER) {
+    throw new HttpsError(
+      "failed-precondition",
+      `Đơn hàng vượt quá giới hạn ${MAX_TICKETS_PER_ORDER} vé. Vui lòng tách thành nhiều đơn.`,
+    );
+  }
+
+  return items;
 }
 
 function calculateTotal(items: OrderItem[]): number {
@@ -254,6 +325,7 @@ function createDraftOrder(
     shopId: input.shopId,
     warehouseId: input.warehouseId,
     ...(input.uid ? { uid: input.uid } : {}),
+    ...(input.member ? { member: input.member } : {}),
     ...(input.deviceId ? { deviceId: input.deviceId } : {}),
     createdBy: operator.firebaseUid,
     operatorId: operator.employeeId,
@@ -277,6 +349,12 @@ function createDraftOrder(
 
 function assertMemberAssociation(order: PosOrder, input: OrderInput): void {
   if (order.uid && input.uid && order.uid !== input.uid) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Đơn hàng đã được gắn với một thành viên khác.",
+    );
+  }
+  if (order.member && input.member && order.member.uid !== input.member.uid) {
     throw new HttpsError(
       "failed-precondition",
       "Đơn hàng đã được gắn với một thành viên khác.",
@@ -403,6 +481,7 @@ export async function stagePosOrderForPayOS(
       shopId: input.shopId,
       warehouseId: input.warehouseId,
       uid: input.uid ?? existing.uid,
+      member: input.member ?? existing.member,
       operatorId: operator.employeeId,
       operatorFirebaseUid: operator.firebaseUid,
       operatorName: operator.name,
@@ -417,6 +496,7 @@ export async function stagePosOrderForPayOS(
       shopId: stagedOrder.shopId,
       warehouseId: stagedOrder.warehouseId,
       ...(stagedOrder.uid ? { uid: stagedOrder.uid } : {}),
+      ...(stagedOrder.member ? { member: stagedOrder.member } : {}),
       operatorId: stagedOrder.operatorId,
       operatorFirebaseUid: stagedOrder.operatorFirebaseUid,
       operatorName: stagedOrder.operatorName,
@@ -454,9 +534,19 @@ export async function preparePosOrderForUser(
           );
         }
         assertMemberAssociation(existing, input);
-        if (input.uid && !existing.uid) {
-          transaction.update(docRef, { uid: input.uid, updatedAt: new Date().toISOString() });
-          return { ...existing, uid: input.uid };
+        if ((input.uid && !existing.uid) || input.member) {
+          const updatedAt = new Date().toISOString();
+          transaction.update(docRef, {
+            ...(input.uid ? { uid: input.uid } : {}),
+            ...(input.member ? { member: input.member } : {}),
+            updatedAt,
+          });
+          return {
+            ...existing,
+            ...(input.uid ? { uid: input.uid } : {}),
+            ...(input.member ? { member: input.member } : {}),
+            updatedAt,
+          };
         }
         return existing;
       }
@@ -551,6 +641,7 @@ export async function checkoutPosOrderForUser(
         shopId: input.shopId,
         warehouseId: input.warehouseId,
         ...(input.uid ? { uid: input.uid } : {}),
+        ...(input.member ? { member: input.member } : {}),
         operatorId: operator.employeeId,
         operatorFirebaseUid: operator.firebaseUid,
         operatorName: operator.name,

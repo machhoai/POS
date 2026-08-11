@@ -2,9 +2,7 @@
 
 import { MonitorCheck, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { mapRemoteReceiptSettings } from "@/features/receipt/helpers/remoteReceiptSettings";
-import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
-import { cachePaymentSettings } from "@/lib/services/paymentSettingsCacheService";
+import { useRemoteDeviceSettingsSync } from "@/lib/hooks/useRemoteDeviceSettingsSync";
 import {
   activateDevice,
   canUseOfflineDeviceCredential,
@@ -14,10 +12,8 @@ import {
   loadDeviceCredential,
   openDeviceSession,
   persistVerifiedDeviceSession,
-  watchRemoteReceiptSettings,
 } from "@/lib/services/deviceEnrollmentService";
 import type { PosDeviceCredential } from "@/lib/types/deviceEnrollment";
-
 export default function DeviceActivationGate({ children }: { children: ReactNode }) {
   const [credential, setCredential] = useState<PosDeviceCredential | null>(null);
   const [checking, setChecking] = useState(true);
@@ -30,12 +26,16 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
     "REVOKED" | "OFFLINE_EXPIRED" | "PENDING" | null
   >(null);
   const [warning, setWarning] = useState("");
-  const applyRemoteSettings = useReceiptSettingsStore(
-    (state) => state.applyRemoteSettings,
-  );
-  const remoteReceiptVersion = useReceiptSettingsStore(
-    (state) => state.remoteVersion,
-  );
+  const handleRevoked = useCallback((message: string) => {
+    setBlocked(true);
+    setBlockReason(credential?.warehouse_id ? "REVOKED" : "PENDING");
+    setError(message);
+  }, [credential?.warehouse_id]);
+  const { applySessionSettings } = useRemoteDeviceSettingsSync({
+    credential,
+    blocked,
+    onRevoked: handleRevoked,
+  });
 
   const syncDevice = useCallback(
     async (deviceCredential: PosDeviceCredential) => {
@@ -49,16 +49,7 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
         setBlocked(false);
         setBlockReason(null);
         setWarning("");
-        if (session.receipt_settings) {
-          applyRemoteSettings(
-            session.receipt_settings.warehouse_id,
-            session.receipt_settings.version,
-            mapRemoteReceiptSettings(session.receipt_settings),
-          );
-        }
-        if (session.payment_settings) {
-          cachePaymentSettings(session.payment_settings);
-        }
+        await applySessionSettings(session);
         if (
           deviceCredential.warehouse_id &&
           deviceCredential.warehouse_id !== session.device.warehouse_id
@@ -89,7 +80,7 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
         );
       }
     },
-    [applyRemoteSettings],
+    [applySessionSettings],
   );
 
   useEffect(() => {
@@ -113,50 +104,6 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
     const timer = window.setInterval(() => void syncDevice(credential), 60_000);
     return () => window.clearInterval(timer);
   }, [credential, syncDevice]);
-
-  useEffect(() => {
-    if (!credential || blocked || !isDeviceEnrollmentRuntime()) return;
-    let cancelled = false;
-    let activeController: AbortController | null = null;
-    const watch = async () => {
-      while (!cancelled) {
-        activeController = new AbortController();
-        try {
-          const result = await watchRemoteReceiptSettings(
-            credential,
-            remoteReceiptVersion,
-            activeController.signal,
-          );
-          if (cancelled) return;
-          if (result.changed && result.receipt_settings) {
-            applyRemoteSettings(
-              result.receipt_settings.warehouse_id,
-              result.receipt_settings.version,
-              mapRemoteReceiptSettings(result.receipt_settings),
-            );
-          }
-        } catch (reason: unknown) {
-          if (cancelled) return;
-          if (reason instanceof DeviceSessionError && reason.revoked) {
-            void syncDevice(credential);
-            return;
-          }
-          await new Promise((resolve) => window.setTimeout(resolve, 3_000));
-        }
-      }
-    };
-    void watch();
-    return () => {
-      cancelled = true;
-      activeController?.abort();
-    };
-  }, [
-    applyRemoteSettings,
-    blocked,
-    credential,
-    remoteReceiptVersion,
-    syncDevice,
-  ]);
 
   if (checking) {
     return (

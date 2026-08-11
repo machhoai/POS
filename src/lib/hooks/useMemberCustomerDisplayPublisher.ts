@@ -24,6 +24,7 @@ import { showError } from "@/lib/utils/toast";
 interface MemberDisplayPublisherInput {
   enabled: boolean;
   suppressWhenDisabled?: boolean;
+  showLookupBalances?: boolean;
   draft: MemberRegistrationDraft;
   mutationStatus: MemberMutationStatus;
   member: MemberProfile | null;
@@ -43,6 +44,7 @@ function profileBirthDate(value: string | null): string | null {
 function memberSnapshot(
   draft: MemberRegistrationDraft,
   member: MemberProfile | null,
+  showLookupBalances: boolean,
 ): CustomerDisplayMemberSnapshot {
   return {
     fullName: member?.fullName || draft.fullName,
@@ -51,21 +53,30 @@ function memberSnapshot(
     birthDate: member ? profileBirthDate(member.birthDate) : draftBirthDate(draft),
     email: member?.email || draft.email || null,
     memberCode: member?.memberCode || null,
+    balances: showLookupBalances && member
+      ? {
+          integral: member.balances.integral,
+          bonus: member.balances.bonus,
+          principalVnd: member.balances.principalVnd,
+        }
+      : null,
   };
 }
 
 export function useMemberCustomerDisplayPublisher({
   enabled,
   suppressWhenDisabled = false,
+  showLookupBalances = false,
   draft,
   mutationStatus,
   member,
 }: MemberDisplayPublisherInput): void {
   const items = useCartStore((state) => state.items);
   const paymentMethod = useCartStore((state) => state.paymentMethod);
+  const orderMember = useCartStore((state) => state.member);
   const order = useMemo(
-    () => createCustomerDisplayOrderSnapshot(items, paymentMethod),
-    [items, paymentMethod],
+    () => createCustomerDisplayOrderSnapshot(items, paymentMethod, orderMember),
+    [items, orderMember, paymentMethod],
   );
   const defaultState = useMemo<CustomerDisplayState>(
     () => order
@@ -76,13 +87,15 @@ export function useMemberCustomerDisplayPublisher({
   const displayState = useMemo<CustomerDisplayState>(() => {
     if (!enabled) return defaultState;
     return {
-      mode: mutationStatus === "SUCCEEDED" && member ? "MEMBER_SUCCESS" : "MEMBER_REVIEW",
+      mode: !showLookupBalances && mutationStatus === "SUCCEEDED" && member
+        ? "MEMBER_SUCCESS"
+        : "MEMBER_REVIEW",
       connectionStatus: "CONNECTED",
-      member: memberSnapshot(draft, member),
+      member: memberSnapshot(draft, member, showLookupBalances),
       order,
       payment: { status: "NOT_STARTED", qr: null },
     };
-  }, [defaultState, draft, enabled, member, mutationStatus, order]);
+  }, [defaultState, draft, enabled, member, mutationStatus, order, showLookupBalances]);
   const latestStateRef = useRef(displayState);
 
   useEffect(() => {

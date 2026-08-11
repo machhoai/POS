@@ -30,7 +30,7 @@ export function mapGroupedGoods(
   lastSyncAt: string,
   visualColorsByGoodsId: ReadonlyMap<
     string,
-    { foreColor?: string; backColor?: string }
+    { foreColor?: string; backColor?: string; ticketsPerUnit?: number }
   > = new Map(),
 ): SyncProduct[] {
   const normalizedTypeName = typeName.trim() || "Khác";
@@ -59,6 +59,9 @@ export function mapGroupedGoods(
       item.backColor,
       visualColors?.backColor,
     );
+    const ticketsPerUnit = category === 4
+      ? visualColors?.ticketsPerUnit
+      : undefined;
 
     return [{
       goodsId,
@@ -73,6 +76,7 @@ export function mapGroupedGoods(
       typeName: normalizedTypeName,
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
+      ...(ticketsPerUnit !== undefined ? { ticketsPerUnit } : {}),
       lastSyncAt,
     }];
   });

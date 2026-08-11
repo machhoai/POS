@@ -20,6 +20,15 @@ export type OrderStatus =
 export type PaymentMethod = "CASH" | "QR_CODE";
 export type OrderKind = "STANDARD" | "MEMBER_PACKAGE";
 
+/** Member details captured when the member is attached to an order. */
+export interface OrderMemberSnapshot {
+  uid: string;
+  memberCode: string | null;
+  fullName: string;
+  phone: string;
+  levelName: string;
+}
+
 /** A single line item. */
 export interface OrderItem {
   goodsId: string;
@@ -33,6 +42,10 @@ export interface OrderItem {
   taxRate?: number;
   /** Total tax amount for this line. */
   taxAmount?: number;
+  /** Authoritative ticket quantity captured from the local product catalog. */
+  ticketsPerUnit?: number;
+  /** Stable codes for every physical ticket belonging to this line item. */
+  ticketCodes?: string[];
 }
 
 /** Sync metadata. */
@@ -144,6 +157,8 @@ export interface PosOrder {
   orderKind?: OrderKind;
   /** HK system member UID — required by the 鲸舰 API for order_create */
   uid?: string;
+  /** Member snapshot retained with the local order for history and loyalty. */
+  member?: OrderMemberSnapshot;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentMethodId: string;

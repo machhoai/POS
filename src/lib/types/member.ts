@@ -11,10 +11,6 @@ export type MemberBalanceBucket =
 
 export type RemoteRequestStatus = "IDLE" | "WAITING_API" | "SUCCEEDED" | "FAILED";
 export type CardReaderStatus = "IDLE" | "READING" | "SUCCEEDED" | "FAILED";
-export type MemberRegistrationReviewStatus =
-  | "EDITING"
-  | "AWAITING_CUSTOMER"
-  | "CUSTOMER_CONFIRMED";
 export type MemberMutationKind =
   | "REGISTER"
   | "PACKAGE_TOP_UP"

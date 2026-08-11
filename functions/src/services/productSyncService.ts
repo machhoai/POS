@@ -52,10 +52,10 @@ function extractList<T>(
   return [];
 }
 
-function mapProductVisualColors(items: HKProductVisualItem[]) {
-  const colorsByGoodsId = new Map<
+function mapProductVisualMetadata(items: HKProductVisualItem[]) {
+  const metadataByGoodsId = new Map<
     string,
-    { foreColor?: string; backColor?: string }
+    { foreColor?: string; backColor?: string; ticketsPerUnit?: number }
   >();
 
   for (const item of items) {
@@ -70,22 +70,27 @@ function mapProductVisualColors(items: HKProductVisualItem[]) {
 
     const foreColor = (item.ForeColor || item.foreColor || "").trim();
     const backColor = (item.BackColor || item.backColor || "").trim();
-    if (!foreColor && !backColor) continue;
+    const rawTicketsPerUnit = Number(item.Amount ?? item.amount);
+    const ticketsPerUnit = Number.isInteger(rawTicketsPerUnit) && rawTicketsPerUnit >= 0
+      ? rawTicketsPerUnit
+      : undefined;
+    if (!foreColor && !backColor && ticketsPerUnit === undefined) continue;
 
-    colorsByGoodsId.set(goodsId, {
+    metadataByGoodsId.set(goodsId, {
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
+      ...(ticketsPerUnit !== undefined ? { ticketsPerUnit } : {}),
     });
   }
 
-  return colorsByGoodsId;
+  return metadataByGoodsId;
 }
 
 async function loadProductDetailVisualColors(
   items: HKGoodsItem[],
   colorsByGoodsId: Map<
     string,
-    { foreColor?: string; backColor?: string }
+    { foreColor?: string; backColor?: string; ticketsPerUnit?: number }
   >,
 ): Promise<void> {
   const goodsIds = Array.from(new Set(items.flatMap((item) => {
@@ -183,6 +188,9 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       subCategory: data.subCategory ? String(data.subCategory) : "",
       ...(data.foreColor ? { foreColor: String(data.foreColor) } : {}),
       ...(data.backColor ? { backColor: String(data.backColor) } : {}),
+      ...(Number.isInteger(Number(data.ticketsPerUnit)) && Number(data.ticketsPerUnit) >= 0
+        ? { ticketsPerUnit: Number(data.ticketsPerUnit) }
+        : {}),
       ...(Number.isFinite(Number(data.amount))
         ? { amount: Number(data.amount) }
         : {}),
@@ -208,8 +216,8 @@ export async function synchronizePosProducts(
 
   const visualResponse = await fetchProductVisualCatalog();
   const visualColorsByGoodsId = visualResponse.success
-    ? mapProductVisualColors(extractList<HKProductVisualItem>(visualResponse.data))
-    : new Map<string, { foreColor?: string; backColor?: string }>();
+    ? mapProductVisualMetadata(extractList<HKProductVisualItem>(visualResponse.data))
+    : new Map<string, { foreColor?: string; backColor?: string; ticketsPerUnit?: number }>();
 
   if (!visualResponse.success) {
     logger.warn("[productSync] Product visual catalog request failed", {
@@ -217,8 +225,8 @@ export async function synchronizePosProducts(
       message: visualResponse.msg,
     });
   } else {
-    logger.info("[productSync] Product visual colors loaded", {
-      colorCount: visualColorsByGoodsId.size,
+    logger.info("[productSync] Product visual metadata loaded", {
+      metadataCount: visualColorsByGoodsId.size,
     });
   }
 

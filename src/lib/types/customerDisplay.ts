@@ -48,11 +48,20 @@ export interface CustomerDisplayItem {
   unitPrice: number;
 }
 
+/** Thông tin thành viên an toàn để hiển thị công khai cho chính khách hàng. */
+export interface CustomerDisplayOrderMemberSnapshot {
+  fullName: string;
+  phone: string;
+  memberCode: string | null;
+  levelName: string;
+}
+
 /** Ảnh chụp đơn hàng đã loại bỏ mã nội bộ và thông tin vận hành. */
 export interface CustomerDisplayOrderSnapshot {
   items: readonly CustomerDisplayItem[];
   totalAmount: number;
   paymentMethod: CustomerDisplayPaymentMethod;
+  member?: CustomerDisplayOrderMemberSnapshot | null;
 }
 
 export interface CustomerDisplayMemberSnapshot {
@@ -62,6 +71,12 @@ export interface CustomerDisplayMemberSnapshot {
   birthDate: string | null;
   email: string | null;
   memberCode: string | null;
+  /** Chỉ có khi hiển thị kết quả tra cứu thành viên. */
+  balances: {
+    integral: number;
+    bonus: number;
+    principalVnd: number;
+  } | null;
 }
 
 /** Dữ liệu QR hiện tại; value là chuỗi QR có thể hiển thị cho khách. */

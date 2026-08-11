@@ -7,6 +7,7 @@
 import type { PosOrder } from "@/lib/types/order";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import ReceiptPrintButton from "@/features/receipt/components/ReceiptPrintButton";
+import TicketPrintButton from "@/features/ticket/components/TicketPrintButton";
 
 interface OrderDetailModalProps {
     order: PosOrder;
@@ -107,6 +108,7 @@ export default function OrderDetailModal({
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm text-[var(--color-text-primary)] truncate">{item.goodsName}</p>
                                         <p className="text-xs text-[var(--color-text-muted)]">{formatCurrency(item.price)} × {item.quantity}</p>
+                                        {(item.ticketCodes?.length ?? 0) > 0 && <p className="mt-0.5 text-xs font-bold text-emerald-600">{item.ticketCodes?.length} vé</p>}
                                     </div>
                                     <span className="text-sm font-semibold text-[var(--color-accent)] ml-3">
                                         {formatCurrency(item.price * item.quantity)}
@@ -157,6 +159,12 @@ export default function OrderDetailModal({
                         order={order}
                         className="mt-3 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#202124] px-4 text-sm font-bold text-white active:scale-[0.98] disabled:opacity-50"
                     />
+                    {order.items.some((item) => (item.ticketCodes?.length ?? 0) > 0) && (
+                        <TicketPrintButton
+                            order={order}
+                            className="mt-2 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-[var(--color-accent)] bg-white px-4 text-sm font-bold text-[var(--color-accent)] active:scale-[0.98] disabled:opacity-50"
+                        />
+                    )}
                     {order.status === "SYNC_FAILED" && (
                         <button
                             type="button"

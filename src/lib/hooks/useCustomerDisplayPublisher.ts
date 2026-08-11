@@ -22,6 +22,7 @@ export function useCustomerDisplayPublisher(
 ): void {
   const items = useCartStore((state) => state.items);
   const paymentMethod = useCartStore((state) => state.paymentMethod);
+  const member = useCartStore((state) => state.member);
   const orderStatus = useCartStore((state) => state.currentOrderStatus);
   const lastOrderRef = useRef<CustomerDisplayOrderSnapshot | null>(null);
   const latestStateRef = useRef<CustomerDisplayState>(
@@ -36,7 +37,7 @@ export function useCustomerDisplayPublisher(
   const isBusy = payOSPayment.isBusy;
 
   useEffect(() => {
-    const currentOrder = createCustomerDisplayOrderSnapshot(items, paymentMethod);
+    const currentOrder = createCustomerDisplayOrderSnapshot(items, paymentMethod, member);
     if (currentOrder) lastOrderRef.current = currentOrder;
     const displayState = createCustomerDisplayState({
       items,
@@ -52,6 +53,7 @@ export function useCustomerDisplayPublisher(
         isBusy,
       },
       lastOrder: lastOrderRef.current,
+      member,
     });
     latestStateRef.current = displayState;
     void publishCustomerDisplayState(displayState).catch((error: unknown) => {
@@ -63,6 +65,7 @@ export function useCustomerDisplayPublisher(
     isBusy,
     isCartLocked,
     items,
+    member,
     nextAction,
     orderStatus,
     paymentMethod,

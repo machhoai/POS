@@ -40,6 +40,8 @@ export interface SyncProduct {
   foreColor?: string;
   /** Background color used by HK for the product card. */
   backColor?: string;
+  /** Number of physical tickets to print for one sold category-4 product. */
+  ticketsPerUnit?: number;
   /** Current stock quantity for physical souvenir products. */
   amount?: number;
   /** HK product code for physical souvenir products. */

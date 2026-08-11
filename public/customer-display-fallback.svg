@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Joy World</title>
+  <desc id="desc">Màn hình chào mừng mặc định của Joy World</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fb923c"/>
+      <stop offset="0.55" stop-color="#f59e0b"/>
+      <stop offset="1" stop-color="#facc15"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".4"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#background)"/>
+  <circle cx="1350" cy="80" r="380" fill="url(#glow)"/>
+  <circle cx="260" cy="850" r="430" fill="#9a3412" opacity=".12"/>
+  <g fill="#fff">
+    <text x="120" y="390" font-family="Arial, sans-serif" font-size="44" font-weight="700" opacity=".9">JOY WORLD</text>
+    <text x="120" y="520" font-family="Arial, sans-serif" font-size="92" font-weight="900">Chào mừng bạn</text>
+    <text x="120" y="600" font-family="Arial, sans-serif" font-size="34" font-weight="600" opacity=".88">Cảm ơn bạn đã ghé thăm cửa hàng hôm nay</text>
+  </g>
+  <g transform="translate(1220 515)" fill="none" stroke="#fff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity=".9">
+    <path d="M0 70h230l-25 210H30z"/>
+    <path d="M55 70c0-75 25-120 60-120s60 45 60 120"/>
+    <path d="M75 175h80"/>
+  </g>
+</svg>

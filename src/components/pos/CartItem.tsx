@@ -34,6 +34,13 @@ export default function CartItem({
                                     {formatCurrency(item.price)}
                                 </span>
                             </p>
+                            {item.ticketsPerUnit !== undefined && (
+                                <p className={`mt-1 text-[11px] font-bold ${item.ticketsPerUnit > 0 ? "text-emerald-700" : "text-red-600"}`}>
+                                    {item.ticketsPerUnit > 0
+                                        ? `${item.ticketsPerUnit * item.quantity} vé sẽ được in`
+                                        : "Sản phẩm chưa có cấu hình số vé"}
+                                </p>
+                            )}
                         </div>
                     </div>
                     <button

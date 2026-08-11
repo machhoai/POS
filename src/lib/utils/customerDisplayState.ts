@@ -7,6 +7,7 @@ import type {
 import type {
   FixedTransferDetails,
   OrderItem,
+  OrderMemberSnapshot,
   OrderStatus,
   PaymentMethod,
 } from "@/lib/types/order";
@@ -31,6 +32,7 @@ interface CreateCustomerDisplayStateInput {
   orderStatus: OrderStatus | null;
   payment: CustomerDisplayPaymentSource;
   lastOrder: CustomerDisplayOrderSnapshot | null;
+  member?: OrderMemberSnapshot | null;
 }
 
 export function createIdleCustomerDisplayState(
@@ -47,6 +49,7 @@ export function createIdleCustomerDisplayState(
 export function createCustomerDisplayOrderSnapshot(
   items: readonly OrderItem[],
   paymentMethod: PaymentMethod,
+  member: OrderMemberSnapshot | null = null,
 ): CustomerDisplayOrderSnapshot | null {
   if (items.length === 0) return null;
   return {
@@ -60,6 +63,14 @@ export function createCustomerDisplayOrderSnapshot(
       0,
     ),
     paymentMethod: paymentMethod === "QR_CODE" ? "TRANSFER" : "CASH",
+    member: member
+      ? {
+          fullName: member.fullName,
+          phone: member.phone,
+          memberCode: member.memberCode,
+          levelName: member.levelName,
+        }
+      : null,
   };
 }
 
@@ -131,6 +142,7 @@ export function createCustomerDisplayState(
   const currentOrder = createCustomerDisplayOrderSnapshot(
     input.items,
     input.paymentMethod,
+    input.member ?? null,
   );
   const order = currentOrder ?? input.lastOrder;
   const isPaid =

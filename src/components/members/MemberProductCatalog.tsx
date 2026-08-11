@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   Coins,
   Gift,
+  LoaderCircle,
   Minus,
   Plus,
   RefreshCw,
@@ -25,10 +26,11 @@ interface MemberProductCatalogProps {
   error: string | null;
   isPaymentLocked: boolean;
   memberReady: boolean;
+  isRegistering: boolean;
   onReload: () => void;
   onAdd: (product: Product) => void;
   onUpdateQuantity: (goodsId: string, quantity: number) => void;
-  onContinueCheckout: () => void;
+  onRegisterAndCheckout: () => void;
 }
 
 const PRODUCT_GROUPS: Array<{
@@ -60,10 +62,11 @@ const MemberProductCatalog: React.FC<MemberProductCatalogProps> = ({
   error,
   isPaymentLocked,
   memberReady,
+  isRegistering,
   onReload,
   onAdd,
   onUpdateQuantity,
-  onContinueCheckout,
+  onRegisterAndCheckout,
 }) => {
   const [activeGroup, setActiveGroup] = useState<MemberProductGroup>("POINTS");
   const [searchQuery, setSearchQuery] = useState("");
@@ -95,7 +98,7 @@ const MemberProductCatalog: React.FC<MemberProductCatalogProps> = ({
   );
 
   return (
-    <section className="flex min-h-[620px] flex-col overflow-hidden rounded-3xl border border-[var(--color-border)] bg-white shadow-sm">
+    <section className="flex h-[calc(100dvh-7rem)] min-h-[520px] flex-col overflow-hidden rounded-3xl border border-[var(--color-border)] bg-white shadow-sm lg:h-full lg:min-h-0">
       <header className="shrink-0 space-y-3 border-b border-[var(--color-border)] p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -178,9 +181,9 @@ const MemberProductCatalog: React.FC<MemberProductCatalogProps> = ({
           <p className="text-xs font-bold text-[var(--color-text-muted)]">{itemCount} sản phẩm đã chọn</p>
           <p className="truncate text-xl font-black text-[var(--color-accent)]">{formatCurrency(totalAmount)}</p>
         </div>
-        <button type="button" onClick={onContinueCheckout} disabled={!memberReady || items.length === 0 || isPaymentLocked} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-5 text-sm font-extrabold text-white disabled:bg-slate-200 disabled:text-slate-500">
-          <ShoppingCart className="size-4" />
-          {memberReady ? "Tiếp tục thanh toán" : "Đăng ký để thanh toán"}
+        <button type="button" onClick={onRegisterAndCheckout} disabled={items.length === 0 || isPaymentLocked || isRegistering} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-5 text-sm font-extrabold text-white disabled:bg-slate-200 disabled:text-slate-500">
+          {isRegistering ? <LoaderCircle className="size-4 animate-spin" /> : <ShoppingCart className="size-4" />}
+          {isRegistering ? "Đang đăng ký" : memberReady ? "Thanh toán" : "Đăng ký và thanh toán"}
         </button>
       </footer>
     </section>

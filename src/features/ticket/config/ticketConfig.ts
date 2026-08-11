@@ -1,0 +1,26 @@
+import type { TicketSettings } from "@/features/ticket/types/ticket";
+
+export const DEFAULT_TICKET_SETTINGS: TicketSettings = {
+  paperSize: "POS80",
+  ticketHeightMm: 112,
+  storeName: "JOY POS",
+  ticketTitle: "VÉ VUI CHƠI",
+  subtitle: "Vui lòng xuất trình vé trước khi tham gia",
+  instructions: "Mỗi vé chỉ có giá trị cho một lượt sử dụng. Không nhận vé rách hoặc mã QR không đọc được.",
+  footerMessage: "Chúc Quý khách có những phút giây thật vui!",
+  logoDataUrl: null,
+  logoWidthMm: 24,
+  logoMaxHeightMm: 16,
+  logoContrastPercent: 125,
+  qrSizeMm: 34,
+  titleFontSizePt: 15,
+  productFontSizePt: 13,
+  bodyFontSizePt: 8,
+  fontWeight: 700,
+  showLogo: true,
+  showOrderCode: true,
+  showIssuedAt: true,
+  showPrice: false,
+  showSequence: true,
+  autoPrintAfterPayment: true,
+};

@@ -3,6 +3,7 @@ import type { PosOrder } from "@/lib/types/order";
 export type ReceiptPaperSize = "POS58" | "POS80" | "POS82";
 export type ReceiptTheme = "CLASSIC" | "NATIONAL_DAY" | "TET";
 export type ReceiptFontWeight = 400 | 500 | 600 | 700 | 800 | 900;
+export type ReceiptLanguage = "vi" | "en" | "zh";
 
 export interface ReceiptFontWeights {
   storeName: ReceiptFontWeight;
@@ -61,6 +62,7 @@ export interface ReceiptSettings {
 export interface ReceiptDocumentProps {
   order: PosOrder;
   settings: ReceiptSettings;
+  language?: ReceiptLanguage;
   /** Chỉ dùng cho bản xem trước; đơn thật tự dựng URL từ token đã ký. */
   invoiceRequestUrlOverride?: string;
 }

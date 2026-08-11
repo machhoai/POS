@@ -41,6 +41,29 @@ test("maps package products with the HK classification name", () => {
   ]);
 });
 
+test("maps the authoritative ticket quantity from the management catalog", () => {
+  const products = mapGroupedGoods(
+    [
+      {
+        goodsId: "COMBO-07",
+        goodsName: "Combo 7 games",
+        price: 700000,
+        subCategory: 1,
+      },
+    ],
+    4,
+    "Combo",
+    "2026-08-11T00:00:00.000Z",
+    new Map([
+      ["COMBO-07", { ticketsPerUnit: 7 }],
+    ]),
+  );
+
+  assert.equal(products.length, 1);
+  assert.equal(products[0].ticketsPerUnit, 7);
+  assert.equal(products[0].amount, undefined);
+});
+
 test("maps only enabled souvenirs with a positive after-tax price", () => {
   const products = mapSellableSouvenirs(
     [

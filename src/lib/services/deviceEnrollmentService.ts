@@ -5,10 +5,15 @@ import type {
   PosDeviceCredential,
   PosDeviceSessionResult,
   PosReceiptSettingsWatchResult,
+  PosTicketSettingsWatchResult,
+  PosCustomerDisplaySettingsWatchResult,
   RemotePosReceiptSettings,
+  RemotePosTicketSettings,
 } from "@/lib/types/deviceEnrollment";
 import { mapReceiptSettingsToRemote } from "@/features/receipt/helpers/remoteReceiptSettings";
+import { mapTicketSettingsToRemote } from "@/features/ticket/helpers/remoteTicketSettings";
 import type { ReceiptSettings } from "@/features/receipt/types/receipt";
+import type { TicketSettings } from "@/features/ticket/types/ticket";
 import {
   clearWebDevDeviceCredential,
   getOrCreateWebDevInstallationId,
@@ -220,6 +225,78 @@ export async function watchRemoteReceiptSettings(
   return envelope.data;
 }
 
+export async function watchRemoteTicketSettings(
+  credential: PosDeviceCredential,
+  knownVersion: number | null,
+  signal: AbortSignal,
+): Promise<PosTicketSettingsWatchResult> {
+  const appVersion = await getRuntimeAppVersion();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/pos/devices/ticket-settings/watch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_id: credential.device_id,
+        device_credential: credential.device_credential,
+        app_version: appVersion,
+        known_version: knownVersion,
+      }),
+      signal,
+    });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new DeviceSessionError(
+      "Không thể theo dõi cấu hình vé mới. JPOS sẽ tự kết nối lại.",
+      false,
+    );
+  }
+  const envelope = (await response.json()) as ApiEnvelope<PosTicketSettingsWatchResult>;
+  if (!response.ok || !envelope.data) {
+    throw new DeviceSessionError(
+      envelope.messages?.vi || "Không thể nhận cấu hình vé POS.",
+      response.status === 401 || response.status === 403,
+    );
+  }
+  return envelope.data;
+}
+
+export async function watchRemoteCustomerDisplaySettings(
+  credential: PosDeviceCredential,
+  knownVersion: number | null,
+  signal: AbortSignal,
+): Promise<PosCustomerDisplaySettingsWatchResult> {
+  const appVersion = await getRuntimeAppVersion();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/pos/devices/customer-display-settings/watch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_id: credential.device_id,
+        device_credential: credential.device_credential,
+        app_version: appVersion,
+        known_version: knownVersion,
+      }),
+      signal,
+    });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new DeviceSessionError(
+      "Không thể theo dõi playlist quảng cáo. JPOS sẽ tự kết nối lại.",
+      false,
+    );
+  }
+  const envelope = (await response.json()) as ApiEnvelope<PosCustomerDisplaySettingsWatchResult>;
+  if (!response.ok || !envelope.data) {
+    throw new DeviceSessionError(
+      envelope.messages?.vi || "Không thể nhận playlist quảng cáo.",
+      response.status === 401 || response.status === 403,
+    );
+  }
+  return envelope.data;
+}
+
 export async function saveRemoteReceiptSettings(
   settings: ReceiptSettings,
 ): Promise<RemotePosReceiptSettings> {
@@ -250,6 +327,42 @@ export async function saveRemoteReceiptSettings(
   if (!response.ok || !envelope.data) {
     throw new DeviceSessionError(
       envelope.messages?.vi || "Không thể lưu cấu hình biên lai lên JPULSE.",
+      response.status === 401 || response.status === 403,
+    );
+  }
+  return envelope.data;
+}
+
+export async function saveRemoteTicketSettings(
+  settings: TicketSettings,
+): Promise<RemotePosTicketSettings> {
+  const credential = await loadDeviceCredential();
+  if (!credential) {
+    throw new Error("Máy POS chưa được kích hoạt trên JPULSE.");
+  }
+  const appVersion = await getRuntimeAppVersion();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/pos/devices/ticket-settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_id: credential.device_id,
+        device_credential: credential.device_credential,
+        app_version: appVersion,
+        ticket_settings: mapTicketSettingsToRemote(settings),
+      }),
+    });
+  } catch {
+    throw new DeviceSessionError(
+      "Không thể kết nối JPULSE để lưu cấu hình vé.",
+      false,
+    );
+  }
+  const envelope = (await response.json()) as ApiEnvelope<RemotePosTicketSettings>;
+  if (!response.ok || !envelope.data) {
+    throw new DeviceSessionError(
+      envelope.messages?.vi || "Không thể lưu cấu hình vé lên JPULSE.",
       response.status === 401 || response.status === 403,
     );
   }

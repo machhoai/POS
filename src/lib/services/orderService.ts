@@ -11,6 +11,7 @@ import type {
   PosOrder,
   OrderStatus,
   OrderItem,
+  OrderMemberSnapshot,
   PaymentMethod,
 } from "@/lib/types/order";
 
@@ -31,6 +32,7 @@ interface OrderRequest {
   shopId: number;
   warehouseId: string;
   uid?: string;
+  member?: OrderMemberSnapshot;
   items: Array<Pick<OrderItem, "goodsId" | "quantity">>;
 }
 

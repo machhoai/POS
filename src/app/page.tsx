@@ -7,7 +7,7 @@
 // Auth-guarded: redirects to /login if not authenticated.
 // =============================================================================
 
-import { useEffect, useCallback, useState, useMemo } from "react";
+import { useEffect, useCallback, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/useCartStore";
@@ -15,12 +15,24 @@ import { useProductStore } from "@/lib/stores/useProductStore";
 import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { syncProducts } from "@/lib/services/productService";
 import { fetchOrderForReceipt } from "@/lib/services/orderService";
-import { showError, showPromise, showWarning } from "@/lib/utils/toast";
+import {
+  cancelMemberCardRead,
+  readMemberCard,
+  toCardReaderServiceError,
+} from "@/lib/services/cardReaderService";
+import {
+  lookupMember,
+  toMemberServiceError,
+} from "@/lib/services/memberService";
+import { showError, showPromise, showSuccess, showWarning } from "@/lib/utils/toast";
 import {
   describeReceiptPrintError,
   printReceiptSilently,
 } from "@/features/receipt/components/ReceiptPrintButton";
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
+import type { ReceiptLanguage } from "@/features/receipt/types/receipt";
+import { printTicketsSilently } from "@/features/ticket/components/TicketPrintButton";
+import { useTicketSettingsStore } from "@/features/ticket/store/useTicketSettingsStore";
 import { filterProducts } from "@/lib/utils/productSearch";
 import { usePayOSCheckoutController } from "@/lib/hooks/usePayOSCheckoutController";
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
@@ -70,6 +82,7 @@ export default function CashierPage() {
   // ── Cart Store ─────────────────────────────────────────────────────────
   const cartItems = useCartStore((s) => s.items);
   const cartMemberUid = useCartStore((s) => s.memberUid);
+  const cartMember = useCartStore((s) => s.member);
   const paymentMethod = useCartStore((s) => s.paymentMethod);
   const isCheckingOut = useCartStore((s) => s.isCheckingOut);
   const isPaymentLocked = useCartStore((s) => s.isPaymentLocked);
@@ -82,6 +95,7 @@ export default function CashierPage() {
   const addItem = useCartStore((s) => s.addItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
+  const setCartMember = useCartStore((s) => s.setMember);
   const setPaymentMethod = useCartStore((s) => s.setPaymentMethod);
   const checkout = useCartStore((s) => s.checkout);
   const prepareCurrentOrder = useCartStore((s) => s.prepareCurrentOrder);
@@ -92,11 +106,128 @@ export default function CashierPage() {
   const hydrateCheckoutJournal = useCartStore((s) => s.hydrateCheckoutJournal);
   const recoveryNotice = useCartStore((s) => s.recoveryNotice);
   const dismissRecoveryNotice = useCartStore((s) => s.dismissRecoveryNotice);
+  const checkoutModalRequested = useCartStore((s) => s.checkoutModalRequested);
+  const consumeCheckoutModalRequest = useCartStore((s) => s.consumeCheckoutModalRequest);
   const markReceiptPrinted = useCartStore((s) => s.markReceiptPrinted);
   const receiptSettings = useReceiptSettingsStore((state) => state.settings);
+  const ticketSettings = useTicketSettingsStore((state) => state.settings);
   const paymentMethods = JPOS_PAYMENT_METHODS;
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
+  const [receiptLanguage, setReceiptLanguage] = useState<ReceiptLanguage>("vi");
+  const [memberReadStatus, setMemberReadStatus] = useState<"IDLE" | "READING" | "LOOKING_UP" | "FAILED">("IDLE");
+  const [memberReadError, setMemberReadError] = useState<string | null>(null);
+  const memberReadAttemptRef = useRef(0);
   const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
+
+  const handleReadMemberCard = useCallback(async () => {
+    if (!effectiveWarehouseId) {
+      showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi đọc thẻ thành viên.");
+      return;
+    }
+
+    const attemptId = memberReadAttemptRef.current + 1;
+    memberReadAttemptRef.current = attemptId;
+    setMemberReadStatus("READING");
+    setMemberReadError(null);
+
+    try {
+      const card = await readMemberCard();
+      if (memberReadAttemptRef.current !== attemptId) return;
+      const result = await lookupMember({
+        shopId,
+        warehouseId: effectiveWarehouseId,
+        mode: "CARD",
+        query: card.serialNumber,
+        cardLookupKind: "SERIAL_NUMBER",
+      });
+      if (memberReadAttemptRef.current !== attemptId) return;
+      setCartMember({
+        uid: result.member.uid,
+        memberCode: result.member.memberCode,
+        fullName: result.member.fullName,
+        phone: result.member.phone,
+        levelName: result.member.levelName,
+      });
+      setMemberReadStatus("IDLE");
+      showSuccess(
+        "Đã gắn thành viên vào đơn",
+        result.member.fullName || result.member.memberCode || result.member.phone,
+      );
+    } catch (error: unknown) {
+      if (memberReadAttemptRef.current !== attemptId) return;
+      const readerError = toCardReaderServiceError(error);
+      if (readerError.code === "READ_CANCELLED") {
+        setMemberReadStatus("IDLE");
+        return;
+      }
+      const message = readerError.code === "UNKNOWN"
+        ? toMemberServiceError(error).message
+        : readerError.message;
+      setMemberReadError(message);
+      setMemberReadStatus("FAILED");
+      showError("Không thể gắn thành viên", message);
+    }
+  }, [effectiveWarehouseId, setCartMember, shopId]);
+
+  const handleCancelMemberCardRead = useCallback(() => {
+    memberReadAttemptRef.current += 1;
+    setMemberReadStatus("IDLE");
+    setMemberReadError(null);
+    void cancelMemberCardRead().catch((error: unknown) => {
+      console.warn("[Đầu đọc thẻ] Không thể gửi lệnh hủy:", error);
+    });
+  }, []);
+
+  const handleLookupMemberByPhone = useCallback(async (phone: string) => {
+    if (!effectiveWarehouseId) {
+      showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi tìm thành viên.");
+      return;
+    }
+
+    const attemptId = memberReadAttemptRef.current + 1;
+    memberReadAttemptRef.current = attemptId;
+    setMemberReadStatus("LOOKING_UP");
+    setMemberReadError(null);
+
+    try {
+      const result = await lookupMember({
+        shopId,
+        warehouseId: effectiveWarehouseId,
+        mode: "PHONE",
+        query: phone,
+      });
+      if (memberReadAttemptRef.current !== attemptId) return;
+      setCartMember({
+        uid: result.member.uid,
+        memberCode: result.member.memberCode,
+        fullName: result.member.fullName,
+        phone: result.member.phone,
+        levelName: result.member.levelName,
+      });
+      setMemberReadStatus("IDLE");
+      showSuccess(
+        "Đã gắn thành viên vào đơn",
+        result.member.fullName || result.member.memberCode || result.member.phone,
+      );
+    } catch (error: unknown) {
+      if (memberReadAttemptRef.current !== attemptId) return;
+      const memberError = toMemberServiceError(error);
+      setMemberReadError(memberError.message);
+      setMemberReadStatus("FAILED");
+      showError("Không thể gắn thành viên", memberError.message);
+    }
+  }, [effectiveWarehouseId, setCartMember, shopId]);
+
+  const handleRemoveMember = useCallback(() => {
+    setCartMember(null);
+    setMemberReadStatus("IDLE");
+    setMemberReadError(null);
+  }, [setCartMember]);
+
+  useEffect(() => () => {
+    memberReadAttemptRef.current += 1;
+    void cancelMemberCardRead();
+  }, []);
 
   const handleAutoPrint = useCallback(async (localOrderId: string) => {
     console.info("[Biên lai] Bắt đầu in tự động", { localOrderId });
@@ -113,20 +244,23 @@ export default function CashierPage() {
     }
 
     try {
-      await printReceiptSilently(order, receiptSettings);
+      await printReceiptSilently(order, receiptSettings, undefined, receiptLanguage);
+      if (ticketSettings.autoPrintAfterPayment) {
+        await printTicketsSilently(order, ticketSettings);
+      }
       markReceiptPrinted(localOrderId);
     } catch (error: unknown) {
-      console.error("[Biên lai] In tự động thất bại:", error);
+      console.error("[In chứng từ] In tự động thất bại:", error);
       void recordPendingFailure("PRINT_ERROR", error, { localOrderId });
       showError(
-        "Thanh toán thành công nhưng chưa in được biên lai",
+        "Thanh toán thành công nhưng chưa in đủ chứng từ",
         describeReceiptPrintError(
           error,
-          "Không thể gửi biên lai tới máy in mặc định của Windows.",
+          "Không thể gửi biên lai hoặc vé tới máy in mặc định của Windows.",
         ),
       );
     }
-  }, [markReceiptPrinted, receiptSettings]);
+  }, [markReceiptPrinted, receiptLanguage, receiptSettings, ticketSettings]);
 
   const handlePayOSCompleted = useCallback((localOrderId: string, status: Parameters<typeof completePayOSCheckout>[1]) => {
     completePayOSCheckout(localOrderId, status);
@@ -137,6 +271,7 @@ export default function CashierPage() {
     shopId,
     warehouseId: effectiveWarehouseId,
     memberUid: cartMemberUid,
+    member: cartMember,
     draftOrderId,
     items: cartItems,
     onCompleted: handlePayOSCompleted,
@@ -207,6 +342,7 @@ export default function CashierPage() {
         goodsName: product.goodsName,
         price: displayPrice,
         quantity: 1,
+        ticketsPerUnit: product.ticketsPerUnit,
       });
       if (cartItems.length === 0 && effectiveWarehouseId) {
         void prepareCurrentOrder(shopId, effectiveWarehouseId);
@@ -381,8 +517,12 @@ export default function CashierPage() {
         >
           <CartPanel
             items={cartItems}
+            member={cartMember}
+            memberReadStatus={memberReadStatus}
+            memberReadError={memberReadError}
             paymentMethod={paymentMethod}
             paymentMethods={paymentMethods}
+            receiptLanguage={receiptLanguage}
             payOSPayment={payOSPayment}
             isCheckingOut={isCheckingOut}
             isPaymentLocked={isPaymentLocked}
@@ -393,9 +533,16 @@ export default function CashierPage() {
             itemCount={itemCount}
             onUpdateQuantity={updateQuantity}
             onRemoveItem={removeItem}
+            onReadMemberCard={() => void handleReadMemberCard()}
+            onCancelMemberCardRead={handleCancelMemberCardRead}
+            onLookupMemberByPhone={handleLookupMemberByPhone}
+            onRemoveMember={handleRemoveMember}
             onSetPaymentMethod={setPaymentMethod}
+            onSetReceiptLanguage={setReceiptLanguage}
             onCheckout={handleCheckout}
             onClearCart={clearCart}
+            openCheckoutRequested={checkoutModalRequested}
+            onCheckoutOpened={consumeCheckoutModalRequest}
           />
         </CheckoutSafetyBoundary>
       </div>

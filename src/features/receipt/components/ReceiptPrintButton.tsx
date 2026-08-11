@@ -6,7 +6,7 @@ import ReceiptDocument from "@/features/receipt/components/ReceiptDocument";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
 import { buildInvoiceRequestUrl } from "@/features/receipt/helpers/invoiceRequestUrl";
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
-import type { ReceiptSettings } from "@/features/receipt/types/receipt";
+import type { ReceiptLanguage, ReceiptSettings } from "@/features/receipt/types/receipt";
 import { fetchOrderForReceipt } from "@/lib/services/orderService";
 import type { PosOrder } from "@/lib/types/order";
 import { showError } from "@/lib/utils/toast";
@@ -20,6 +20,7 @@ interface ReceiptPrintButtonProps {
   className?: string;
   invoiceRequestUrlOverride?: string;
   printMode?: ReceiptPrintMode;
+  language?: ReceiptLanguage;
 }
 
 async function waitForImages(container: ParentNode): Promise<void> {
@@ -95,6 +96,7 @@ export async function printReceiptWithDialog(
   order: PosOrder,
   settings: ReceiptSettings,
   invoiceRequestUrlOverride?: string,
+  language: ReceiptLanguage = "vi",
 ): Promise<void> {
   const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
   const frame = document.createElement("iframe");
@@ -116,7 +118,7 @@ export async function printReceiptWithDialog(
   }
 
   printDocument.open();
-  printDocument.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><style>
+  printDocument.write(`<!doctype html><html lang="${language === "zh" ? "zh-CN" : language}"><head><meta charset="utf-8"><style>
     @page { size: ${profile.paperWidthMm}mm auto; margin: 0; }
     html, body { width: ${profile.paperWidthMm}mm; margin: 0; padding: 0; background: #fff; }
     *, *::before, *::after { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -129,6 +131,7 @@ export async function printReceiptWithDialog(
     <ReceiptDocument
       order={order}
       settings={settings}
+      language={language}
       invoiceRequestUrlOverride={invoiceRequestUrlOverride}
     />,
   );
@@ -152,6 +155,7 @@ export async function printReceiptSilently(
   order: PosOrder,
   settings: ReceiptSettings,
   invoiceRequestUrlOverride?: string,
+  language: ReceiptLanguage = "vi",
 ): Promise<void> {
   const { invoke, isTauri } = await import("@tauri-apps/api/core");
   if (!isTauri()) {
@@ -179,6 +183,7 @@ export async function printReceiptSilently(
       <ReceiptDocument
         order={order}
         settings={settings}
+        language={language}
         invoiceRequestUrlOverride={invoiceRequestUrlOverride}
       />,
     );
@@ -246,6 +251,7 @@ const ReceiptPrintButton: React.FC<ReceiptPrintButtonProps> = ({
   className = "",
   invoiceRequestUrlOverride,
   printMode = "silent",
+  language = "vi",
 }) => {
   const storedSettings = useReceiptSettingsStore((state) => state.settings);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -264,12 +270,14 @@ const ReceiptPrintButton: React.FC<ReceiptPrintButtonProps> = ({
           printableOrder,
           settings,
           invoiceRequestUrlOverride,
+          language,
         );
       } else {
         await printReceiptSilently(
           printableOrder,
           settings,
           invoiceRequestUrlOverride,
+          language,
         );
       }
     } catch (error: unknown) {
@@ -286,7 +294,7 @@ const ReceiptPrintButton: React.FC<ReceiptPrintButtonProps> = ({
     } finally {
       setIsPrinting(false);
     }
-  }, [invoiceRequestUrlOverride, order, printMode, settings]);
+  }, [invoiceRequestUrlOverride, language, order, printMode, settings]);
 
   return (
     <button

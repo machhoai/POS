@@ -5,19 +5,33 @@ import {
     calculateReceiptLine,
     calculateReceiptTotals,
 } from "@/features/receipt/helpers/receiptCalculations";
+import {
+    getLocalizedThemeMessage,
+    getReceiptCopy,
+    getReceiptLocale,
+    translateKnownSettingText,
+} from "@/features/receipt/helpers/receiptI18n";
 import type {
     ReceiptDocumentProps,
     ReceiptFontWeight,
+    ReceiptLanguage,
     ReceiptTheme,
 } from "@/features/receipt/types/receipt";
 import { buildInvoiceRequestUrl } from "@/features/receipt/helpers/invoiceRequestUrl";
 
-function formatMoney(value: number): string {
-    return `${Math.round(value).toLocaleString("vi-VN")} đ`;
+function formatMoney(value: number, language: ReceiptLanguage): string {
+    if (language === "vi") {
+        return `${Math.round(value).toLocaleString("vi-VN")} đ`;
+    }
+    return new Intl.NumberFormat(getReceiptLocale(language), {
+        style: "currency",
+        currency: "VND",
+        maximumFractionDigits: 0,
+    }).format(Math.round(value));
 }
 
-function formatDateTime(value: string): string {
-    return new Date(value).toLocaleString("vi-VN", {
+function formatDateTime(value: string, language: ReceiptLanguage): string {
+    return new Date(value).toLocaleString(getReceiptLocale(language), {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
@@ -26,10 +40,10 @@ function formatDateTime(value: string): string {
     });
 }
 
-function formatTaxRate(value: number): string {
+function formatTaxRate(value: number, language: ReceiptLanguage): string {
     return Number.isInteger(value)
         ? String(value)
-        : value.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+        : value.toLocaleString(getReceiptLocale(language), { maximumFractionDigits: 2 });
 }
 
 const rowStyle: CSSProperties = {
@@ -196,6 +210,7 @@ const ThemeMessageBanner: React.FC<ThemeMessageBannerProps> = ({
 const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
     order,
     settings,
+    language = "vi",
     invoiceRequestUrlOverride,
 }) => {
     const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
@@ -210,8 +225,20 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
         profile.printableWidthMm - (isCompact ? 8 : 12),
     );
     const totals = calculateReceiptTotals(order, settings.defaultTaxRate);
+    const copy = getReceiptCopy(language);
     const invoiceRequestUrl = invoiceRequestUrlOverride || buildInvoiceRequestUrl(order);
-    const themeMessage = settings.themeMessages[settings.theme]?.trim() ?? "";
+    const themeMessage = getLocalizedThemeMessage(
+        settings.theme,
+        settings.themeMessages[settings.theme] ?? "",
+        language,
+    );
+    const storeAddress = translateKnownSettingText(settings.storeAddress, language);
+    const afterSalesText = translateKnownSettingText(settings.afterSalesText, language);
+    const footerMessage = translateKnownSettingText(settings.footerMessage, language);
+    const customerName = order.member?.fullName || order.customerName || "";
+    const customerPhone = order.member?.phone || order.customerPhone || "";
+    const memberCode = order.member?.memberCode || "";
+    const memberLevel = order.member?.levelName || "";
     const borderStyle = settings.theme === "NATIONAL_DAY"
         ? "1px solid #000"
         : settings.theme === "TET"
@@ -220,7 +247,8 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
 
     return (
         <article
-            aria-label={`Biên lai ${order.localOrderId}`}
+            aria-label={`${copy.documentLabel} ${order.localOrderId}`}
+            lang={language === "zh" ? "zh-CN" : language}
             style={{
                 boxSizing: "border-box",
                 width: `${profile.printableWidthMm}mm`,
@@ -228,7 +256,7 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                 padding: isCompact ? "3mm" : "4mm",
                 background: "#fff",
                 color: "#000",
-                fontFamily: "Arial, Helvetica, sans-serif",
+                fontFamily: 'Arial, "Microsoft YaHei", "Noto Sans SC", Helvetica, sans-serif',
                 fontSize: isCompact ? "10px" : "11.5px",
                 lineHeight: 1.35,
                 overflowWrap: "anywhere",
@@ -240,7 +268,7 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                         src={settings.logoDataUrl}
-                        alt="Logo cửa hàng"
+                        alt={copy.logoAlt}
                         style={{
                             display: "block",
                             width: `${logoWidthMm}mm`,
@@ -254,11 +282,11 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                 <div style={{ fontSize: isCompact ? "15px" : "18px", fontWeight: fontWeights.storeName }}>
                     {settings.storeName || "JOY POS"}
                 </div>
-                {settings.storeAddress && (
-                    <div style={{ marginTop: "0.8mm", fontWeight: fontWeights.storeDetails }}>{settings.storeAddress}</div>
+                {storeAddress && (
+                    <div style={{ marginTop: "0.8mm", fontWeight: fontWeights.storeDetails }}>{storeAddress}</div>
                 )}
                 {settings.showContact && settings.hotline && (
-                    <div style={{ marginTop: "0.5mm", fontWeight: fontWeights.storeDetails }}>Hotline: {settings.hotline}</div>
+                    <div style={{ marginTop: "0.5mm", fontWeight: fontWeights.storeDetails }}>{copy.hotline}: {settings.hotline}</div>
                 )}
                 {settings.showThemeMessage && themeMessage && (
                     <ThemeMessageBanner
@@ -280,41 +308,67 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                         padding: "1.5mm 0",
                     }}
                 >
-                    Biên lai bán hàng
+                    {copy.receiptTitle}
                 </div>
             </header>
 
             <section style={{ display: "grid", gap: "0.8mm", fontWeight: fontWeights.orderInfo }}>
                 <div style={rowStyle}>
-                    <span style={labelStyle}>Mã đơn:</span>
+                    <span style={labelStyle}>{copy.orderId}:</span>
                     <strong style={{ ...valueStyle, fontFamily: "monospace", fontWeight: fontWeights.orderInfo }}>
                         {order.localOrderId}
                     </strong>
                 </div>
                 <div style={rowStyle}>
-                    <span style={labelStyle}>Ngày giờ:</span>
-                    <span style={valueStyle}>{formatDateTime(order.paidAt || order.createdAt)}</span>
+                    <span style={labelStyle}>{copy.dateTime}:</span>
+                    <span style={valueStyle}>{formatDateTime(order.paidAt || order.createdAt, language)}</span>
                 </div>
                 {settings.showCashier && order.operatorName && (
                     <div style={rowStyle}>
-                        <span style={labelStyle}>Nhân viên:</span>
+                        <span style={labelStyle}>{copy.cashier}:</span>
                         <span style={valueStyle}>{order.operatorName}</span>
                     </div>
                 )}
+                {customerName && (
+                    <div style={rowStyle}>
+                        <span style={labelStyle}>{copy.customer}:</span>
+                        <span style={valueStyle}>{customerName}</span>
+                    </div>
+                )}
+                {customerPhone && (
+                    <div style={rowStyle}>
+                        <span style={labelStyle}>{copy.phone}:</span>
+                        <span style={valueStyle}>{customerPhone}</span>
+                    </div>
+                )}
+                {memberCode && (
+                    <div style={rowStyle}>
+                        <span style={labelStyle}>{copy.memberCode}:</span>
+                        <span style={valueStyle}>{memberCode}</span>
+                    </div>
+                )}
+                {memberLevel && (
+                    <div style={rowStyle}>
+                        <span style={labelStyle}>{copy.memberLevel}:</span>
+                        <span style={valueStyle}>{memberLevel}</span>
+                    </div>
+                )}
                 <div style={rowStyle}>
-                    <span style={labelStyle}>Thanh toán:</span>
+                    <span style={labelStyle}>{copy.payment}:</span>
                     <span style={valueStyle}>
-                        {order.paymentMethodName || (order.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản")}
+                        {language === "vi" && order.paymentMethodName
+                            ? order.paymentMethodName
+                            : copy.paymentMethods[order.paymentMethod]}
                     </span>
                 </div>
             </section>
 
             <div style={{ borderTop: "1px dashed #000", margin: "3mm 0" }} />
 
-            <section aria-label="Hàng hóa đã mua">
+            <section aria-label={copy.purchasedItems}>
                 <div style={{ ...rowStyle, fontWeight: fontWeights.tableHeader, marginBottom: "1.8mm" }}>
-                    <span style={labelStyle}>HÀNG HÓA</span>
-                    <span style={valueStyle}>THÀNH TIỀN</span>
+                    <span style={labelStyle}>{copy.goods}</span>
+                    <span style={valueStyle}>{copy.amount}</span>
                 </div>
                 <div style={{ display: "grid", gap: isCompact ? "2.5mm" : "2mm" }}>
                     {order.items.map((item) => {
@@ -324,16 +378,16 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                                 <div style={{ fontWeight: fontWeights.itemName }}>{item.goodsName}</div>
                                 <div style={{ ...rowStyle, marginTop: "0.5mm", fontWeight: fontWeights.itemDetails }}>
                                     <span style={labelStyle}>
-                                        {item.quantity} × {formatMoney(item.price)}
+                                        {item.quantity} × {formatMoney(item.price, language)}
                                     </span>
                                     <span style={valueStyle}>
-                                        {formatMoney(line.lineTotal)}
+                                        {formatMoney(line.lineTotal, language)}
                                     </span>
                                 </div>
                                 {settings.showItemTax && (
                                     <div style={{ ...rowStyle, marginTop: "0.5mm", fontSize: "0.92em", fontWeight: fontWeights.itemTax }}>
-                                        <span style={labelStyle}>Thuế {formatTaxRate(line.taxRate)}%</span>
-                                        <span style={valueStyle}>{formatMoney(line.taxAmount)}</span>
+                                        <span style={labelStyle}>{copy.tax} {formatTaxRate(line.taxRate, language)}%</span>
+                                        <span style={valueStyle}>{formatMoney(line.taxAmount, language)}</span>
                                     </div>
                                 )}
                             </div>
@@ -346,20 +400,20 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
 
             <section style={{ display: "grid", gap: "1mm", fontWeight: fontWeights.summary }}>
                 <div style={rowStyle}>
-                    <span style={labelStyle}>Tạm tính</span>
-                    <span style={valueStyle}>{formatMoney(totals.subtotal)}</span>
+                    <span style={labelStyle}>{copy.subtotal}</span>
+                    <span style={valueStyle}>{formatMoney(totals.subtotal, language)}</span>
                 </div>
                 {totals.discount > 0 && (
                     <div style={rowStyle}>
                         <span style={labelStyle}>
-                            Giảm giá{order.voucherCode ? ` (${order.voucherCode})` : ""}
+                            {copy.discount}{order.voucherCode ? ` (${order.voucherCode})` : ""}
                         </span>
-                        <span style={valueStyle}>-{formatMoney(totals.discount)}</span>
+                        <span style={valueStyle}>-{formatMoney(totals.discount, language)}</span>
                     </div>
                 )}
                 <div style={{ ...rowStyle, fontWeight: fontWeights.taxTotal }}>
-                    <span style={labelStyle}>Tổng tiền thuế</span>
-                    <span style={valueStyle}>{formatMoney(totals.taxTotal)}</span>
+                    <span style={labelStyle}>{copy.taxTotal}</span>
+                    <span style={valueStyle}>{formatMoney(totals.taxTotal, language)}</span>
                 </div>
                 <div
                     style={{
@@ -371,15 +425,15 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                         fontWeight: fontWeights.grandTotal,
                     }}
                 >
-                    <span style={labelStyle}>TỔNG TIỀN</span>
-                    <span style={valueStyle}>{formatMoney(totals.grandTotal)}</span>
+                    <span style={labelStyle}>{copy.grandTotal}</span>
+                    <span style={valueStyle}>{formatMoney(totals.grandTotal, language)}</span>
                 </div>
             </section>
 
             <footer style={{ marginTop: "4mm", textAlign: "center" }}>
                 {invoiceRequestUrl && settings.showInvoiceRequestQr && (
                     <section
-                        aria-label="Yêu cầu xuất hóa đơn"
+                        aria-label={copy.invoiceRequest}
                         style={{
                             borderTop: "1px dashed #000",
                             paddingTop: "3mm",
@@ -392,7 +446,7 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                                 fontWeight: fontWeights.invoiceQrTitle,
                             }}
                         >
-                            Quét mã để yêu cầu xuất hóa đơn
+                            {copy.invoiceRequestQr}
                         </div>
                         <div style={{ display: "flex", justifyContent: "center", margin: "2mm 0" }}>
                             <QRCodeSVG
@@ -402,7 +456,7 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                                 marginSize={1}
                                 bgColor="#ffffff"
                                 fgColor="#000000"
-                                title="Mã QR yêu cầu xuất hóa đơn"
+                                title={copy.invoiceRequestQr}
                                 style={{
                                     width: `${invoiceQrSizeMm}mm`,
                                     height: `${invoiceQrSizeMm}mm`,
@@ -415,18 +469,18 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                                 fontWeight: fontWeights.invoiceQrHint,
                             }}
                         >
-                            Vui lòng điền thông tin xuất hóa đơn trước 22:30 cùng ngày.
+                            {copy.invoiceRequestHint}
                         </div>
                     </section>
                 )}
-                {settings.showContact && settings.afterSalesText && (
+                {settings.showContact && afterSalesText && (
                     <div style={{ borderTop: "1px dashed #000", paddingTop: "3mm", fontWeight: fontWeights.footer }}>
-                        {settings.afterSalesText}
+                        {afterSalesText}
                     </div>
                 )}
-                {settings.footerMessage && (
+                {footerMessage && (
                     <div style={{ marginTop: "2.5mm", fontWeight: fontWeights.footer }}>
-                        {settings.footerMessage}
+                        {footerMessage}
                     </div>
                 )}
             </footer>

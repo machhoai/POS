@@ -1,4 +1,9 @@
-import type { OrderItem, OrderStatus, PaymentMethod } from "@/lib/types/order";
+import type {
+  OrderItem,
+  OrderMemberSnapshot,
+  OrderStatus,
+  PaymentMethod,
+} from "@/lib/types/order";
 
 export type CheckoutCheckpoint =
   | "CART_READY"
@@ -16,6 +21,7 @@ export interface CheckoutJournalRecord {
   shopId: number;
   warehouseId: string;
   memberUid?: string | null;
+  member?: OrderMemberSnapshot | null;
   items: OrderItem[];
   paymentMethod: PaymentMethod;
   totalAmount: number;

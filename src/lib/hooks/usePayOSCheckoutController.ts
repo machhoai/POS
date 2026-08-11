@@ -5,7 +5,11 @@ import { usePayOSPaymentTimer } from "@/lib/hooks/usePayOSPaymentTimer";
 import { generateLocalOrderId } from "@/lib/services/orderService";
 import { useCartStore } from "@/lib/stores/useCartStore";
 import { usePayOSPaymentStore } from "@/lib/stores/usePayOSPaymentStore";
-import type { OrderItem, OrderStatus } from "@/lib/types/order";
+import type {
+  OrderItem,
+  OrderMemberSnapshot,
+  OrderStatus,
+} from "@/lib/types/order";
 import type { PayOSCheckoutController } from "@/lib/types/payment";
 import {
   showError,
@@ -18,6 +22,7 @@ interface PayOSCheckoutInput {
   shopId: number;
   warehouseId: string | null;
   memberUid?: string | null;
+  member?: OrderMemberSnapshot | null;
   draftOrderId: string | null;
   items: OrderItem[];
   onCompleted: (
@@ -33,6 +38,7 @@ export function usePayOSCheckoutController({
   shopId,
   warehouseId,
   memberUid = null,
+  member = null,
   draftOrderId,
   items,
   onCompleted,
@@ -160,6 +166,7 @@ export function usePayOSCheckoutController({
         shopId,
         warehouseId,
         ...(memberUid ? { uid: memberUid } : {}),
+        ...(member ? { member } : {}),
         items: items.map(({ goodsId, quantity }) => ({ goodsId, quantity })),
       });
       if (result.nextAction === "WAIT") {
@@ -179,6 +186,7 @@ export function usePayOSCheckoutController({
     localOrderId,
     lockCartForPayOS,
     manageCartLock,
+    member,
     memberUid,
     shopId,
     startPayment,
@@ -281,7 +289,6 @@ export function usePayOSCheckoutController({
   }, [
     cancelPayOS,
     fixedTransfer?.status,
-    localOrderId,
     localOrderId,
     manageCartLock,
     onCancelled,

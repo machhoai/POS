@@ -11,13 +11,16 @@ import CheckoutModalFooter from "@/components/pos/CheckoutModalFooter";
 import CheckoutPaymentMethods from "@/components/pos/CheckoutPaymentMethods";
 import CheckoutSummary from "@/components/pos/CheckoutSummary";
 import PayOSQrPanel from "@/components/pos/PayOSQrPanel";
+import ReceiptLanguageSelector from "@/components/pos/ReceiptLanguageSelector";
 import VoucherInput, { type AppliedVoucher } from "@/components/pos/VoucherInput";
+import type { ReceiptLanguage } from "@/features/receipt/types/receipt";
 import type { PaymentMethod } from "@/lib/types/order";
 import type { PayOSCheckoutController, PaymentMethodOption } from "@/lib/types/payment";
 
 interface CheckoutModalProps {
   paymentMethod: PaymentMethod;
   paymentMethods: PaymentMethodOption[];
+  receiptLanguage: ReceiptLanguage;
   payOSPayment: PayOSCheckoutController;
   totalAmount: number;
   finalAmount: number;
@@ -26,6 +29,7 @@ interface CheckoutModalProps {
   isValidatingVoucher: boolean;
   isCheckingOut: boolean;
   onSetPaymentMethod: (method: PaymentMethod) => void;
+  onSetReceiptLanguage: (language: ReceiptLanguage) => void;
   onApplyVoucher: (code: string) => void;
   onRemoveVoucher: () => void;
   onClose: () => void;
@@ -87,6 +91,11 @@ export default function CheckoutModal(props: CheckoutModalProps) {
             <PayOSQrPanel payment={props.payOSPayment} />
           ) : (
             <>
+              <ReceiptLanguageSelector
+                value={props.receiptLanguage}
+                disabled={isBusy}
+                onChange={props.onSetReceiptLanguage}
+              />
               <CheckoutPaymentMethods paymentMethod={props.paymentMethod} methods={props.paymentMethods} onChange={props.onSetPaymentMethod} />
               {isCashPayment && (
                 <CashPaymentPanel counts={banknotes} missingAmount={missingCash} changeAmount={cashChange} onIncrement={(value) => changeBanknote(value, 1)} onDecrement={(value) => changeBanknote(value, -1)} />

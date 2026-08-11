@@ -14,6 +14,15 @@ export type OrderStatus =
 export type PaymentMethod = "CASH" | "QR_CODE";
 export type OrderKind = "STANDARD" | "MEMBER_PACKAGE";
 
+/** Member details captured when the member is attached to an order. */
+export interface OrderMemberSnapshot {
+  uid: string;
+  memberCode: string | null;
+  fullName: string;
+  phone: string;
+  levelName: string;
+}
+
 /** A single line item in an order. */
 export interface OrderItem {
   goodsId: string;
@@ -27,6 +36,10 @@ export interface OrderItem {
   taxRate?: number;
   /** Tổng tiền thuế của dòng hàng. */
   taxAmount?: number;
+  /** Số vé cần in cho mỗi đơn vị sản phẩm, được snapshot khi tạo đơn. */
+  ticketsPerUnit?: number;
+  /** Mã duy nhất của từng vé vật lý, được backend tạo và lưu cùng đơn. */
+  ticketCodes?: string[];
 }
 
 /** Metadata tracking the sync process with the remote HK API. */
@@ -160,6 +173,9 @@ export interface PosOrder {
 
   /** UID thành viên trên OpenAPI, chỉ dùng ở backend khi tạo đơn từ xa. */
   uid?: string;
+
+  /** Snapshot thành viên tại thời điểm bán, phục vụ lịch sử đơn và tích điểm. */
+  member?: OrderMemberSnapshot;
 
   /** Current status in the order lifecycle */
   status: OrderStatus;
