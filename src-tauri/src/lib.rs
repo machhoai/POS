@@ -316,6 +316,7 @@ async fn print_receipt_silent(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
         .on_window_event(|window, event| {
             if window.label() != MAIN_WINDOW_LABEL
                 || !matches!(event, tauri::WindowEvent::CloseRequested { .. })
@@ -336,6 +337,10 @@ pub fn run() {
             app.exit(0);
         })
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+
             match ensure_customer_display(app.handle()) {
                 Ok(CustomerDisplayOpenStatus::NoSecondaryMonitor) => {
                     notify_main_window(app.handle(), NO_SECONDARY_MONITOR_WARNING);

@@ -7,6 +7,7 @@ import { AuthProvider } from "@/lib/contexts/AuthContext";
 import ToastProvider from "@/components/providers/ToastProvider";
 import ResilienceProvider from "@/components/resilience/ResilienceProvider";
 import DeviceActivationGate from "@/components/device/DeviceActivationGate";
+import UpdateProvider from "@/features/updater/components/UpdateProvider";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -26,11 +27,13 @@ export default function RootLayout({
   return (
     <html lang="vi" data-scroll-behavior="smooth">
       <body className={`${inter.className} antialiased`}>
-        <ResilienceProvider>
-          <DeviceActivationGate>
-            <AuthProvider>{children}</AuthProvider>
-          </DeviceActivationGate>
-        </ResilienceProvider>
+        <UpdateProvider>
+          <ResilienceProvider>
+            <DeviceActivationGate>
+              <AuthProvider>{children}</AuthProvider>
+            </DeviceActivationGate>
+          </ResilienceProvider>
+        </UpdateProvider>
         <ToastProvider />
         <Script
           type="module"

@@ -30,6 +30,11 @@ const NAV_ITEMS = [
         label: "Thành viên",
         icon: <IoPeople />
     },
+    {
+        href: "/display-control",
+        label: "Điều khiển màn hình khách",
+        icon: <IoDesktop />
+    },
 ];
 
 export default function Sidebar({ onLogout }: SidebarProps) {

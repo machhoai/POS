@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import AdvertisingCarousel from "@/components/display/AdvertisingCarousel";
 import CustomerOrderPanel from "@/components/display/CustomerOrderPanel";
@@ -10,9 +10,11 @@ import PaymentSuccessView from "@/components/display/PaymentSuccessView";
 import { useCustomerDisplayAdvertisingSlides } from "@/lib/hooks/useCustomerDisplayAdvertisingSlides";
 import { useCustomerPaymentCountdown } from "@/lib/hooks/useCustomerPaymentCountdown";
 import { useCustomerDisplayState } from "@/lib/hooks/useCustomerDisplayState";
+import { useCustomerDisplayControl } from "@/lib/hooks/useCustomerDisplayControl";
 
 export default function CustomerDisplayPage() {
     const state = useCustomerDisplayState();
+    const control = useCustomerDisplayControl();
     const advertisingSlides = useCustomerDisplayAdvertisingSlides();
     const [dismissedSuccessKey, setDismissedSuccessKey] = useState<string | null>(null);
     const activeQr = state.mode === "TRANSFER" && state.payment.status === "AWAITING_PAYMENT"
@@ -22,11 +24,19 @@ export default function CustomerDisplayPage() {
 
     const successKey = state.mode === "SUCCESS" ? JSON.stringify(state.order) : null;
 
+    useEffect(() => {
+        document.documentElement.lang = control.language === "zh" ? "zh-CN" : control.language;
+        return () => {
+            document.documentElement.lang = "vi";
+        };
+    }, [control.language]);
+
     if (state.mode === "SUCCESS" && dismissedSuccessKey !== successKey) {
         return (
             <PaymentSuccessView
                 key={successKey || "payment-success"}
                 order={state.order}
+                language={control.language}
                 onTimeout={() => setDismissedSuccessKey(successKey)}
             />
         );
@@ -42,22 +52,24 @@ export default function CustomerDisplayPage() {
             <div className={`grid min-h-0 flex-1 gap-3 overflow-y-auto p-2 ${contentLayout}`}>
                 <AdvertisingCarousel
                     slides={advertisingSlides}
+                    pinnedSlideId={control.pinnedSlideId}
                 />
                 {state.mode === "CART" ? (
-                    <CustomerOrderPanel order={state.order} />
+                    <CustomerOrderPanel order={state.order} language={control.language} />
                 ) : null}
                 {state.mode === "TRANSFER" ? (
                     <CustomerPaymentQr
                         order={state.order}
                         payment={state.payment}
                         remainingSeconds={remainingSeconds}
+                        language={control.language}
                     />
                 ) : null}
                 {isMemberMode ? (
                     <div className="scrollbar-thin flex min-h-0 flex-col gap-3 overflow-y-auto">
-                        <MemberRegistrationDisplay state={state} />
+                        <MemberRegistrationDisplay state={state} language={control.language} />
                         <div className="overflow-hidden min-h-0 flex-1">
-                            {state.order ? <CustomerOrderPanel order={state.order} /> : null}
+                            {state.order ? <CustomerOrderPanel order={state.order} language={control.language} /> : null}
                         </div>
                     </div>
                 ) : null}

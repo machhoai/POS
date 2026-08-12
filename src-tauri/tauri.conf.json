@@ -1,7 +1,7 @@
 {
-    "$schema": "https://raw.githubusercontent.com/nicegui/nicegui-native/refs/heads/main/nicegui_native/.tauri/config-schema.json",
+    "$schema": "https://schema.tauri.app/config/2",
     "productName": "JPOS",
-    "version": "0.1.11",
+    "version": "../package.json",
     "identifier": "com.jpos.system",
     "build": {
         "beforeDevCommand": "pnpm dev",
@@ -32,6 +32,7 @@
     "bundle": {
         "active": true,
         "targets": "all",
+        "createUpdaterArtifacts": true,
         "resources": [
             "resources/card-reader/*"
         ],
@@ -42,5 +43,16 @@
             "icons/icon.icns",
             "icons/icon.ico"
         ]
+    },
+    "plugins": {
+        "updater": {
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGODhFMUQ2QUYxMzc3RkIKUldUN2R4T3YxdUdJL3lHdmcrb1NPL3V4OEErMjlqanBQOTA3aVR4dVBUSVZFL3JyRGk2aEh2VjYK",
+            "endpoints": [
+                "https://github.com/machhoai/POS/releases/latest/download/latest.json"
+            ],
+            "windows": {
+                "installMode": "passive"
+            }
+        }
     }
 }

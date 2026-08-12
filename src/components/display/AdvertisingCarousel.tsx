@@ -10,6 +10,7 @@ interface AdvertisingMediaProps {
   slide: CustomerDisplayResolvedSlide;
   active: boolean;
   leaving: boolean;
+  pinned: boolean;
   onEnded: () => void;
 }
 
@@ -17,6 +18,7 @@ const AdvertisingMedia: React.FC<AdvertisingMediaProps> = ({
   slide,
   active,
   leaving,
+  pinned,
   onEnded,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -37,6 +39,7 @@ const AdvertisingMedia: React.FC<AdvertisingMediaProps> = ({
       ref={videoRef}
       src={slide.src}
       muted
+      loop={pinned}
       playsInline
       preload="auto"
       onEnded={active ? onEnded : undefined}
@@ -52,11 +55,17 @@ const AdvertisingMedia: React.FC<AdvertisingMediaProps> = ({
 
 const AdvertisingCarousel: React.FC<{
   slides: readonly CustomerDisplayResolvedSlide[];
-}> = ({ slides }) => {
+  pinnedSlideId?: string | null;
+}> = ({ slides, pinnedSlideId = null }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [leavingIndex, setLeavingIndex] = useState<number | null>(null);
   const safeActiveIndex = activeIndex % Math.max(1, slides.length);
-  const activeSlide = slides[safeActiveIndex];
+  const pinnedIndex = pinnedSlideId
+    ? slides.findIndex((slide) => slide.id === pinnedSlideId)
+    : -1;
+  const isPinned = pinnedIndex >= 0;
+  const visibleActiveIndex = isPinned ? pinnedIndex : safeActiveIndex;
+  const activeSlide = slides[visibleActiveIndex];
 
   const advance = useCallback(() => {
     if (slides.length <= 1) return;
@@ -65,13 +74,13 @@ const AdvertisingCarousel: React.FC<{
   }, [safeActiveIndex, slides.length]);
 
   useEffect(() => {
-    if (!activeSlide || slides.length <= 1) return;
+    if (!activeSlide || slides.length <= 1 || isPinned) return;
     const timeout = window.setTimeout(
       advance,
       activeSlide.type === "VIDEO" ? 15_000 : activeSlide.durationSeconds * 1_000,
     );
     return () => window.clearTimeout(timeout);
-  }, [activeSlide, advance, slides.length]);
+  }, [activeSlide, advance, isPinned, slides.length]);
 
   useEffect(() => {
     if (leavingIndex === null) return;
@@ -90,7 +99,7 @@ const AdvertisingCarousel: React.FC<{
       aria-roledescription="băng chuyền"
     >
       {slides.map((slide, index) => {
-        const active = index === safeActiveIndex;
+        const active = index === visibleActiveIndex;
         const leaving = index === leavingIndex && !active;
         const position = active
           ? "z-20 translate-x-0"
@@ -107,6 +116,7 @@ const AdvertisingCarousel: React.FC<{
               slide={slide}
               active={active}
               leaving={leaving}
+              pinned={isPinned && active}
               onEnded={advance}
             />
           </article>
@@ -121,7 +131,7 @@ const AdvertisingCarousel: React.FC<{
           {slides.map((slide, index) => (
             <span
               key={slide.id}
-              className={`h-2.5 rounded-full bg-white transition-all duration-500 ${index === safeActiveIndex ? "w-8" : "w-2.5 opacity-50"}`}
+              className={`h-2.5 rounded-full bg-white transition-all duration-500 ${index === visibleActiveIndex ? "w-8" : "w-2.5 opacity-50"}`}
             />
           ))}
         </div>

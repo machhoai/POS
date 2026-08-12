@@ -3,12 +3,15 @@
 import { useEffect, useRef } from "react";
 import { CheckCircle2, Heart } from "lucide-react";
 import type { CustomerDisplayOrderSnapshot } from "@/lib/types/customerDisplay";
+import type { CustomerDisplayLanguage } from "@/lib/types/customerDisplayControl";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import { getCustomerDisplayCopy } from "@/lib/utils/customerDisplayI18n";
 
 interface PaymentSuccessViewProps {
     order?: CustomerDisplayOrderSnapshot | null;
     onTimeout?: () => void;
     durationSeconds?: number;
+    language: CustomerDisplayLanguage;
 }
 
 const DEFAULT_DURATION_SECONDS = 5;
@@ -27,9 +30,11 @@ const PaymentSuccessView: React.FC<PaymentSuccessViewProps> = ({
     order,
     onTimeout,
     durationSeconds = DEFAULT_DURATION_SECONDS,
+    language,
 }) => {
     const displayOrder = order ?? MOCK_ORDER;
     const itemCount = displayOrder.items.reduce((total, item) => total + item.quantity, 0);
+    const copy = getCustomerDisplayCopy(language);
 
     const onTimeoutRef = useRef(onTimeout);
     useEffect(() => {
@@ -59,17 +64,17 @@ const PaymentSuccessView: React.FC<PaymentSuccessViewProps> = ({
                     <CheckCircle2 className="size-14" strokeWidth={2.4} aria-hidden="true" />
                 </span>
                 <h1 className="mt-5 text-4xl font-black tracking-[-0.04em] text-[var(--color-text-primary)] sm:text-5xl">
-                    Cảm ơn quý khách!
+                    {copy.thankYou}
                 </h1>
                 <p className="mx-auto mt-4 max-w-lg text-lg leading-8 text-[var(--color-text-secondary)]">
-                    Đơn hàng gồm {itemCount} sản phẩm đã được thanh toán thành công.
+                    {copy.paymentSuccess(itemCount)}
                 </p>
                 <strong className="mt-7 block text-5xl font-black tracking-[-0.05em] text-[var(--color-accent)] sm:text-6xl">
                     {formatCurrency(displayOrder.totalAmount)}
                 </strong>
                 <div className="mt-8 flex items-center justify-center gap-2 text-lg font-bold text-[var(--color-text-muted)]">
                     <Heart className="size-5 fill-current text-rose-400" aria-hidden="true" />
-                    Hẹn gặp lại quý khách trong lần mua sắm tiếp theo
+                    {copy.seeYouAgain}
                 </div>
             </section>
         </main>

@@ -1,0 +1,59 @@
+name: Release JPOS Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "jpos-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    name: Build and publish Windows updater
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-pc-windows-msvc
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and publish JPOS
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          tagName: jpos-v__VERSION__
+          releaseName: JPOS v__VERSION__
+          releaseBody: |
+            Bản cập nhật JPOS v__VERSION__.
+
+            Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
+          generateReleaseNotes: true
+          releaseDraft: false
+          prerelease: false
+          updaterJsonPreferNsis: true
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true

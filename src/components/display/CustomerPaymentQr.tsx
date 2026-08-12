@@ -2,36 +2,31 @@
 import { CircleX, Clock3, LoaderCircle, ScanLine, TriangleAlert } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { CustomerDisplayOrderSnapshot, CustomerDisplayTransferPayment } from "@/lib/types/customerDisplay";
+import type { CustomerDisplayLanguage } from "@/lib/types/customerDisplayControl";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import { getCustomerDisplayCopy } from "@/lib/utils/customerDisplayI18n";
 
 interface CustomerPaymentQrProps {
     payment: CustomerDisplayTransferPayment;
     remainingSeconds: number;
     order?: CustomerDisplayOrderSnapshot;
+    language: CustomerDisplayLanguage;
 }
 
-const STATUS_CONTENT = {
+const STATUS_ICONS = {
     CREATING: {
-        title: "Đang tạo mã thanh toán",
-        description: "Vui lòng chờ trong giây lát.",
         icon: LoaderCircle,
         iconClassName: "animate-spin text-[var(--color-info)]",
     },
     EXPIRED: {
-        title: "Mã thanh toán đã hết hạn",
-        description: "Vui lòng liên hệ thu ngân để tạo mã mới.",
         icon: Clock3,
         iconClassName: "text-[var(--color-warning)]",
     },
     CANCELLED: {
-        title: "Thanh toán đã được hủy",
-        description: "Thu ngân sẽ hỗ trợ bạn chọn phương thức khác.",
         icon: CircleX,
         iconClassName: "text-[var(--color-danger)]",
     },
     ERROR: {
-        title: "Chưa thể hiển thị mã QR",
-        description: "Vui lòng kiểm tra kết nối mạng hoặc liên hệ thu ngân.",
         icon: TriangleAlert,
         iconClassName: "text-[var(--color-danger)]",
     },
@@ -46,17 +41,22 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
     payment,
     remainingSeconds,
     order,
+    language,
 }) => {
+    const copy = getCustomerDisplayCopy(language);
     const hasLocallyExpired =
         payment.status === "AWAITING_PAYMENT" &&
         !payment.qr.manualConfirmationRequired &&
         remainingSeconds <= 0;
     const isReady = payment.status === "AWAITING_PAYMENT" && !hasLocallyExpired;
     const displayStatus = hasLocallyExpired ? "EXPIRED" : payment.status;
-    const statusContent = displayStatus === "AWAITING_PAYMENT"
+    const statusIcon = displayStatus === "AWAITING_PAYMENT"
         ? null
-        : STATUS_CONTENT[displayStatus];
-    const StatusIcon = statusContent?.icon;
+        : STATUS_ICONS[displayStatus];
+    const statusText = displayStatus === "AWAITING_PAYMENT"
+        ? null
+        : copy.paymentStatuses[displayStatus];
+    const StatusIcon = statusIcon?.icon;
 
     return (
         <section className="flex flex-col h-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-md)]" aria-live="polite">
@@ -66,8 +66,8 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                         <ScanLine className="size-6" aria-hidden="true" />
                     </span>
                     <div>
-                        <h2 className="text-xl font-extrabold text-[var(--color-text-primary)]">Thanh toán qua mã QR</h2>
-                        <p className="text-xs font-medium text-[var(--color-text-muted)]">Quét mã QR để hoàn tất thanh toán</p>
+                        <h2 className="text-xl font-extrabold text-[var(--color-text-primary)]">{copy.qrTitle}</h2>
+                        <p className="text-xs font-medium text-[var(--color-text-muted)]">{copy.qrSubtitle}</p>
                     </div>
                 </div>
                 {isReady && !payment.qr.manualConfirmationRequired && (
@@ -89,7 +89,7 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                                     {payment.qr.imageUrl ? (
                                         <img
                                             src={payment.qr.imageUrl}
-                                            alt="Mã QR chuyển khoản vào tài khoản cố định"
+                                            alt={copy.qrImageAlt}
                                             className="h-full w-full object-contain"
                                         />
                                     ) : payment.qr.value ? (
@@ -99,7 +99,7 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                                             level="M"
                                             marginSize={1}
                                             className="w-full h-full"
-                                            aria-label="Mã QR thanh toán chuyển khoản"
+                                            aria-label={copy.qrImageAlt}
                                         />
                                     ) : null}
                                 </div>
@@ -112,10 +112,10 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                                 {/* Recipient Name */}
                                 <div className="rounded-xl bg-[var(--color-surface-alt)] p-3 text-left">
                                     <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-                                        Tên người nhận
+                                        {copy.recipient}
                                     </p>
                                     <p className="mt-0.5 uppercase font-bold text-lg text-[var(--color-text-primary)]">
-                                        {payment.qr.accountName || "Đang cập nhật"}
+                                        {payment.qr.accountName || copy.updating}
                                     </p>
                                     {payment.qr.accountNumber ? (
                                         <p className="mt-0.5 font-mono text-sm font-bold text-[var(--color-text-secondary)]">
@@ -127,7 +127,7 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                                 {/* Transfer Content */}
                                 <div className="rounded-xl bg-amber-50/80 border border-amber-200/60 p-3 text-left">
                                     <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
-                                        Nội dung chuyển khoản
+                                        {copy.transferContent}
                                     </p>
                                     <p className="mt-0.5 break-words  text-lg font-black text-amber-950">
                                         {payment.qr.description}
@@ -136,15 +136,15 @@ const CustomerPaymentQr: React.FC<CustomerPaymentQrProps> = ({
                             </div>
                             {payment.qr.manualConfirmationRequired ? (
                                 <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-sm font-semibold text-amber-900">
-                                    Vui lòng báo thu ngân sau khi chuyển khoản thành công.
+                                    {copy.manualConfirmation}
                                 </p>
                             ) : null}
                         </>
                     ) : (
                         <div className="flex flex-col items-center justify-center my-auto p-6 text-center">
-                            {StatusIcon ? <StatusIcon className={`mb-4 size-14 ${statusContent?.iconClassName}`} aria-hidden="true" /> : null}
-                            <h3 className="text-xl font-extrabold text-[var(--color-text-primary)]">{statusContent?.title}</h3>
-                            <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">{statusContent?.description}</p>
+                            {StatusIcon ? <StatusIcon className={`mb-4 size-14 ${statusIcon?.iconClassName}`} aria-hidden="true" /> : null}
+                            <h3 className="text-xl font-extrabold text-[var(--color-text-primary)]">{statusText?.[0]}</h3>
+                            <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">{statusText?.[1]}</p>
                         </div>
                     )}
                 </div>

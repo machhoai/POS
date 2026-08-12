@@ -1,32 +1,30 @@
 import { CalendarDays, CheckCircle2, Coins, Mail, Phone, UserRound, WalletCards } from "lucide-react";
 import type { CustomerDisplayMemberState } from "@/lib/types/customerDisplay";
+import type { CustomerDisplayLanguage } from "@/lib/types/customerDisplayControl";
+import { getCustomerDisplayCopy, getCustomerDisplayLocale } from "@/lib/utils/customerDisplayI18n";
 
 interface MemberRegistrationDisplayProps {
     state: CustomerDisplayMemberState;
+    language: CustomerDisplayLanguage;
 }
 
-const GENDER_LABEL = {
-    MALE: "Nam",
-    FEMALE: "Nữ",
-    OTHER: "Khác",
-    UNKNOWN: "Chưa cập nhật",
-};
-
-const pointFormatter = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
-
-export default function MemberRegistrationDisplay({ state }: MemberRegistrationDisplayProps) {
+export default function MemberRegistrationDisplay({ state, language }: MemberRegistrationDisplayProps) {
     const isSuccess = state.mode === "MEMBER_SUCCESS";
     const balances = state.member.balances ?? null;
+    const copy = getCustomerDisplayCopy(language);
+    const pointFormatter = new Intl.NumberFormat(getCustomerDisplayLocale(language), {
+        maximumFractionDigits: 2,
+    });
     const details = [
-        { icon: Phone, label: "Số điện thoại", value: state.member.phone || "" },
-        { icon: UserRound, label: "Giới tính", value: GENDER_LABEL[state.member.gender] },
-        { icon: CalendarDays, label: "Ngày sinh", value: state.member.birthDate || "Chưa nhập" },
-        { icon: Mail, label: "Email", value: state.member.email || "Chưa nhập" },
+        { icon: Phone, label: copy.phone, value: state.member.phone || "" },
+        { icon: UserRound, label: copy.gender, value: copy.genders[state.member.gender] },
+        { icon: CalendarDays, label: copy.birthDate, value: state.member.birthDate || copy.notEntered },
+        { icon: Mail, label: copy.email, value: state.member.email || copy.notEntered },
     ];
     const balanceItems = balances ? [
-        { label: "Tài khoản VND", value: balances.principalVnd, icon: WalletCards, tone: "bg-blue-50 text-blue-700" },
-        { label: "Điểm thưởng", value: balances.bonus, icon: Coins, tone: "bg-amber-50 text-amber-700" },
-        { label: "Điểm tích lũy", value: balances.integral, icon: Coins, tone: "bg-violet-50 text-violet-700" },
+        { label: copy.vndAccount, value: balances.principalVnd, icon: WalletCards, tone: "bg-blue-50 text-blue-700" },
+        { label: copy.bonusPoints, value: balances.bonus, icon: Coins, tone: "bg-amber-50 text-amber-700" },
+        { label: copy.integralPoints, value: balances.integral, icon: Coins, tone: "bg-violet-50 text-violet-700" },
     ] : [];
 
     return (
@@ -36,22 +34,22 @@ export default function MemberRegistrationDisplay({ state }: MemberRegistrationD
                     {isSuccess ? <CheckCircle2 className="size-6" /> : <UserRound className="size-6" />}
                 </span>
                 <div>
-                    <h1 className="text-xl font-extrabold text-[var(--color-text-primary)]">{isSuccess ? "Đăng ký thành công" : "Thông tin thành viên"}</h1>
-                    <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">{isSuccess ? "Cảm ơn bạn đã đăng ký tại Joy World" : "Đang cập nhật trực tiếp từ thu ngân"}</p>
+                    <h1 className="text-xl font-extrabold text-[var(--color-text-primary)]">{isSuccess ? copy.registrationSuccess : copy.memberInformation}</h1>
+                    <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">{isSuccess ? copy.registrationThanks : copy.liveFromCashier}</p>
                 </div>
             </header>
 
             <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-3">
                 <div className={`rounded-2xl p-2 ${isSuccess ? "bg-emerald-50" : "bg-orange-50"}`}>
-                    <p className="text-sm font-medium text-[var(--color-text-muted)]">Họ và tên</p>
+                    <p className="text-sm font-medium text-[var(--color-text-muted)]">{copy.fullName}</p>
                     <p className="break-words text-xl font-bold text-[var(--color-text-primary)]">{state.member.fullName || ""}</p>
                     {balances ? (
                         <p className="mt-2 flex items-center gap-2 text-base font-medium text-[var(--color-text-secondary)]">
                             <Phone className="size-4 text-[var(--color-accent)]" />
-                            {state.member.phone || "Chưa cập nhật"}
+                            {state.member.phone || copy.notUpdated}
                         </p>
                     ) : state.member.memberCode ? (
-                        <p className="mt-2 text-sm font-bold text-emerald-700">Mã thẻ: {state.member.memberCode}</p>
+                        <p className="mt-2 text-sm font-bold text-emerald-700">{copy.cardCode}: {state.member.memberCode}</p>
                     ) : null}
                 </div>
 
@@ -62,7 +60,7 @@ export default function MemberRegistrationDisplay({ state }: MemberRegistrationD
                                 <Icon className="size-6 shrink-0" />
                                 <div className="min-w-0">
                                     <p className="text-xs font-bold opacity-75">{label}</p>
-                                    <p className="mt-1 text-xl font-black">{pointFormatter.format(value)} điểm</p>
+                                    <p className="mt-1 text-xl font-black">{pointFormatter.format(value)} {copy.points}</p>
                                 </div>
                             </div>
                         ))}
