@@ -1,42 +1,42 @@
 {
-  "name": "pos-system",
-  "version": "0.1.12",
-  "private": true,
-  "scripts": {
-    "dev": "next dev --port 3000",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "card-reader:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-card-reader-sidecar.ps1"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^2.11.0",
-    "@tauri-apps/plugin-process": "~2.3.1",
-    "@tauri-apps/plugin-shell": "^2.3.5",
-    "@tauri-apps/plugin-updater": "~2.10.1",
-    "firebase": "^12.12.1",
-    "goey-toast": "^0.4.0",
-    "lucide-react": "^1.28.0",
-    "next": "16.2.4",
-    "qrcode.react": "^4.2.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "react-icons": "^5.7.0",
-    "zustand": "^5.0.12"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@tauri-apps/cli": "^2.11.0",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.4",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  },
-  "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0"
+    "name": "pos-system",
+    "version": "0.1.13",
+    "private": true,
+    "scripts": {
+        "dev": "next dev --port 3000",
+        "build": "next build",
+        "start": "next start",
+        "lint": "eslint",
+        "tauri": "tauri",
+        "tauri:dev": "tauri dev",
+        "tauri:build": "tauri build",
+        "card-reader:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-card-reader-sidecar.ps1"
+    },
+    "dependencies": {
+        "@tauri-apps/api": "^2.11.0",
+        "@tauri-apps/plugin-process": "~2.3.1",
+        "@tauri-apps/plugin-shell": "^2.3.5",
+        "@tauri-apps/plugin-updater": "~2.10.1",
+        "firebase": "^12.12.1",
+        "goey-toast": "^0.4.0",
+        "lucide-react": "^1.28.0",
+        "next": "16.2.4",
+        "qrcode.react": "^4.2.0",
+        "react": "19.2.4",
+        "react-dom": "19.2.4",
+        "react-icons": "^5.7.0",
+        "zustand": "^5.0.12"
+    },
+    "devDependencies": {
+        "@tailwindcss/postcss": "^4",
+        "@tauri-apps/cli": "^2.11.0",
+        "@types/node": "^20",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "eslint": "^9",
+        "eslint-config-next": "16.2.4",
+        "tailwindcss": "^4",
+        "typescript": "^5"
+    },
+    "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0"
 }
