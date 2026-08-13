@@ -17,6 +17,7 @@ import {
 import { SAMPLE_RECEIPT_ORDER } from "@/features/receipt/data/sampleReceipt";
 import { mapRemoteReceiptSettings } from "@/features/receipt/helpers/remoteReceiptSettings";
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
+import { useSettingsAccess } from "@/features/settings/hooks/useSettingsAccess";
 import type {
     ReceiptFontWeight,
     ReceiptFontWeights,
@@ -56,6 +57,7 @@ const FONT_WEIGHT_FIELDS: Array<{
 export default function ReceiptSettingsPage() {
     const router = useRouter();
     const { user, userDoc, isLoading: authLoading, logout } = useAuth();
+    const { canManageGeneralSettings } = useSettingsAccess();
     const appliedSettings = useReceiptSettingsStore((state) => state.settings);
     const remoteVersion = useReceiptSettingsStore((state) => state.remoteVersion);
     const applyRemoteSettings = useReceiptSettingsStore((state) => state.applyRemoteSettings);
@@ -70,10 +72,12 @@ export default function ReceiptSettingsPage() {
     }, [authLoading, router, user, userDoc]);
 
     const updateSettings = useCallback((patch: Partial<typeof settings>) => {
+        if (!canManageGeneralSettings) return;
         setDraftSettings((current) => ({ ...(current ?? appliedSettings), ...patch }));
-    }, [appliedSettings]);
+    }, [appliedSettings, canManageGeneralSettings]);
 
     const handleLogoChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        if (!canManageGeneralSettings) return;
         const file = event.target.files?.[0];
         event.target.value = "";
         if (!file) return;
@@ -93,15 +97,16 @@ export default function ReceiptSettingsPage() {
         });
         reader.addEventListener("error", () => showError("Không thể đọc logo", "Vui lòng chọn một tệp ảnh khác."));
         reader.readAsDataURL(file);
-    }, [updateSettings]);
+    }, [canManageGeneralSettings, updateSettings]);
 
     const handleReset = useCallback(() => {
+        if (!canManageGeneralSettings) return;
         setDraftSettings(DEFAULT_RECEIPT_SETTINGS);
         showSuccess("Đã tạo cấu hình mặc định", "Nhấn Lưu cấu hình để đồng bộ thay đổi lên JPULSE.");
-    }, []);
+    }, [canManageGeneralSettings]);
 
     const handleSave = useCallback(async () => {
-        if (!isDirty || isSaving) return;
+        if (!canManageGeneralSettings || !isDirty || isSaving) return;
         setIsSaving(true);
         try {
             const saved = await saveRemoteReceiptSettings(settings);
@@ -121,7 +126,7 @@ export default function ReceiptSettingsPage() {
         } finally {
             setIsSaving(false);
         }
-    }, [applyRemoteSettings, isDirty, isSaving, settings]);
+    }, [applyRemoteSettings, canManageGeneralSettings, isDirty, isSaving, settings]);
 
     if (authLoading || !user || !userDoc) {
         return <div className="flex h-screen items-center justify-center bg-[var(--color-background)]"><div className="flex flex-col items-center gap-3"><div className="size-10 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" /><p className="text-sm text-[var(--color-text-muted)]">Đang tải cấu hình...</p></div></div>;
@@ -137,16 +142,16 @@ export default function ReceiptSettingsPage() {
                         <div><h1 className="text-lg font-extrabold tracking-tight text-[var(--color-text-primary)]">Cấu hình biên lai</h1><p className="text-xs text-[var(--color-text-muted)]">Đồng bộ hai chiều với JPULSE · phiên bản {remoteVersion ?? 0}</p></div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <span className={`hidden items-center gap-1.5 text-xs font-semibold sm:flex ${isDirty ? "text-amber-600" : "text-emerald-600"}`}><Check className="size-3.5" /> {isDirty ? "Có thay đổi chưa lưu" : "Đã đồng bộ"}</span>
-                        <button type="button" onClick={handleReset} disabled={isSaving} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-50"><RotateCcw className="size-3.5" />Khôi phục mặc định</button>
-                        <button type="button" onClick={() => void handleSave()} disabled={!isDirty || isSaving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-bold text-white transition-colors hover:brightness-95 disabled:opacity-50"><Save className="size-3.5" />{isSaving ? "Đang lưu..." : "Lưu cấu hình"}</button>
+                        <span className={`hidden items-center gap-1.5 text-xs font-semibold sm:flex ${!canManageGeneralSettings ? "text-slate-500" : isDirty ? "text-amber-600" : "text-emerald-600"}`}><Check className="size-3.5" /> {!canManageGeneralSettings ? "Chỉ được xem" : isDirty ? "Có thay đổi chưa lưu" : "Đã đồng bộ"}</span>
+                        <button type="button" onClick={handleReset} disabled={isSaving || !canManageGeneralSettings} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-50"><RotateCcw className="size-3.5" />Khôi phục mặc định</button>
+                        <button type="button" onClick={() => void handleSave()} disabled={!canManageGeneralSettings || !isDirty || isSaving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-bold text-white transition-colors hover:brightness-95 disabled:opacity-50"><Save className="size-3.5" />{isSaving ? "Đang lưu..." : "Lưu cấu hình"}</button>
                     </div>
                 </header>
 
                 <SettingsTabs />
 
                 <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto xl:grid-cols-[minmax(560px,1fr)_430px] xl:overflow-hidden">
-                    <fieldset disabled={isSaving} className="space-y-4 p-4 xl:overflow-y-auto">
+                    <fieldset disabled={isSaving || !canManageGeneralSettings} className="space-y-4 p-4 xl:overflow-y-auto">
                         <SettingsSection title="Khổ giấy máy in" description="Các số đo là vùng in thực tế; lề an toàn được đặt bên trong nội dung.">
                             <div className="grid gap-2 sm:grid-cols-3">
                                 {Object.values(RECEIPT_PAPER_PROFILES).map((profile) => {

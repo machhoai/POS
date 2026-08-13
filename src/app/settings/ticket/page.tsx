@@ -16,6 +16,7 @@ import { SAMPLE_PRINTABLE_TICKET } from "@/features/ticket/data/sampleTicket";
 import { mapRemoteTicketSettings } from "@/features/ticket/helpers/remoteTicketSettings";
 import { useTicketSettingsStore } from "@/features/ticket/store/useTicketSettingsStore";
 import type { TicketSettings } from "@/features/ticket/types/ticket";
+import { useSettingsAccess } from "@/features/settings/hooks/useSettingsAccess";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { saveRemoteTicketSettings } from "@/lib/services/deviceEnrollmentService";
 import { showError, showSuccess } from "@/lib/utils/toast";
@@ -23,6 +24,7 @@ import { showError, showSuccess } from "@/lib/utils/toast";
 export default function TicketSettingsPage() {
     const router = useRouter();
     const { user, userDoc, isLoading: authLoading, logout } = useAuth();
+    const { canManageGeneralSettings } = useSettingsAccess();
     const appliedSettings = useTicketSettingsStore((state) => state.settings);
     const applyRemoteSettings = useTicketSettingsStore((state) => state.applyRemoteSettings);
     const remoteVersion = useTicketSettingsStore((state) => state.remoteVersion);
@@ -38,10 +40,12 @@ export default function TicketSettingsPage() {
     }, [authLoading, router, user, userDoc]);
 
     const updateSettings = useCallback((patch: Partial<TicketSettings>) => {
+        if (!canManageGeneralSettings) return;
         setDraftSettings((current) => ({ ...(current ?? appliedSettings), ...patch }));
-    }, [appliedSettings]);
+    }, [appliedSettings, canManageGeneralSettings]);
 
     const handleLogoChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        if (!canManageGeneralSettings) return;
         const file = event.target.files?.[0];
         event.target.value = "";
         if (!file) return;
@@ -60,10 +64,10 @@ export default function TicketSettingsPage() {
         });
         reader.addEventListener("error", () => showError("Không thể đọc logo", "Vui lòng chọn một tệp ảnh khác."));
         reader.readAsDataURL(file);
-    }, [updateSettings]);
+    }, [canManageGeneralSettings, updateSettings]);
 
     const handleSave = useCallback(async () => {
-        if (!isDirty || isSaving) return;
+        if (!canManageGeneralSettings || !isDirty || isSaving) return;
         setIsSaving(true);
         try {
             const remote = await saveRemoteTicketSettings(settings);
@@ -75,12 +79,13 @@ export default function TicketSettingsPage() {
         } finally {
             setIsSaving(false);
         }
-    }, [applyRemoteSettings, isDirty, isSaving, settings]);
+    }, [applyRemoteSettings, canManageGeneralSettings, isDirty, isSaving, settings]);
 
     const handleReset = useCallback(() => {
+        if (!canManageGeneralSettings) return;
         setDraftSettings(DEFAULT_TICKET_SETTINGS);
         showSuccess("Đã tạo cấu hình mặc định", "Nhấn Lưu cấu hình để áp dụng thay đổi.");
-    }, []);
+    }, [canManageGeneralSettings]);
 
     const handlePrintPreview = useCallback(async () => {
         if (isPrinting) return;
@@ -108,16 +113,16 @@ export default function TicketSettingsPage() {
                         <div><h1 className="text-lg font-extrabold tracking-tight text-[var(--color-text-primary)]">Cấu hình vé</h1><p className="text-xs text-[var(--color-text-muted)]">Bố cục vé nhiệt và in tự động sau thanh toán</p></div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <span className={`hidden items-center gap-1.5 text-xs font-semibold sm:flex ${isDirty ? "text-amber-600" : "text-emerald-600"}`}><Check className="size-3.5" />{isDirty ? "Có thay đổi chưa lưu" : `Đã đồng bộ JPULSE · v${remoteVersion ?? 0}`}</span>
-                        <button type="button" onClick={handleReset} disabled={isSaving} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50"><RotateCcw className="size-3.5" />Khôi phục mặc định</button>
-                        <button type="button" onClick={() => void handleSave()} disabled={!isDirty || isSaving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-bold text-white disabled:opacity-50"><Save className="size-3.5" />{isSaving ? "Đang lưu..." : "Lưu cấu hình"}</button>
+                        <span className={`hidden items-center gap-1.5 text-xs font-semibold sm:flex ${!canManageGeneralSettings ? "text-slate-500" : isDirty ? "text-amber-600" : "text-emerald-600"}`}><Check className="size-3.5" />{!canManageGeneralSettings ? "Chỉ được xem" : isDirty ? "Có thay đổi chưa lưu" : `Đã đồng bộ JPULSE · v${remoteVersion ?? 0}`}</span>
+                        <button type="button" onClick={handleReset} disabled={isSaving || !canManageGeneralSettings} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50"><RotateCcw className="size-3.5" />Khôi phục mặc định</button>
+                        <button type="button" onClick={() => void handleSave()} disabled={!canManageGeneralSettings || !isDirty || isSaving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-bold text-white disabled:opacity-50"><Save className="size-3.5" />{isSaving ? "Đang lưu..." : "Lưu cấu hình"}</button>
                     </div>
                 </header>
 
                 <SettingsTabs />
 
                 <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto xl:grid-cols-[minmax(560px,1fr)_430px] xl:overflow-hidden">
-                    <fieldset className="space-y-4 p-4 xl:overflow-y-auto">
+                    <fieldset disabled={!canManageGeneralSettings || isSaving} className="space-y-4 p-4 xl:overflow-y-auto">
                         <SettingsSection title="Khổ vé và máy in" description="Mỗi mã vé được in thành một trang riêng để máy in nhiệt có thể cắt theo từng vé.">
                             <div className="grid gap-2 sm:grid-cols-3">
                                 {Object.values(RECEIPT_PAPER_PROFILES).map((profile) => {

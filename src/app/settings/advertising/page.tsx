@@ -8,6 +8,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import AdvertisingMediaUploader from "@/components/settings/AdvertisingMediaUploader";
 import AdvertisingPlaylistEditor from "@/components/settings/AdvertisingPlaylistEditor";
 import SettingsTabs from "@/components/settings/SettingsTabs";
+import { useSettingsAccess } from "@/features/settings/hooks/useSettingsAccess";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCustomerDisplayAdvertisingEditor } from "@/lib/hooks/useCustomerDisplayAdvertisingEditor";
 import { applyCustomerDisplayAdvertisingView } from "@/lib/services/customerDisplayAdvertisingSyncService";
@@ -23,12 +24,13 @@ import { showError, showSuccess } from "@/lib/utils/toast";
 export default function AdvertisingSettingsPage() {
   const router = useRouter();
   const auth = useAuth();
+  const { canReadAdvertisingSettings, canManageAdvertisingSettings } = useSettingsAccess();
   const [deviceWarehouseId, setDeviceWarehouseId] = useState<string | null>(null);
   const [draft, setDraft] = useState<CustomerDisplayPlaylistItem[]>([]);
   const [busy, setBusy] = useState<"save" | "upload" | "remove" | null>(null);
   const sameWarehouse = Boolean(auth.effectiveWarehouseId && auth.effectiveWarehouseId === deviceWarehouseId);
-  const canRead = sameWarehouse && auth.hasPermission("pos.advertising.read", deviceWarehouseId || undefined);
-  const canManage = sameWarehouse && auth.hasPermission("pos.advertising.manage", deviceWarehouseId || undefined);
+  const canRead = sameWarehouse && canReadAdvertisingSettings;
+  const canManage = sameWarehouse && canManageAdvertisingSettings;
   const editor = useCustomerDisplayAdvertisingEditor(deviceWarehouseId, canRead);
   const mediaById = useMemo(() => new Map(editor.view?.media.map((item) => [item.id, item]) ?? []), [editor.view?.media]);
 

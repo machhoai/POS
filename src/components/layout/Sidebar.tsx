@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IoDesktop, IoDocument, IoHome, IoPeople, IoSettings, IoTime } from "react-icons/io5";
+import { useUpdater } from "@/features/updater/components/UpdateProvider";
 
 interface SidebarProps {
     onLogout: () => void;
@@ -39,6 +40,8 @@ const NAV_ITEMS = [
 
 export default function Sidebar({ onLogout }: SidebarProps) {
     const pathname = usePathname();
+    const updater = useUpdater();
+    const hasAvailableUpdate = updater.availableVersion !== null;
     const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
     const logoutButtonRef = useRef<HTMLButtonElement>(null);
     const cancelButtonRef = useRef<HTMLButtonElement>(null);
@@ -131,7 +134,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                 <div className="mt-auto flex flex-col items-center gap-2">
                     <Link
                         href="/settings"
-                        className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors ${pathname.startsWith("/settings")
+                        className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-colors ${pathname.startsWith("/settings")
                             ? "text-[var(--color-accent)] bg-orange-50"
                             : "text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]"
                             }`}
@@ -139,6 +142,12 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                         aria-label="Cài đặt"
                     >
                         <IoSettings className="w-5 h-5" />
+                        {hasAvailableUpdate && (
+                            <span
+                                className="absolute right-1.5 top-1.5 size-2.5 rounded-full border-2 border-white bg-red-500"
+                                aria-label="Có bản cập nhật JPOS mới"
+                            />
+                        )}
                     </Link>
                     <button
                         ref={logoutButtonRef}

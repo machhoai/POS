@@ -34,6 +34,7 @@ interface UpdateState {
   downloadedBytes: number;
   totalBytes: number | null;
   error: string | null;
+  isStartupUpdateRequired: boolean;
 }
 
 interface UpdateContextValue extends UpdateState {
@@ -56,7 +57,13 @@ const INITIAL_STATE: UpdateState = {
   downloadedBytes: 0,
   totalBytes: null,
   error: null,
+  isStartupUpdateRequired: false,
 };
+
+type UpdateCheckOrigin = "startup" | "background" | "manual";
+
+const STARTUP_UPDATE_DELAY_MS = 1_000;
+const BACKGROUND_UPDATE_INTERVAL_MS = 15 * 60 * 1_000;
 
 const UpdateContext = createContext<UpdateContextValue | null>(null);
 
@@ -69,8 +76,12 @@ const UpdateProvider: React.FC<UpdateProviderProps> = ({ children }) => {
   const pendingUpdateRef = useRef<Update | null>(null);
   const isCheckingRef = useRef(false);
 
-  const checkForUpdates = useCallback(async (silent = false): Promise<void> => {
+  const runUpdateCheck = useCallback(async (
+    origin: UpdateCheckOrigin,
+    silent: boolean,
+  ): Promise<void> => {
     if (isCheckingRef.current) return;
+    if (origin === "background" && pendingUpdateRef.current) return;
 
     if (!isTauri()) {
       setState((current) => ({ ...current, status: "unsupported", error: null }));
@@ -100,14 +111,16 @@ const UpdateProvider: React.FC<UpdateProviderProps> = ({ children }) => {
         return;
       }
 
-      setState({
+      setState((current) => ({
         ...INITIAL_STATE,
         status: "available",
         currentVersion,
         availableVersion: update.version,
         notes: update.body?.trim() || null,
         publishedAt: update.date || null,
-      });
+        isStartupUpdateRequired:
+          origin === "startup" || current.isStartupUpdateRequired,
+      }));
       setIsPromptVisible(true);
     } catch (error: unknown) {
       console.error("[Updater] Không thể kiểm tra cập nhật:", error);
@@ -122,6 +135,10 @@ const UpdateProvider: React.FC<UpdateProviderProps> = ({ children }) => {
     }
   }, []);
 
+  const checkForUpdates = useCallback(async (silent = false): Promise<void> => {
+    await runUpdateCheck("manual", silent);
+  }, [runUpdateCheck]);
+
   const installUpdate = useCallback(async (): Promise<void> => {
     const update = pendingUpdateRef.current;
     if (!update) {
@@ -135,9 +152,11 @@ const UpdateProvider: React.FC<UpdateProviderProps> = ({ children }) => {
 
     const cart = useCartStore.getState();
     if (
-      cart.isCheckingOut ||
-      cart.isPaymentLocked ||
-      cart.checkoutCheckpoint === "PAYMENT_INITIATED"
+      !state.isStartupUpdateRequired && (
+        cart.isCheckingOut ||
+        cart.isPaymentLocked ||
+        cart.checkoutCheckpoint === "PAYMENT_INITIATED"
+      )
     ) {
       setState((current) => ({
         ...current,
@@ -187,17 +206,26 @@ const UpdateProvider: React.FC<UpdateProviderProps> = ({ children }) => {
       }));
       setIsPromptVisible(true);
     }
-  }, []);
+  }, [state.isStartupUpdateRequired]);
 
-  const dismissPrompt = useCallback(() => setIsPromptVisible(false), []);
+  const dismissPrompt = useCallback(() => {
+    if (state.isStartupUpdateRequired) return;
+    setIsPromptVisible(false);
+  }, [state.isStartupUpdateRequired]);
 
   useEffect(() => {
     if (window.location.pathname.startsWith("/display")) return;
-    const timeoutId = window.setTimeout(() => {
-      void checkForUpdates(true);
-    }, 5_000);
-    return () => window.clearTimeout(timeoutId);
-  }, [checkForUpdates]);
+    const startupTimeoutId = window.setTimeout(() => {
+      void runUpdateCheck("startup", true);
+    }, STARTUP_UPDATE_DELAY_MS);
+    const backgroundIntervalId = window.setInterval(() => {
+      void runUpdateCheck("background", true);
+    }, BACKGROUND_UPDATE_INTERVAL_MS);
+    return () => {
+      window.clearTimeout(startupTimeoutId);
+      window.clearInterval(backgroundIntervalId);
+    };
+  }, [runUpdateCheck]);
 
   const progressPercent = useMemo(() => {
     if (!state.totalBytes || state.totalBytes <= 0) return null;
@@ -213,28 +241,42 @@ const UpdateProvider: React.FC<UpdateProviderProps> = ({ children }) => {
   }), [checkForUpdates, dismissPrompt, installUpdate, progressPercent, state]);
 
   const isBusy = state.status === "downloading" || state.status === "installing";
+  const isMandatory = state.isStartupUpdateRequired;
 
   return (
     <UpdateContext.Provider value={value}>
       {children}
       {isPromptVisible && state.availableVersion && (
         <aside
+          role={isMandatory ? "dialog" : undefined}
+          aria-modal={isMandatory ? true : undefined}
           aria-live="polite"
-          className="fixed bottom-5 right-5 z-[120] w-[min(390px,calc(100vw-2.5rem))] rounded-3xl border border-orange-100 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.24)]"
+          className={isMandatory
+            ? "fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+            : "fixed bottom-5 right-5 z-[120] w-[min(390px,calc(100vw-2.5rem))] rounded-3xl border border-orange-100 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.24)]"
+          }
         >
+          <div className={isMandatory
+            ? "w-full max-w-md rounded-3xl border border-orange-100 bg-white p-6 shadow-[0_30px_100px_rgba(15,23,42,0.36)]"
+            : undefined
+          }>
           <div className="flex items-start gap-3">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-[var(--color-accent)]">
               <Download className="size-5" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-extrabold text-[var(--color-text-primary)]">
-                JPOS {state.availableVersion} đã sẵn sàng
+                {isMandatory
+                  ? `Cần cập nhật JPOS ${state.availableVersion}`
+                  : `JPOS ${state.availableVersion} đã sẵn sàng`}
               </h2>
               <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-                Ứng dụng sẽ tải bản cập nhật đã ký, cài đặt và khởi động lại.
+                {isMandatory
+                  ? "Bạn cần cài bản mới để tiếp tục sử dụng JPOS. Bản cập nhật đã được xác thực chữ ký."
+                  : "Ứng dụng sẽ tải bản cập nhật đã ký, cài đặt và khởi động lại."}
               </p>
             </div>
-            {!isBusy && (
+            {!isMandatory && !isBusy && (
               <button
                 type="button"
                 onClick={dismissPrompt}
@@ -275,23 +317,26 @@ const UpdateProvider: React.FC<UpdateProviderProps> = ({ children }) => {
           )}
 
           {!isBusy && (
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={dismissPrompt}
-                className="min-h-11 rounded-xl border border-[var(--color-border)] px-4 text-sm font-bold text-[var(--color-text-secondary)] hover:bg-slate-50"
-              >
-                Để sau
-              </button>
+            <div className={`mt-5 grid gap-3 ${isMandatory ? "grid-cols-1" : "grid-cols-2"}`}>
+              {!isMandatory && (
+                <button
+                  type="button"
+                  onClick={dismissPrompt}
+                  className="min-h-11 rounded-xl border border-[var(--color-border)] px-4 text-sm font-bold text-[var(--color-text-secondary)] hover:bg-slate-50"
+                >
+                  Để sau
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => void installUpdate()}
                 className="min-h-11 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-bold text-white hover:opacity-90"
               >
-                Cập nhật ngay
+                {isMandatory ? "Cập nhật để tiếp tục" : "Cập nhật ngay"}
               </button>
             </div>
           )}
+          </div>
         </aside>
       )}
     </UpdateContext.Provider>

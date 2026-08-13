@@ -29,8 +29,9 @@ Không phát hành lại cùng một version. Tauri chỉ đề xuất bản có
 
 ## Luồng trong ứng dụng
 
-- JPOS kiểm tra cập nhật sau 5 giây khi cửa sổ chính khởi động.
-- Nếu có bản mới, app hiển thị thông báo nhưng không tự cài.
+- JPOS kiểm tra cập nhật sau 1 giây khi cửa sổ chính khởi động và kiểm tra lại mỗi 15 phút trong lúc chạy.
+- Nếu phát hiện bản mới lúc khởi động, app bắt buộc người dùng cập nhật trước khi tiếp tục sử dụng.
+- Nếu phát hiện bản mới trong lúc chạy, app hiển thị thông báo và đánh dấu đỏ tại bánh răng cùng tab **Hệ thống**.
 - Người dùng có thể kiểm tra thủ công tại **Cài đặt → Hệ thống**.
-- App chặn cài đặt nếu đang xử lý thanh toán.
+- Với cập nhật phát hiện trong lúc chạy, app chặn cài đặt nếu đang xử lý thanh toán.
 - Tauri tải installer, xác minh chữ ký, đóng ứng dụng trên Windows, cài bản mới và khởi động lại.
