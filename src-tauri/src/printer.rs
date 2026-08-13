@@ -9,7 +9,7 @@ pub(crate) struct PrinterInfo {
     pub status: PrinterStatus,
 }
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum PrinterStatus {
     Ready,
@@ -52,19 +52,26 @@ fn get_default_printer_name() -> Option<String> {
 }
 
 #[cfg(windows)]
-fn classify_status(status: u32) -> (PrinterStatus, bool) {
+fn classify_status(status: u32, attributes: u32) -> (PrinterStatus, bool) {
     use windows::Win32::Graphics::Printing::{
-        PRINTER_STATUS_BUSY, PRINTER_STATUS_DOOR_OPEN, PRINTER_STATUS_ERROR,
-        PRINTER_STATUS_NOT_AVAILABLE, PRINTER_STATUS_NO_TONER, PRINTER_STATUS_OFFLINE,
-        PRINTER_STATUS_OUTPUT_BIN_FULL, PRINTER_STATUS_OUT_OF_MEMORY, PRINTER_STATUS_PAGE_PUNT,
-        PRINTER_STATUS_PAPER_JAM, PRINTER_STATUS_PAPER_OUT, PRINTER_STATUS_PAPER_PROBLEM,
-        PRINTER_STATUS_PAUSED, PRINTER_STATUS_PRINTING, PRINTER_STATUS_PROCESSING,
-        PRINTER_STATUS_SERVER_OFFLINE, PRINTER_STATUS_SERVER_UNKNOWN,
-        PRINTER_STATUS_USER_INTERVENTION,
+        PRINTER_ATTRIBUTE_WORK_OFFLINE, PRINTER_STATUS_BUSY, PRINTER_STATUS_DOOR_OPEN,
+        PRINTER_STATUS_ERROR, PRINTER_STATUS_NOT_AVAILABLE, PRINTER_STATUS_NO_TONER,
+        PRINTER_STATUS_OFFLINE, PRINTER_STATUS_OUTPUT_BIN_FULL, PRINTER_STATUS_OUT_OF_MEMORY,
+        PRINTER_STATUS_PAGE_PUNT, PRINTER_STATUS_PAPER_JAM, PRINTER_STATUS_PAPER_OUT,
+        PRINTER_STATUS_PAPER_PROBLEM, PRINTER_STATUS_PAUSED, PRINTER_STATUS_PENDING_DELETION,
+        PRINTER_STATUS_PRINTING, PRINTER_STATUS_PROCESSING, PRINTER_STATUS_SERVER_OFFLINE,
+        PRINTER_STATUS_SERVER_UNKNOWN, PRINTER_STATUS_USER_INTERVENTION,
     };
+
+    // A number of USB printer drivers leave Status at zero after the cable is
+    // removed and only expose the disconnection through WORK_OFFLINE.
+    if attributes & PRINTER_ATTRIBUTE_WORK_OFFLINE != 0 {
+        return (PrinterStatus::Offline, false);
+    }
 
     let disconnected = PRINTER_STATUS_OFFLINE
         | PRINTER_STATUS_NOT_AVAILABLE
+        | PRINTER_STATUS_PENDING_DELETION
         | PRINTER_STATUS_SERVER_OFFLINE
         | PRINTER_STATUS_SERVER_UNKNOWN;
     if status & disconnected != 0 {
@@ -167,7 +174,7 @@ fn enumerate_windows_printers() -> Result<Vec<PrinterInfo>, String> {
             if name.trim().is_empty() {
                 return None;
             }
-            let (status, is_available) = classify_status(printer.Status);
+            let (status, is_available) = classify_status(printer.Status, printer.Attributes);
             Some(PrinterInfo {
                 is_default: default_name
                     .as_deref()
@@ -187,6 +194,39 @@ fn enumerate_windows_printers() -> Result<Vec<PrinterInfo>, String> {
     });
     printers.dedup_by(|left, right| left.name.eq_ignore_ascii_case(&right.name));
     Ok(printers)
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::{classify_status, PrinterStatus};
+    use windows::Win32::Graphics::Printing::{
+        PRINTER_ATTRIBUTE_WORK_OFFLINE, PRINTER_STATUS_BUSY, PRINTER_STATUS_PENDING_DELETION,
+    };
+
+    #[test]
+    fn marks_work_offline_queue_as_unavailable_even_when_status_is_zero() {
+        assert_eq!(
+            classify_status(0, PRINTER_ATTRIBUTE_WORK_OFFLINE),
+            (PrinterStatus::Offline, false),
+        );
+    }
+
+    #[test]
+    fn marks_pending_deletion_queue_as_unavailable() {
+        assert_eq!(
+            classify_status(PRINTER_STATUS_PENDING_DELETION, 0),
+            (PrinterStatus::Offline, false),
+        );
+    }
+
+    #[test]
+    fn preserves_available_statuses() {
+        assert_eq!(classify_status(0, 0), (PrinterStatus::Ready, true));
+        assert_eq!(
+            classify_status(PRINTER_STATUS_BUSY, 0),
+            (PrinterStatus::Busy, true),
+        );
+    }
 }
 
 #[cfg(not(windows))]

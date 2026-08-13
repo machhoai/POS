@@ -1,6 +1,6 @@
 [package]
 name = "pos-system"
-version = "0.1.15"
+version = "0.1.16"
 description = "Local-First POS System"
 authors = ["POS Team"]
 edition = "2021"
