@@ -7,6 +7,7 @@ if ($env:OS -ne "Windows_NT") {
 $workspaceRoot = Split-Path -Parent $PSScriptRoot
 $driverRoot = Join-Path $workspaceRoot "src-tauri\resources\printer-drivers"
 $sp01Installer = Join-Path $driverRoot "sp01\Xprinter.exe"
+$sp01InstallScript = Join-Path $driverRoot "sp01\install-sp01-driver.ps1"
 $printer365Inf = Join-Path $driverRoot "365b\4BARCODE.inf"
 $printer365Catalog = Join-Path $driverRoot "365b\4BARCODE.cat"
 $required365Files = @(
@@ -52,6 +53,16 @@ foreach ($signedFile in @($sp01Installer, $printer365Catalog)) {
     if ($signature.Status -ne "Valid") {
         throw "Printer driver signature is not valid: $signedFile ($($signature.Status))"
     }
+}
+
+if (-not (Test-Path -LiteralPath $sp01InstallScript -PathType Leaf)) {
+    throw "Missing SP01 installation script: $sp01InstallScript"
+}
+
+$sp01InstallDefinition = Get-Content -LiteralPath $sp01InstallScript -Raw
+if ($sp01InstallDefinition -notmatch '\$driverName = "XP-80C"' -or
+    $sp01InstallDefinition -notmatch '\$queueName = "Sapo SP01 \(XP-80C\)"') {
+    throw "The SP01 installation script is not configured for XP-80C."
 }
 
 $printer365Definition = Get-Content -LiteralPath $printer365Inf -Raw

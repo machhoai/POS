@@ -39,9 +39,13 @@ export interface PrintableTicket {
 export interface TicketDocumentProps {
   ticket: PrintableTicket;
   settings: TicketSettings;
+  printableWidthMm?: number;
+  topMarginMm?: number;
 }
 
 export interface TicketBatchDocumentProps {
   order: PosOrder;
   settings: TicketSettings;
+  printableWidthMm?: number;
+  topMarginMm?: number;
 }

@@ -1,12 +1,23 @@
 "use client";
 
 import { QRCodeSVG } from "qrcode.react";
+import {
+    DEFAULT_PRINT_TOP_MARGIN_MM,
+    normalizePrintTopMarginMm,
+} from "@/features/printer/config/printerConfig";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
 import type { TicketDocumentProps } from "@/features/ticket/types/ticket";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 
-const TicketDocument: React.FC<TicketDocumentProps> = ({ ticket, settings }) => {
+const TicketDocument: React.FC<TicketDocumentProps> = ({
+    ticket,
+    settings,
+    printableWidthMm,
+    topMarginMm = DEFAULT_PRINT_TOP_MARGIN_MM,
+}) => {
     const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
+    const resolvedPrintableWidthMm = printableWidthMm ?? profile.printableWidthMm;
+    const resolvedTopMarginMm = normalizePrintTopMarginMm(topMarginMm);
     const issuedAt = new Date(ticket.issuedAt).toLocaleString("vi-VN", {
         day: "2-digit",
         month: "2-digit",
@@ -19,10 +30,10 @@ const TicketDocument: React.FC<TicketDocumentProps> = ({ ticket, settings }) => 
         <article
             data-ticket-page
             style={{
-                width: `${profile.printableWidthMm}mm`,
+                width: `${resolvedPrintableWidthMm}mm`,
                 height: `${settings.ticketHeightMm}mm`,
                 overflow: "hidden",
-                padding: "2mm",
+                padding: `${resolvedTopMarginMm}mm 2mm 2mm`,
                 background: "#fff",
                 color: "#000",
                 fontFamily: "Arial, Helvetica, sans-serif",

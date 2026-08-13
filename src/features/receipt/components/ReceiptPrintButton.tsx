@@ -2,7 +2,11 @@
 
 import { useCallback, useState } from "react";
 import { Printer } from "lucide-react";
-import { printCurrentDocumentSilently } from "@/features/printer/services/printerService";
+import {
+  printCurrentDocumentSilently,
+  resolveLocalPrinterPageWidthMm,
+} from "@/features/printer/services/printerService";
+import { usePrinterSettingsStore } from "@/features/printer/store/usePrinterSettingsStore";
 import ReceiptDocument from "@/features/receipt/components/ReceiptDocument";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
 import { buildInvoiceRequestUrl } from "@/features/receipt/helpers/invoiceRequestUrl";
@@ -100,6 +104,7 @@ export async function printReceiptWithDialog(
   language: ReceiptLanguage = "vi",
 ): Promise<void> {
   const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
+  const topMarginMm = usePrinterSettingsStore.getState().topMarginMm;
   const frame = document.createElement("iframe");
   frame.setAttribute("title", "Biên lai đang in thử");
   frame.style.position = "fixed";
@@ -120,8 +125,8 @@ export async function printReceiptWithDialog(
 
   printDocument.open();
   printDocument.write(`<!doctype html><html lang="${language === "zh" ? "zh-CN" : language}"><head><meta charset="utf-8"><style>
-    @page { size: ${profile.paperWidthMm}mm auto; margin: 0; }
-    html, body { width: ${profile.paperWidthMm}mm; margin: 0; padding: 0; background: #fff; }
+    @page { size: ${profile.printableWidthMm}mm auto; margin: 0; }
+    html, body { width: ${profile.printableWidthMm}mm; margin: 0; padding: 0; background: #fff; }
     *, *::before, *::after { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   </style></head><body></body></html>`);
   printDocument.close();
@@ -132,6 +137,7 @@ export async function printReceiptWithDialog(
     <ReceiptDocument
       order={order}
       settings={settings}
+      topMarginMm={topMarginMm}
       language={language}
       invoiceRequestUrlOverride={invoiceRequestUrlOverride}
     />,
@@ -159,6 +165,8 @@ export async function printReceiptSilently(
   language: ReceiptLanguage = "vi",
 ): Promise<void> {
   const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
+  const pageWidthMm = resolveLocalPrinterPageWidthMm(profile.printableWidthMm);
+  const topMarginMm = usePrinterSettingsStore.getState().topMarginMm;
   const rootId = `pos-silent-receipt-${crypto.randomUUID()}`;
   const rootElement = document.createElement("div");
   const printStyle = document.createElement("style");
@@ -167,7 +175,7 @@ export async function printReceiptSilently(
   rootElement.style.position = "fixed";
   rootElement.style.left = "-10000px";
   rootElement.style.top = "0";
-  rootElement.style.width = `${profile.paperWidthMm}mm`;
+  rootElement.style.width = `${pageWidthMm}mm`;
   rootElement.style.background = "#fff";
   document.body.appendChild(rootElement);
 
@@ -179,6 +187,8 @@ export async function printReceiptSilently(
       <ReceiptDocument
         order={order}
         settings={settings}
+        printableWidthMm={pageWidthMm}
+        topMarginMm={topMarginMm}
         language={language}
         invoiceRequestUrlOverride={invoiceRequestUrlOverride}
       />,
@@ -195,10 +205,10 @@ export async function printReceiptSilently(
     );
 
     printStyle.textContent = `
-      @page { size: ${profile.paperWidthMm}mm ${pageHeightMm}mm; margin: 0; }
+      @page { size: ${pageWidthMm}mm ${pageHeightMm}mm; margin: 0; }
       @media print {
         html, body {
-          width: ${profile.paperWidthMm}mm !important;
+          width: ${pageWidthMm}mm !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: visible !important;
@@ -208,7 +218,7 @@ export async function printReceiptSilently(
         body > #${rootId} {
           display: block !important;
           position: static !important;
-          width: ${profile.paperWidthMm}mm !important;
+          width: ${pageWidthMm}mm !important;
           margin: 0 !important;
           background: #fff !important;
         }
@@ -227,7 +237,7 @@ export async function printReceiptSilently(
       pageHeightMm,
     });
     const dispatch = await printCurrentDocumentSilently({
-      pageWidthMm: profile.paperWidthMm,
+      pageWidthMm,
       pageHeightMm,
     });
     console.info("[Biên lai] Máy in đã nhận lệnh", {

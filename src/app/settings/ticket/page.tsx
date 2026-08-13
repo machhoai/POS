@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, ImagePlus, Info, Printer, RotateCcw, Save, Settings2, Trash2 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import SettingsTabs from "@/components/settings/SettingsTabs";
+import { usePrinterSettingsStore } from "@/features/printer/store/usePrinterSettingsStore";
 import { RECEIPT_FONT_WEIGHT_OPTIONS, RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
 import type { ReceiptFontWeight, ReceiptPaperSize } from "@/features/receipt/types/receipt";
 import TicketDocument from "@/features/ticket/components/TicketDocument";
@@ -28,6 +29,7 @@ export default function TicketSettingsPage() {
     const appliedSettings = useTicketSettingsStore((state) => state.settings);
     const applyRemoteSettings = useTicketSettingsStore((state) => state.applyRemoteSettings);
     const remoteVersion = useTicketSettingsStore((state) => state.remoteVersion);
+    const topMarginMm = usePrinterSettingsStore((state) => state.topMarginMm);
     const [draftSettings, setDraftSettings] = useState<TicketSettings | null>(null);
     const [isPrinting, setIsPrinting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -181,7 +183,7 @@ export default function TicketSettingsPage() {
                     <aside className="border-t border-[var(--color-border)] bg-[#e9e8e5] p-4 xl:overflow-y-auto xl:border-l xl:border-t-0">
                         <div className="mx-auto max-w-[390px] xl:sticky xl:top-0">
                             <div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-extrabold text-[var(--color-text-primary)]">Xem trước thực tế</h2><p className="text-[11px] text-[var(--color-text-muted)]">{RECEIPT_PAPER_PROFILES[settings.paperSize].printableWidthMm} × {settings.ticketHeightMm} mm · đơn sắc</p></div><button type="button" onClick={() => void handlePrintPreview()} disabled={isPrinting} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#202124] px-3.5 text-xs font-bold text-white shadow-md disabled:opacity-60"><Printer className="size-4" />{isPrinting ? "Đang mở..." : "In thử"}</button></div>
-                            <div className="overflow-x-auto rounded-2xl bg-[#d8d6d1] p-5 shadow-inner"><div className="mx-auto w-fit overflow-hidden bg-white shadow-[0_12px_35px_rgba(0,0,0,.18)]"><TicketDocument ticket={SAMPLE_PRINTABLE_TICKET} settings={settings} /></div></div>
+                            <div className="overflow-x-auto rounded-2xl bg-[#d8d6d1] p-5 shadow-inner"><div className="mx-auto w-fit overflow-hidden bg-white shadow-[0_12px_35px_rgba(0,0,0,.18)]"><TicketDocument ticket={SAMPLE_PRINTABLE_TICKET} settings={settings} topMarginMm={topMarginMm} /></div></div>
                             <p className="mt-3 text-center text-[11px] leading-relaxed text-[var(--color-text-muted)]">Bản xem trước dùng dữ liệu mẫu. Đơn thật sẽ tạo đúng một mã QR duy nhất cho mỗi vé và lưu mã cùng đơn hàng.</p>
                         </div>
                     </aside>

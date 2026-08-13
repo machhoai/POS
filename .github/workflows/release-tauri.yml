@@ -58,8 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Cấu hình tài khoản QR chuyển khoản riêng cho từng máy POS.
-            - Bộ cài Windows tích hợp driver Sapo SP01 và 4BARCODE 3B-365B.
+            - Thêm cấu hình máy in local và kiểm tra lề đầu giấy.
+            - Tối ưu khổ in riêng cho Sapo SP01/XP-80C, không ảnh hưởng các máy in khác.
+            - In tuần tự từng job: hóa đơn, vé 1, vé 2 và các vé tiếp theo.
+            - Bộ cài Windows tích hợp và tự nhận driver Sapo SP01/XP-80C và 4BARCODE 3B-365B.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

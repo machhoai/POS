@@ -1,5 +1,9 @@
 import type { CSSProperties } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import {
+    DEFAULT_PRINT_TOP_MARGIN_MM,
+    normalizePrintTopMarginMm,
+} from "@/features/printer/config/printerConfig";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
 import {
     calculateReceiptLine,
@@ -210,19 +214,24 @@ const ThemeMessageBanner: React.FC<ThemeMessageBannerProps> = ({
 const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
     order,
     settings,
+    printableWidthMm,
+    topMarginMm = DEFAULT_PRINT_TOP_MARGIN_MM,
     language = "vi",
     invoiceRequestUrlOverride,
 }) => {
     const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
+    const resolvedPrintableWidthMm = printableWidthMm ?? profile.printableWidthMm;
     const isCompact = settings.paperSize === "POS58";
+    const horizontalAndBottomPaddingMm = isCompact ? 3 : 4;
+    const resolvedTopMarginMm = normalizePrintTopMarginMm(topMarginMm);
     const fontWeights = settings.fontWeights;
     const logoWidthMm = Math.min(
         Math.max(12, settings.logoWidthMm),
-        profile.printableWidthMm - (isCompact ? 6 : 8),
+        resolvedPrintableWidthMm - (isCompact ? 6 : 8),
     );
     const invoiceQrSizeMm = Math.min(
         Math.max(22, settings.invoiceQrSizeMm),
-        profile.printableWidthMm - (isCompact ? 8 : 12),
+        resolvedPrintableWidthMm - (isCompact ? 8 : 12),
     );
     const totals = calculateReceiptTotals(order, settings.defaultTaxRate);
     const copy = getReceiptCopy(language);
@@ -251,9 +260,9 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
             lang={language === "zh" ? "zh-CN" : language}
             style={{
                 boxSizing: "border-box",
-                width: `${profile.printableWidthMm}mm`,
+                width: `${resolvedPrintableWidthMm}mm`,
                 minHeight: "40mm",
-                padding: isCompact ? "3mm" : "4mm",
+                padding: `${resolvedTopMarginMm}mm ${horizontalAndBottomPaddingMm}mm ${horizontalAndBottomPaddingMm}mm`,
                 background: "#fff",
                 color: "#000",
                 fontFamily: 'Arial, "Microsoft YaHei", "Noto Sans SC", Helvetica, sans-serif',

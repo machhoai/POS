@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, ImagePlus, Info, RotateCcw, Save, Settings2, Trash2 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import SettingsTabs from "@/components/settings/SettingsTabs";
+import { usePrinterSettingsStore } from "@/features/printer/store/usePrinterSettingsStore";
 import ReceiptDocument from "@/features/receipt/components/ReceiptDocument";
 import ReceiptPrintButton from "@/features/receipt/components/ReceiptPrintButton";
 import {
@@ -61,6 +62,7 @@ export default function ReceiptSettingsPage() {
     const appliedSettings = useReceiptSettingsStore((state) => state.settings);
     const remoteVersion = useReceiptSettingsStore((state) => state.remoteVersion);
     const applyRemoteSettings = useReceiptSettingsStore((state) => state.applyRemoteSettings);
+    const topMarginMm = usePrinterSettingsStore((state) => state.topMarginMm);
     const [draftSettings, setDraftSettings] = useState<typeof appliedSettings | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const settings = draftSettings ?? appliedSettings;
@@ -319,7 +321,7 @@ export default function ReceiptSettingsPage() {
                     <aside className="border-t border-[var(--color-border)] bg-[#e9e8e5] p-4 xl:overflow-y-auto xl:border-l xl:border-t-0">
                         <div className="mx-auto max-w-[390px] xl:sticky xl:top-0">
                             <div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-extrabold text-[var(--color-text-primary)]">Xem trước thực tế</h2><p className="text-[11px] text-[var(--color-text-muted)]">{RECEIPT_PAPER_PROFILES[settings.paperSize].printableWidthMm} mm · đơn sắc</p></div><ReceiptPrintButton order={SAMPLE_RECEIPT_ORDER} settings={settings} invoiceRequestUrlOverride={SAMPLE_INVOICE_REQUEST_URL} printMode="dialog" label="In thử" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#202124] px-3.5 text-xs font-bold text-white shadow-md transition-transform active:scale-[0.98] disabled:opacity-60" /></div>
-                            <div className="overflow-x-auto rounded-2xl bg-[#d8d6d1] p-5 shadow-inner"><div className="mx-auto w-fit overflow-hidden bg-white shadow-[0_12px_35px_rgba(0,0,0,.18)]"><ReceiptDocument order={SAMPLE_RECEIPT_ORDER} settings={settings} invoiceRequestUrlOverride={SAMPLE_INVOICE_REQUEST_URL} /></div></div>
+                            <div className="overflow-x-auto rounded-2xl bg-[#d8d6d1] p-5 shadow-inner"><div className="mx-auto w-fit overflow-hidden bg-white shadow-[0_12px_35px_rgba(0,0,0,.18)]"><ReceiptDocument order={SAMPLE_RECEIPT_ORDER} settings={settings} topMarginMm={topMarginMm} invoiceRequestUrlOverride={SAMPLE_INVOICE_REQUEST_URL} /></div></div>
                             <p className="mt-3 text-center text-[11px] leading-relaxed text-[var(--color-text-muted)]">Bản xem trước dùng dữ liệu mẫu. Khi in đơn thật, mã đơn, thời gian, nhân viên, hàng hóa và thuế được lấy từ đơn hàng.</p>
                         </div>
                     </aside>

@@ -2,7 +2,12 @@
 
 import { useCallback, useState } from "react";
 import { TicketCheck } from "lucide-react";
-import { printCurrentDocumentSilently } from "@/features/printer/services/printerService";
+import { trimPrintImageWhitespace } from "@/features/printer/helpers/trimPrintImageWhitespace";
+import {
+  printCurrentDocumentSilently,
+  resolveLocalPrinterPageWidthMm,
+} from "@/features/printer/services/printerService";
+import { usePrinterSettingsStore } from "@/features/printer/store/usePrinterSettingsStore";
 import TicketBatchDocument from "@/features/ticket/components/TicketBatchDocument";
 import TicketDocument from "@/features/ticket/components/TicketDocument";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
@@ -20,6 +25,16 @@ interface TicketPrintButtonProps {
   label?: string;
   className?: string;
   printMode?: TicketPrintMode;
+}
+
+async function prepareTicketSettingsForPrint(
+  settings: TicketSettings,
+): Promise<TicketSettings> {
+  if (!settings.showLogo || !settings.logoDataUrl) return settings;
+
+  const trimmedLogoDataUrl = await trimPrintImageWhitespace(settings.logoDataUrl);
+  if (trimmedLogoDataUrl === settings.logoDataUrl) return settings;
+  return { ...settings, logoDataUrl: trimmedLogoDataUrl };
 }
 
 async function waitForAssets(container: ParentNode): Promise<void> {
@@ -70,8 +85,8 @@ async function printWithDialog(
 
   printDocument.open();
   printDocument.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><style>
-    @page { size: ${profile.paperWidthMm}mm ${settings.ticketHeightMm}mm; margin: 0; }
-    html, body { width: ${profile.paperWidthMm}mm; margin: 0; padding: 0; background: #fff; }
+    @page { size: ${profile.printableWidthMm}mm ${settings.ticketHeightMm}mm; margin: 0; }
+    html, body { width: ${profile.printableWidthMm}mm; margin: 0; padding: 0; background: #fff; }
     *, *::before, *::after { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     [data-ticket-page]:last-child { page-break-after: auto !important; break-after: auto !important; }
   </style></head><body></body></html>`);
@@ -99,7 +114,12 @@ export async function printTicketPreviewWithDialog(
   ticket: PrintableTicket,
   settings: TicketSettings,
 ): Promise<void> {
-  await printWithDialog(<TicketDocument ticket={ticket} settings={settings} />, settings);
+  const printSettings = await prepareTicketSettingsForPrint(settings);
+  const topMarginMm = usePrinterSettingsStore.getState().topMarginMm;
+  await printWithDialog(
+    <TicketDocument ticket={ticket} settings={printSettings} topMarginMm={topMarginMm} />,
+    printSettings,
+  );
 }
 
 export async function printTicketsWithDialog(
@@ -109,62 +129,81 @@ export async function printTicketsWithDialog(
   if (buildPrintableTickets(order).length === 0) {
     throw new Error("Đơn hàng này không có vé để in.");
   }
-  await printWithDialog(<TicketBatchDocument order={order} settings={settings} />, settings);
+  const printSettings = await prepareTicketSettingsForPrint(settings);
+  const topMarginMm = usePrinterSettingsStore.getState().topMarginMm;
+  await printWithDialog(
+    <TicketBatchDocument order={order} settings={printSettings} topMarginMm={topMarginMm} />,
+    printSettings,
+  );
 }
 
 export async function printTicketsSilently(
   order: PosOrder,
   settings: TicketSettings,
 ): Promise<void> {
-  const ticketCount = buildPrintableTickets(order).length;
+  const tickets = buildPrintableTickets(order);
+  const ticketCount = tickets.length;
   if (ticketCount === 0) return;
 
-  const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
-  const rootId = `pos-silent-tickets-${crypto.randomUUID()}`;
-  const rootElement = document.createElement("div");
-  const printStyle = document.createElement("style");
-  rootElement.id = rootId;
-  rootElement.setAttribute("aria-hidden", "true");
-  Object.assign(rootElement.style, {
-    position: "fixed",
-    left: "-10000px",
-    top: "0",
-    width: `${profile.paperWidthMm}mm`,
-    background: "#fff",
-  });
-  document.body.appendChild(rootElement);
-
+  const printSettings = await prepareTicketSettingsForPrint(settings);
+  const profile = RECEIPT_PAPER_PROFILES[printSettings.paperSize];
+  const pageWidthMm = resolveLocalPrinterPageWidthMm(profile.printableWidthMm);
+  const topMarginMm = usePrinterSettingsStore.getState().topMarginMm;
   const { createRoot } = await import("react-dom/client");
-  const root = createRoot(rootElement);
-  try {
-    root.render(<TicketBatchDocument order={order} settings={settings} />);
-    await waitForAssets(rootElement);
-    printStyle.textContent = `
-      @page { size: ${profile.paperWidthMm}mm ${settings.ticketHeightMm}mm; margin: 0; }
-      @media print {
-        html, body { width: ${profile.paperWidthMm}mm !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
-        body > * { display: none !important; }
-        body > #${rootId} { display: block !important; position: static !important; width: ${profile.paperWidthMm}mm !important; margin: 0 !important; background: #fff !important; }
-        [data-ticket-page] { page-break-after: always !important; break-after: page !important; }
-        [data-ticket-page]:last-child { page-break-after: auto !important; break-after: auto !important; }
-        *, *::before, *::after { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-      }
-    `;
-    document.head.appendChild(printStyle);
-    const dispatch = await printCurrentDocumentSilently({
-      pageWidthMm: profile.paperWidthMm,
-      pageHeightMm: settings.ticketHeightMm,
+  for (const [ticketIndex, ticket] of tickets.entries()) {
+    const rootId = `pos-silent-ticket-${crypto.randomUUID()}`;
+    const rootElement = document.createElement("div");
+    const printStyle = document.createElement("style");
+    rootElement.id = rootId;
+    rootElement.setAttribute("aria-hidden", "true");
+    Object.assign(rootElement.style, {
+      position: "fixed",
+      left: "-10000px",
+      top: "0",
+      width: `${pageWidthMm}mm`,
+      background: "#fff",
     });
-    console.info("[Vé] Máy in đã nhận lệnh", {
-      localOrderId: order.localOrderId,
-      ticketCount,
-      printerName: dispatch.effectivePrinterName,
-      usedFallback: dispatch.usedFallback,
-    });
-  } finally {
-    root.unmount();
-    printStyle.remove();
-    rootElement.remove();
+    document.body.appendChild(rootElement);
+
+    const root = createRoot(rootElement);
+    try {
+      root.render(
+        <TicketDocument
+          ticket={ticket}
+          settings={printSettings}
+          printableWidthMm={pageWidthMm}
+          topMarginMm={topMarginMm}
+        />,
+      );
+      await waitForAssets(rootElement);
+      printStyle.textContent = `
+        @page { size: ${pageWidthMm}mm ${printSettings.ticketHeightMm}mm; margin: 0; }
+        @media print {
+          html, body { width: ${pageWidthMm}mm !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
+          body > * { display: none !important; }
+          body > #${rootId} { display: block !important; position: static !important; width: ${pageWidthMm}mm !important; margin: 0 !important; background: #fff !important; }
+          [data-ticket-page] { page-break-after: auto !important; break-after: auto !important; }
+          *, *::before, *::after { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        }
+      `;
+      document.head.appendChild(printStyle);
+      const dispatch = await printCurrentDocumentSilently({
+        pageWidthMm,
+        pageHeightMm: printSettings.ticketHeightMm,
+      });
+      console.info("[Vé] Máy in đã nhận từng job", {
+        localOrderId: order.localOrderId,
+        ticketNumber: ticketIndex + 1,
+        ticketCount,
+        ticketCode: ticket.ticketCode,
+        printerName: dispatch.effectivePrinterName,
+        usedFallback: dispatch.usedFallback,
+      });
+    } finally {
+      root.unmount();
+      printStyle.remove();
+      rootElement.remove();
+    }
   }
 }
 

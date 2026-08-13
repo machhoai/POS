@@ -62,6 +62,8 @@ export interface ReceiptSettings {
 export interface ReceiptDocumentProps {
   order: PosOrder;
   settings: ReceiptSettings;
+  printableWidthMm?: number;
+  topMarginMm?: number;
   language?: ReceiptLanguage;
   /** Chỉ dùng cho bản xem trước; đơn thật tự dựng URL từ token đã ký. */
   invoiceRequestUrlOverride?: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -8,19 +8,28 @@ import {
   Laptop,
   Printer,
   RefreshCw,
+  Ruler,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import SettingsTabs from "@/components/settings/SettingsTabs";
-import { listLocalPrinters } from "@/features/printer/services/printerService";
+import {
+  MAX_PRINT_TOP_MARGIN_MM,
+  MIN_PRINT_TOP_MARGIN_MM,
+  PRINT_TOP_MARGIN_STEP_MM,
+} from "@/features/printer/config/printerConfig";
+import {
+  listLocalPrinters,
+  printTopMarginCalibration,
+} from "@/features/printer/services/printerService";
 import { usePrinterSettingsStore } from "@/features/printer/store/usePrinterSettingsStore";
 import type {
   LocalPrinter,
   PrinterStatus,
 } from "@/features/printer/types/printer";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { showSuccess } from "@/lib/utils/toast";
+import { showError, showSuccess } from "@/lib/utils/toast";
 
 const STATUS_LABELS: Record<PrinterStatus, string> = {
   READY: "Sẵn sàng",
@@ -43,8 +52,11 @@ const PrinterSettingsPage: React.FC = () => {
     (state) => state.selectedPrinterName,
   );
   const selectPrinter = usePrinterSettingsStore((state) => state.selectPrinter);
+  const topMarginMm = usePrinterSettingsStore((state) => state.topMarginMm);
+  const setTopMarginMm = usePrinterSettingsStore((state) => state.setTopMarginMm);
   const [printers, setPrinters] = useState<LocalPrinter[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [isPrintingCalibration, setIsPrintingCalibration] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -104,6 +116,33 @@ const PrinterSettingsPage: React.FC = () => {
     },
     [selectPrinter],
   );
+
+  const handleTopMarginChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setTopMarginMm(event.currentTarget.valueAsNumber);
+    },
+    [setTopMarginMm],
+  );
+
+  const handlePrintCalibration = useCallback(async () => {
+    setIsPrintingCalibration(true);
+    try {
+      const dispatch = await printTopMarginCalibration();
+      showSuccess(
+        "Đã in mẫu kiểm tra lề",
+        `Hãy đo từ mép cắt đến vạch đen đầu tiên trên bản in từ “${dispatch.effectivePrinterName}”.`,
+      );
+    } catch (error: unknown) {
+      showError(
+        "Không thể in mẫu kiểm tra",
+        error instanceof Error
+          ? error.message
+          : "Vui lòng kiểm tra máy in và thử lại.",
+      );
+    } finally {
+      setIsPrintingCalibration(false);
+    }
+  }, []);
 
   const isAuthenticated = !authLoading && Boolean(user && userDoc);
 
@@ -214,6 +253,90 @@ const PrinterSettingsPage: React.FC = () => {
                       );
                     })}
                   </div>
+
+                  <div className="mt-6 border-t border-[var(--color-border)] pt-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 gap-3">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[var(--color-text-secondary)]">
+                          <Ruler className="size-4" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <h2 className="text-sm font-extrabold text-[var(--color-text-primary)]">
+                            Lề đầu giấy
+                          </h2>
+                          <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
+                            Áp dụng cho cả bill và vé trên máy POS này.
+                          </p>
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-secondary)]">
+                        <span className="sr-only">Lề đầu giấy tính bằng milimét</span>
+                        <input
+                          type="number"
+                          min={MIN_PRINT_TOP_MARGIN_MM}
+                          max={MAX_PRINT_TOP_MARGIN_MM}
+                          step={PRINT_TOP_MARGIN_STEP_MM}
+                          value={topMarginMm}
+                          onChange={handleTopMarginChange}
+                          className="h-10 w-20 rounded-xl border border-[var(--color-border)] bg-white px-3 text-right text-sm font-extrabold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-orange-100"
+                        />
+                        mm
+                      </label>
+                    </div>
+
+                    <input
+                      type="range"
+                      min={MIN_PRINT_TOP_MARGIN_MM}
+                      max={MAX_PRINT_TOP_MARGIN_MM}
+                      step={PRINT_TOP_MARGIN_STEP_MM}
+                      value={topMarginMm}
+                      onChange={handleTopMarginChange}
+                      aria-label="Điều chỉnh lề đầu giấy"
+                      className="mt-4 w-full accent-[var(--color-accent)]"
+                    />
+                    <div className="mt-1 flex justify-between text-[10px] font-semibold text-[var(--color-text-muted)]">
+                      <span>{MIN_PRINT_TOP_MARGIN_MM} mm</span>
+                      <span>{MAX_PRINT_TOP_MARGIN_MM} mm</span>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {[0, 1, 2, 4].map((marginMm) => (
+                        <button
+                          key={marginMm}
+                          type="button"
+                          onClick={() => setTopMarginMm(marginMm)}
+                          aria-pressed={topMarginMm === marginMm}
+                          className={`min-h-9 rounded-xl border px-3 text-xs font-bold transition-colors ${
+                            topMarginMm === marginMm
+                              ? "border-[var(--color-accent)] bg-orange-50 text-orange-700"
+                              : "border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] hover:bg-slate-50"
+                          }`}
+                        >
+                          {marginMm} mm
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+                      Khuyến nghị 1 mm. Nếu chọn 0 mm, máy vẫn có thể để lại một đoạn trắng nhỏ do khoảng cách vật lý giữa đầu in và dao cắt.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => void handlePrintCalibration()}
+                      disabled={!selectedPrinter?.isAvailable || isPrintingCalibration}
+                      className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#202124] px-4 text-xs font-bold text-white shadow-sm transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Printer
+                        className={`size-4 ${isPrintingCalibration ? "animate-pulse" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {isPrintingCalibration ? "Đang in kiểm tra..." : "In kiểm tra lề"}
+                    </button>
+                    <p className="mt-2 text-center text-[11px] leading-5 text-[var(--color-text-muted)]">
+                      Mẫu đặt một vạch đen tại đúng 0 mm. Khoảng từ mép cắt đến vạch đen là phần do driver hoặc cơ cấu máy in tạo ra.
+                    </p>
+                  </div>
                 </section>
 
                 <aside className="space-y-4">
@@ -259,7 +382,7 @@ const PrinterSettingsPage: React.FC = () => {
                   <section className="rounded-3xl border border-[var(--color-border)] bg-white p-5 text-xs leading-5 text-[var(--color-text-muted)] shadow-sm">
                     <p className="font-bold text-[var(--color-text-secondary)]">Cấu hình local</p>
                     <p className="mt-1">
-                      Mọi nhân viên dùng máy POS này đều có thể thay đổi máy in. Lựa chọn không ảnh hưởng các máy POS khác.
+                      Mọi nhân viên dùng máy POS này đều có thể thay đổi máy in và lề đầu giấy. Cấu hình không ảnh hưởng các máy POS khác.
                     </p>
                   </section>
                 </aside>

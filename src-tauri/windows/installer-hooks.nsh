@@ -18,22 +18,15 @@
     DetailPrint "Driver 4BARCODE 3B-365B da duoc cai truoc do."
   ${EndIf}
 
-  ReadRegStr $1 HKLM "SOFTWARE\JPOS\PrinterDrivers" "SP01Version"
-  ${If} $1 != "7.77"
-    DetailPrint "Dang cai driver may in bill Sapo SP01..."
-    ClearErrors
-    ExecWait '"$INSTDIR\resources\printer-drivers\sp01\Xprinter.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-' $2
-    ${If} $2 == 0
-      WriteRegStr HKLM "SOFTWARE\JPOS\PrinterDrivers" "SP01Version" "7.77"
-      DetailPrint "Da cai driver Sapo SP01."
-    ${ElseIf} $2 == 3010
-      WriteRegStr HKLM "SOFTWARE\JPOS\PrinterDrivers" "SP01Version" "7.77"
-      DetailPrint "Da cai driver Sapo SP01; Windows co the can khoi dong lai."
-    ${Else}
-      DetailPrint "Khong the cai driver Sapo SP01 (ma loi $2)."
-      MessageBox MB_ICONEXCLAMATION|MB_OK "JPOS da duoc cai dat, nhung driver Sapo SP01 khong cai duoc (ma loi $2). Vui long lien he bo phan ky thuat."
-    ${EndIf}
+  DetailPrint "Dang cai driver XP-80C va cau hinh may in Sapo SP01..."
+  ClearErrors
+  ExecWait '"$WINDIR\Sysnative\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\printer-drivers\sp01\install-sp01-driver.ps1" -DriverPackage "$INSTDIR\resources\printer-drivers\sp01\Xprinter.exe"' $2
+  ${If} $2 == 0
+    DetailPrint "Da cai driver XP-80C va tao may in Sapo SP01."
+  ${ElseIf} $2 == 10
+    DetailPrint "Da cai driver XP-80C; hay ket noi va bat Sapo SP01 de tao hang doi in."
   ${Else}
-    DetailPrint "Driver Sapo SP01 da duoc cai truoc do."
+    DetailPrint "Khong the cau hinh Sapo SP01 (ma loi $2)."
+    MessageBox MB_ICONEXCLAMATION|MB_OK "JPOS da duoc cai dat, nhung driver Sapo SP01 XP-80C khong cau hinh duoc (ma loi $2). Vui long ket noi may in, bat nguon va thu cai lai JPOS."
   ${EndIf}
 !macroend
