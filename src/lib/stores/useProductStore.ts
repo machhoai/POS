@@ -90,6 +90,7 @@ function toProduct(source: StoredProduct): Product {
     amount: Number.isFinite(Number(source.amount))
       ? Number(source.amount)
       : 0,
+    barCode: source.giftNo,
     giftNo: source.giftNo,
     lastSyncAt: source.lastSyncAt || undefined,
   };

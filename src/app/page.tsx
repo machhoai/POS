@@ -34,6 +34,8 @@ import type { ReceiptLanguage } from "@/features/receipt/types/receipt";
 import { printTicketsSilently } from "@/features/ticket/components/TicketPrintButton";
 import { useTicketSettingsStore } from "@/features/ticket/store/useTicketSettingsStore";
 import { filterProducts } from "@/lib/utils/productSearch";
+import { findProductByBarcode } from "@/lib/utils/productBarcode";
+import { useBarcodeScanner } from "@/lib/hooks/useBarcodeScanner";
 import { usePayOSCheckoutController } from "@/lib/hooks/usePayOSCheckoutController";
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
 import { useCustomerDisplayPublisher } from "@/lib/hooks/useCustomerDisplayPublisher";
@@ -325,13 +327,13 @@ export default function CashierPage() {
 
   // ── Add to Cart ────────────────────────────────────────────────────────
   const handleAddToCart = useCallback(
-    (product: Product) => {
+    (product: Product): boolean => {
       if (isPaymentLocked) {
         showWarning(
           "Giỏ hàng đang được khóa",
           "Hãy hoàn tất hoặc hủy mã chuyển khoản trên PayOS trước khi sửa đơn.",
         );
-        return;
+        return false;
       }
       // Dùng afterTaxPrice (giá sau thuế) cho giỏ hàng
       const displayPrice = product.afterTaxPrice > 0
@@ -347,6 +349,7 @@ export default function CashierPage() {
       if (cartItems.length === 0 && effectiveWarehouseId) {
         void prepareCurrentOrder(shopId, effectiveWarehouseId);
       }
+      return true;
     },
     [
       addItem,
@@ -357,6 +360,26 @@ export default function CashierPage() {
       shopId,
     ]
   );
+
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    const product = findProductByBarcode(allProducts, barcode);
+    if (!product) {
+      showWarning(
+        "Không tìm thấy mã vạch",
+        `Không có sản phẩm nào mang mã ${barcode} trong danh mục hiện tại.`,
+      );
+      return;
+    }
+
+    if (handleAddToCart(product)) {
+      showSuccess("Đã quét sản phẩm", `${product.goodsName} đã được thêm vào giỏ hàng.`);
+    }
+  }, [allProducts, handleAddToCart]);
+
+  useBarcodeScanner({
+    enabled: !authLoading && Boolean(user && userDoc) && !needsWarehouseSelection,
+    onScan: handleBarcodeScan,
+  });
 
   useEffect(() => {
     if (
@@ -549,4 +572,5 @@ export default function CashierPage() {
       </div>
     </CheckoutSafetyBoundary>
   );
+
 }

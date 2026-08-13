@@ -14,6 +14,7 @@ import MemberRegistrationForm from "@/components/members/MemberRegistrationForm"
 import StoreSelector from "@/components/pos/StoreSelector";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
+import { useBarcodeScanner } from "@/lib/hooks/useBarcodeScanner";
 import { useMemberCustomerDisplayPublisher } from "@/lib/hooks/useMemberCustomerDisplayPublisher";
 import { useMemberActivityController } from "@/lib/hooks/useMemberActivityController";
 import { useMemberCompensationController } from "@/lib/hooks/useMemberCompensationController";
@@ -39,7 +40,8 @@ import type {
     MemberRegistrationDraft,
 } from "@/lib/types/member";
 import type { Product } from "@/lib/types/product";
-import { showError, showPromise, showWarning } from "@/lib/utils/toast";
+import { findProductByBarcode } from "@/lib/utils/productBarcode";
+import { showError, showPromise, showSuccess, showWarning } from "@/lib/utils/toast";
 
 type MemberOperation = "LOOKUP" | "REGISTER" | "COMPENSATION";
 
@@ -300,10 +302,10 @@ export default function MembersPage() {
         setOperation(nextOperation);
     }, [isPaymentLocked, setCartMember]);
 
-    const handleAddProduct = useCallback((product: Product) => {
+    const handleAddProduct = useCallback((product: Product): boolean => {
         if (isPaymentLocked) {
             showWarning("Giỏ hàng đang được khóa", "Hãy hoàn tất hoặc hủy thanh toán hiện tại trước khi sửa đơn.");
-            return;
+            return false;
         }
         addCartItem({
             goodsId: product.goodsId,
@@ -311,7 +313,31 @@ export default function MembersPage() {
             price: product.afterTaxPrice > 0 ? product.afterTaxPrice : product.price,
             quantity: 1,
         });
+        return true;
     }, [addCartItem, isPaymentLocked]);
+
+    const handleBarcodeScan = useCallback((barcode: string) => {
+        const product = findProductByBarcode(products, barcode);
+        if (!product) {
+            showWarning(
+                "Không tìm thấy mã vạch",
+                `Không có sản phẩm nào mang mã ${barcode} trong danh mục hiện tại.`,
+            );
+            return;
+        }
+
+        if (handleAddProduct(product)) {
+            showSuccess("Đã quét sản phẩm", `${product.goodsName} đã được thêm vào giỏ hàng đăng ký.`);
+        }
+    }, [handleAddProduct, products]);
+
+    useBarcodeScanner({
+        enabled: operation === "REGISTER" &&
+            !auth.isLoading &&
+            Boolean(auth.user && auth.userDoc) &&
+            !auth.needsWarehouseSelection,
+        onScan: handleBarcodeScan,
+    });
 
     const handleRegister = useCallback(async (): Promise<boolean> => {
         if (!auth.effectiveWarehouseId) {

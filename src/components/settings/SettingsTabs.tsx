@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, Megaphone, ReceiptText, Settings2, TicketCheck, type LucideIcon } from "lucide-react";
+import { CreditCard, Megaphone, Printer, ReceiptText, Settings2, TicketCheck, type LucideIcon } from "lucide-react";
 
 type SettingsTab = {
   href: string;
@@ -12,6 +12,11 @@ type SettingsTab = {
 
 // Add future settings pages here to expose them in the shared tab bar.
 const SETTINGS_TABS: readonly SettingsTab[] = [
+  {
+    href: "/settings/printer",
+    label: "Máy in",
+    icon: Printer,
+  },
   {
     href: "/settings/receipt",
     label: "In biên lai",

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { TicketCheck } from "lucide-react";
+import { printCurrentDocumentSilently } from "@/features/printer/services/printerService";
 import TicketBatchDocument from "@/features/ticket/components/TicketBatchDocument";
 import TicketDocument from "@/features/ticket/components/TicketDocument";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
@@ -118,11 +119,6 @@ export async function printTicketsSilently(
   const ticketCount = buildPrintableTickets(order).length;
   if (ticketCount === 0) return;
 
-  const { invoke, isTauri } = await import("@tauri-apps/api/core");
-  if (!isTauri()) {
-    throw new Error("In vé trực tiếp chỉ khả dụng trong ứng dụng Tauri.");
-  }
-
   const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
   const rootId = `pos-silent-tickets-${crypto.randomUUID()}`;
   const rootElement = document.createElement("div");
@@ -155,11 +151,16 @@ export async function printTicketsSilently(
       }
     `;
     document.head.appendChild(printStyle);
-    await invoke("print_receipt_silent", {
+    const dispatch = await printCurrentDocumentSilently({
       pageWidthMm: profile.paperWidthMm,
       pageHeightMm: settings.ticketHeightMm,
     });
-    console.info("[Vé] Máy in đã nhận lệnh", { localOrderId: order.localOrderId, ticketCount });
+    console.info("[Vé] Máy in đã nhận lệnh", {
+      localOrderId: order.localOrderId,
+      ticketCount,
+      printerName: dispatch.effectivePrinterName,
+      usedFallback: dispatch.usedFallback,
+    });
   } finally {
     root.unmount();
     printStyle.remove();

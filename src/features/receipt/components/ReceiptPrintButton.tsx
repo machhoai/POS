@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { Printer } from "lucide-react";
+import { printCurrentDocumentSilently } from "@/features/printer/services/printerService";
 import ReceiptDocument from "@/features/receipt/components/ReceiptDocument";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
 import { buildInvoiceRequestUrl } from "@/features/receipt/helpers/invoiceRequestUrl";
@@ -157,11 +158,6 @@ export async function printReceiptSilently(
   invoiceRequestUrlOverride?: string,
   language: ReceiptLanguage = "vi",
 ): Promise<void> {
-  const { invoke, isTauri } = await import("@tauri-apps/api/core");
-  if (!isTauri()) {
-    throw new Error("In trực tiếp chỉ khả dụng trong ứng dụng Tauri.");
-  }
-
   const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
   const rootId = `pos-silent-receipt-${crypto.randomUUID()}`;
   const rootElement = document.createElement("div");
@@ -230,12 +226,14 @@ export async function printReceiptSilently(
       paperSize: settings.paperSize,
       pageHeightMm,
     });
-    await invoke("print_receipt_silent", {
+    const dispatch = await printCurrentDocumentSilently({
       pageWidthMm: profile.paperWidthMm,
       pageHeightMm,
     });
     console.info("[Biên lai] Máy in đã nhận lệnh", {
       localOrderId: order.localOrderId,
+      printerName: dispatch.effectivePrinterName,
+      usedFallback: dispatch.usedFallback,
     });
   } finally {
     root.unmount();

@@ -4,6 +4,7 @@
 
 use serde::Serialize;
 mod card_reader;
+mod printer;
 mod secure_credential;
 #[cfg(windows)]
 use std::{sync::mpsc, time::Duration};
@@ -13,13 +14,14 @@ use tauri::{
 #[cfg(windows)]
 use webview2_com::{
     Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2Environment6, ICoreWebView2_16, COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT,
-        COREWEBVIEW2_PRINT_STATUS_PRINTER_UNAVAILABLE, COREWEBVIEW2_PRINT_STATUS_SUCCEEDED,
+        ICoreWebView2Environment6, ICoreWebView2PrintSettings2, ICoreWebView2_16,
+        COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT, COREWEBVIEW2_PRINT_STATUS_PRINTER_UNAVAILABLE,
+        COREWEBVIEW2_PRINT_STATUS_SUCCEEDED,
     },
     PrintCompletedHandler,
 };
 #[cfg(windows)]
-use windows::core::Interface;
+use windows::core::{Interface, HSTRING};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const CUSTOMER_DISPLAY_LABEL: &str = "customer-display";
@@ -187,13 +189,166 @@ async fn open_customer_display(app: AppHandle) -> Result<CustomerDisplayOpenStat
     Ok(status)
 }
 
-/// In nội dung hiện tại của WebView thẳng tới máy in mặc định, không mở hộp thoại Windows.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PrintDispatchResult {
+    requested_printer_name: Option<String>,
+    effective_printer_name: String,
+    used_fallback: bool,
+}
+
+#[cfg(windows)]
+enum DirectPrintError {
+    PrinterUnavailable,
+    Other(String),
+}
+
+#[cfg(windows)]
+impl DirectPrintError {
+    fn message(self, printer_name: &str) -> String {
+        match self {
+            Self::PrinterUnavailable => {
+                format!("Máy in “{printer_name}” không khả dụng.")
+            }
+            Self::Other(message) => message,
+        }
+    }
+}
+
+#[cfg(windows)]
+async fn print_webview_once(
+    webview: tauri::WebviewWindow,
+    page_width_mm: f64,
+    page_height_mm: f64,
+    printer_name: String,
+) -> Result<(), DirectPrintError> {
+    let (result_sender, result_receiver) = mpsc::channel::<Result<(), DirectPrintError>>();
+    let setup_sender = result_sender.clone();
+    let page_width_inches = page_width_mm / 25.4;
+    let page_height_inches = page_height_mm / 25.4;
+
+    webview
+        .with_webview(move |platform_webview| {
+            let setup_result = (|| -> Result<(), DirectPrintError> {
+                let controller = platform_webview.controller();
+                let core_webview = unsafe { controller.CoreWebView2() }.map_err(|error| {
+                    DirectPrintError::Other(format!("Không thể truy cập WebView2: {error}"))
+                })?;
+                let printable_webview: ICoreWebView2_16 = core_webview.cast().map_err(|error| {
+                    DirectPrintError::Other(format!("WebView2 chưa hỗ trợ in trực tiếp: {error}"))
+                })?;
+                let print_environment: ICoreWebView2Environment6 =
+                    platform_webview.environment().cast().map_err(|error| {
+                        DirectPrintError::Other(format!("Không thể khởi tạo cấu hình in: {error}"))
+                    })?;
+                let print_settings =
+                    unsafe { print_environment.CreatePrintSettings() }.map_err(|error| {
+                        DirectPrintError::Other(format!("Không thể tạo cấu hình in: {error}"))
+                    })?;
+                let targeted_settings: ICoreWebView2PrintSettings2 =
+                    print_settings.cast().map_err(|error| {
+                        DirectPrintError::Other(format!(
+                            "WebView2 chưa hỗ trợ chọn máy in: {error}"
+                        ))
+                    })?;
+
+                unsafe {
+                    targeted_settings
+                        .SetPrinterName(&HSTRING::from(&printer_name))
+                        .map_err(|error| {
+                            DirectPrintError::Other(format!(
+                                "Không thể chọn máy in “{printer_name}”: {error}"
+                            ))
+                        })?;
+                    print_settings
+                        .SetOrientation(COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetScaleFactor(1.0)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetPageWidth(page_width_inches)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetPageHeight(page_height_inches)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetMarginTop(0.0)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetMarginBottom(0.0)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetMarginLeft(0.0)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetMarginRight(0.0)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetShouldPrintBackgrounds(true)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetShouldPrintSelectionOnly(false)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                    print_settings
+                        .SetShouldPrintHeaderAndFooter(false)
+                        .map_err(|error| DirectPrintError::Other(error.to_string()))?;
+                }
+
+                let callback_sender = result_sender.clone();
+                let handler =
+                    PrintCompletedHandler::create(Box::new(move |error_code, print_status| {
+                        let outcome = match error_code {
+                            Err(error) => Err(DirectPrintError::Other(format!(
+                                "Lệnh in WebView2 thất bại: {error}"
+                            ))),
+                            Ok(()) if print_status == COREWEBVIEW2_PRINT_STATUS_SUCCEEDED => Ok(()),
+                            Ok(())
+                                if print_status
+                                    == COREWEBVIEW2_PRINT_STATUS_PRINTER_UNAVAILABLE =>
+                            {
+                                Err(DirectPrintError::PrinterUnavailable)
+                            }
+                            Ok(()) => Err(DirectPrintError::Other(
+                                "Windows không thể hoàn tất lệnh in.".to_string(),
+                            )),
+                        };
+                        let _ = callback_sender.send(outcome);
+                        Ok(())
+                    }));
+
+                unsafe { printable_webview.Print(&print_settings, &handler) }.map_err(|error| {
+                    DirectPrintError::Other(format!(
+                        "Không thể gửi lệnh tới máy in “{printer_name}”: {error}"
+                    ))
+                })?;
+                Ok(())
+            })();
+
+            if let Err(error) = setup_result {
+                let _ = setup_sender.send(Err(error));
+            }
+        })
+        .map_err(|error| {
+            DirectPrintError::Other(format!("Không thể truy cập cửa sổ in: {error}"))
+        })?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        result_receiver.recv_timeout(Duration::from_secs(30))
+    })
+    .await
+    .map_err(|error| DirectPrintError::Other(format!("Tiến trình in bị gián đoạn: {error}")))?
+    .map_err(|_| DirectPrintError::Other("Máy in không phản hồi sau 30 giây.".to_string()))?
+}
+
+/// In nội dung hiện tại của WebView tới máy in đã cấu hình, không mở hộp thoại Windows.
 #[tauri::command]
 async fn print_receipt_silent(
     webview: tauri::WebviewWindow,
     page_width_mm: f64,
     page_height_mm: f64,
-) -> Result<(), String> {
+    printer_name: Option<String>,
+) -> Result<PrintDispatchResult, String> {
     if !(40.0..=100.0).contains(&page_width_mm) {
         return Err("Khổ giấy in không hợp lệ.".to_string());
     }
@@ -203,111 +358,58 @@ async fn print_receipt_silent(
 
     #[cfg(windows)]
     {
-        let (result_sender, result_receiver) = mpsc::channel::<Result<(), String>>();
-        let setup_sender = result_sender.clone();
-        let page_width_inches = page_width_mm / 25.4;
-        let page_height_inches = page_height_mm / 25.4;
+        let resolution = printer::resolve_printer(printer_name)?;
+        let first_printer = resolution.effective_name.clone();
+        let first_result = print_webview_once(
+            webview.clone(),
+            page_width_mm,
+            page_height_mm,
+            first_printer.clone(),
+        )
+        .await;
 
-        webview
-            .with_webview(move |platform_webview| {
-                let setup_result = (|| -> Result<(), String> {
-                    let controller = platform_webview.controller();
-                    let core_webview = unsafe { controller.CoreWebView2() }
-                        .map_err(|error| format!("Không thể truy cập WebView2: {error}"))?;
-                    let printable_webview: ICoreWebView2_16 = core_webview
-                        .cast()
-                        .map_err(|error| format!("WebView2 chưa hỗ trợ in trực tiếp: {error}"))?;
-                    let print_environment: ICoreWebView2Environment6 = platform_webview
-                        .environment()
-                        .cast()
-                        .map_err(|error| format!("Không thể khởi tạo cấu hình in: {error}"))?;
-                    let print_settings = unsafe { print_environment.CreatePrintSettings() }
-                        .map_err(|error| format!("Không thể tạo cấu hình in: {error}"))?;
-
-                    unsafe {
-                        print_settings
-                            .SetOrientation(COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetScaleFactor(1.0)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetPageWidth(page_width_inches)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetPageHeight(page_height_inches)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetMarginTop(0.0)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetMarginBottom(0.0)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetMarginLeft(0.0)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetMarginRight(0.0)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetShouldPrintBackgrounds(true)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetShouldPrintSelectionOnly(false)
-                            .map_err(|error| error.to_string())?;
-                        print_settings
-                            .SetShouldPrintHeaderAndFooter(false)
-                            .map_err(|error| error.to_string())?;
-                    }
-
-                    let callback_sender = result_sender.clone();
-                    let handler =
-                        PrintCompletedHandler::create(Box::new(move |error_code, print_status| {
-                            let outcome = match error_code {
-                                Err(error) => Err(format!("Lệnh in WebView2 thất bại: {error}")),
-                                Ok(()) if print_status == COREWEBVIEW2_PRINT_STATUS_SUCCEEDED => {
-                                    Ok(())
-                                }
-                                Ok(())
-                                    if print_status
-                                        == COREWEBVIEW2_PRINT_STATUS_PRINTER_UNAVAILABLE =>
-                                {
-                                    Err("Máy in mặc định không khả dụng.".to_string())
-                                }
-                                Ok(()) => Err("Windows không thể hoàn tất lệnh in.".to_string()),
-                            };
-                            let _ = callback_sender.send(outcome);
-                            Ok(())
-                        }));
-
-                    unsafe { printable_webview.Print(&print_settings, &handler) }
-                        .map_err(|error| format!("Không thể gửi lệnh tới máy in: {error}"))?;
-                    Ok(())
-                })();
-
-                if let Err(error) = setup_result {
-                    let _ = setup_sender.send(Err(error));
+        match first_result {
+            Ok(()) => {
+                eprintln!("[In] Đã gửi tài liệu tới máy in “{first_printer}”.");
+                return Ok(PrintDispatchResult {
+                    requested_printer_name: resolution.requested_name,
+                    effective_printer_name: first_printer,
+                    used_fallback: resolution.used_fallback,
+                });
+            }
+            Err(DirectPrintError::PrinterUnavailable) if !resolution.used_fallback => {
+                if let Some(fallback_name) = printer::find_default_fallback(&first_printer)
+                    .map_err(|error| format!("Máy in “{first_printer}” mất kết nối. {error}"))?
+                {
+                    print_webview_once(
+                        webview,
+                        page_width_mm,
+                        page_height_mm,
+                        fallback_name.clone(),
+                    )
+                    .await
+                    .map_err(|error| error.message(&fallback_name))?;
+                    eprintln!(
+                        "[In] Máy in “{first_printer}” mất kết nối; đã chuyển sang “{fallback_name}”."
+                    );
+                    return Ok(PrintDispatchResult {
+                        requested_printer_name: resolution.requested_name,
+                        effective_printer_name: fallback_name,
+                        used_fallback: true,
+                    });
                 }
-            })
-            .map_err(|error| format!("Không thể truy cập cửa sổ in: {error}"))?;
-
-        let result = tauri::async_runtime::spawn_blocking(move || {
-            result_receiver.recv_timeout(Duration::from_secs(30))
-        })
-        .await
-        .map_err(|error| format!("Tiến trình in bị gián đoạn: {error}"))?
-        .map_err(|_| "Máy in không phản hồi sau 30 giây.".to_string())?;
-
-        match &result {
-            Ok(()) => eprintln!("[Biên lai] Đã gửi biên lai tới máy in mặc định."),
-            Err(error) => eprintln!("[Biên lai] In trực tiếp thất bại: {error}"),
+            }
+            Err(error) => return Err(error.message(&first_printer)),
         }
-        result
+
+        Err(format!(
+            "Máy in “{first_printer}” mất kết nối và máy in mặc định của Windows không khả dụng."
+        ))
     }
 
     #[cfg(not(windows))]
     {
-        let _ = webview;
+        let _ = (webview, printer_name);
         Err("In trực tiếp hiện chỉ hỗ trợ ứng dụng POS trên Windows.".to_string())
     }
 }
@@ -358,6 +460,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_customer_display,
+            printer::list_printers,
             print_receipt_silent,
             card_reader::read_member_card,
             card_reader::cancel_member_card_read,
