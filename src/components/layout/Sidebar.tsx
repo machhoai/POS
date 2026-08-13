@@ -102,9 +102,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                     className="relative w-10 h-10 flex items-center justify-center mb-7"
                     aria-label="Joy POS"
                 >
-                    <span className="absolute w-8 h-2.5 rounded-full bg-orange-400 -rotate-45 translate-y-[-5px]" />
-                    <span className="absolute w-8 h-2.5 rounded-full bg-[var(--color-accent)] -rotate-45 translate-x-[7px] translate-y-[5px]" />
-                    <span className="absolute w-5 h-2.5 rounded-full bg-orange-300 -rotate-45 -translate-x-[8px] translate-y-[6px]" />
+                    <img src="/images/logo/logo.png" alt="Joy POS" className="object-contain" />
                 </div>
 
                 <nav className="flex flex-col items-center gap-2 w-full" aria-label="Điều hướng chính">
@@ -187,7 +185,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                             Xác nhận đăng xuất
                         </h2>
                         <p id="logout-confirm-description" className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">
-                            Bạn có chắc muốn đăng xuất khỏi hệ thống POS không?
+                            Bạn có chắc muốn đăng xuất khỏi hệ thống JPOS không?
                         </p>
                         <div className="mt-6 grid grid-cols-2 gap-3">
                             <button

@@ -52,7 +52,7 @@ const RECEIPT_COPY: Record<ReceiptLanguage, ReceiptCopy> = {
         grandTotal: "TỔNG TIỀN",
         invoiceRequest: "Yêu cầu xuất hóa đơn",
         invoiceRequestQr: "Quý khách vui lòng mã để yêu cầu xuất hóa đơn",
-        invoiceRequestHint: "Xuất hóa đơn chỉ có hiện lực đến 22:30 cùng ngày.",
+        invoiceRequestHint: "Xuất hóa đơn chỉ có hiệu lực đến 22:30 cùng ngày.",
         paymentMethods: { CASH: "Tiền mặt", QR_CODE: "Chuyển khoản" },
     },
     en: {
