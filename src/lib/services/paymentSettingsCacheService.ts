@@ -8,6 +8,7 @@ export function cachePaymentSettings(settings: FixedTransferSettings): void {
 }
 
 export function loadCachedPaymentSettings(
+  deviceId: string,
   warehouseId: string,
 ): FixedTransferSettings | null {
   if (typeof window === "undefined") return null;
@@ -15,7 +16,9 @@ export function loadCachedPaymentSettings(
     const raw = window.localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const value = JSON.parse(raw) as FixedTransferSettings;
-    return value.warehouseId === warehouseId ? value : null;
+    return value.deviceId === deviceId && value.warehouseId === warehouseId
+      ? value
+      : null;
   } catch {
     return null;
   }

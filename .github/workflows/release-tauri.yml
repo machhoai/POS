@@ -58,6 +58,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
+            - Cấu hình tài khoản QR chuyển khoản riêng cho từng máy POS.
+            - Bộ cài Windows tích hợp driver Sapo SP01 và 4BARCODE 3B-365B.
+
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
           releaseDraft: false

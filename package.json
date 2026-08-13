@@ -1,6 +1,6 @@
 {
     "name": "pos-system",
-    "version": "0.1.16",
+    "version": "0.1.17",
     "private": true,
     "scripts": {
         "dev": "next dev --port 3000",
@@ -10,7 +10,8 @@
         "tauri": "tauri",
         "tauri:dev": "tauri dev",
         "tauri:build": "tauri build",
-        "card-reader:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-card-reader-sidecar.ps1"
+        "card-reader:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-card-reader-sidecar.ps1",
+        "printer-drivers:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-printer-driver-resources.ps1"
     },
     "dependencies": {
         "@tauri-apps/api": "^2.11.0",

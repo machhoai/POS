@@ -87,12 +87,14 @@ export const payosPayment = onCall(
         return await getFixedTransferSettingsForUser(
           request.auth.uid,
           payload,
+          device.id,
         );
       }
       if (action === "save-fallback-settings") {
         return await saveFixedTransferSettingsForUser(
           request.auth.uid,
           payload,
+          device.id,
         );
       }
       throw new HttpsError("invalid-argument", "Thao tác PayOS không hợp lệ.");

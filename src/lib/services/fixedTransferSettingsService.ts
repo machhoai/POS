@@ -4,12 +4,16 @@ import type {
   FixedTransferSettings,
   FixedTransferSettingsInput,
 } from "@/lib/types/paymentSettings";
-import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
+import { loadDeviceCredential, withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 import { cachePaymentSettings, loadCachedPaymentSettings } from "@/lib/services/paymentSettingsCacheService";
 
 export async function getFixedTransferSettings(
   warehouseId: string,
 ): Promise<FixedTransferSettings | null> {
+  const credential = await loadDeviceCredential();
+  if (!credential) {
+    throw new Error("Máy POS chưa được kích hoạt trên JPULSE.");
+  }
   const callable = httpsCallable<
     {
       action: "get-fallback-settings";
@@ -25,7 +29,7 @@ export async function getFixedTransferSettings(
     if (result.data.settings) cachePaymentSettings(result.data.settings);
     return result.data.settings;
   } catch (error) {
-    const cached = loadCachedPaymentSettings(warehouseId);
+    const cached = loadCachedPaymentSettings(credential.device_id, warehouseId);
     if (cached) return cached;
     throw error;
   }

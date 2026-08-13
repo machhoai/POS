@@ -38,6 +38,7 @@ export default function PaymentSettingsPage() {
   const [form, setForm] = useState<FixedTransferSettingsInput>(EMPTY_FORM);
   const [loadedWarehouseId, setLoadedWarehouseId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [configuredDeviceId, setConfiguredDeviceId] = useState<string | null>(null);
   const isLoading = Boolean(
     effectiveWarehouseId && loadedWarehouseId !== effectiveWarehouseId,
   );
@@ -66,6 +67,7 @@ export default function PaymentSettingsPage() {
               accountName: settings.accountName,
             }
           : { ...EMPTY_FORM, warehouseId: effectiveWarehouseId });
+        setConfiguredDeviceId(settings?.deviceId ?? null);
       })
       .catch((error: unknown) => {
         console.error("[Cài đặt thanh toán] Không thể tải cấu hình:", error);
@@ -102,6 +104,7 @@ export default function PaymentSettingsPage() {
         accountNumber: saved.accountNumber,
         accountName: saved.accountName,
       });
+      setConfiguredDeviceId(saved.deviceId);
       showSuccess(
         "Đã lưu cấu hình thanh toán",
         saved.fixedTransferOnly
@@ -139,7 +142,8 @@ export default function PaymentSettingsPage() {
             <div>
               <h1 className="text-lg font-extrabold text-[var(--color-text-primary)]">Cài đặt thanh toán</h1>
               <p className="text-xs text-[var(--color-text-muted)]">
-                Phương thức chuyển khoản cho {effectiveWarehouseName || "điểm bán hiện tại"}
+                Cấu hình riêng cho máy POS này tại {effectiveWarehouseName || "điểm bán hiện tại"}
+                {configuredDeviceId ? ` · ${configuredDeviceId.slice(0, 8)}` : ""}
               </p>
             </div>
           </div>

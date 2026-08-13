@@ -5,7 +5,7 @@
     "identifier": "com.jpos.system",
     "build": {
         "beforeDevCommand": "pnpm dev",
-        "beforeBuildCommand": "pnpm card-reader:build && pnpm build",
+        "beforeBuildCommand": "pnpm card-reader:build && pnpm printer-drivers:verify && pnpm build",
         "devUrl": "http://localhost:3000",
         "frontendDist": "../out"
     },
@@ -31,10 +31,13 @@
     },
     "bundle": {
         "active": true,
-        "targets": "all",
+        "targets": [
+            "nsis"
+        ],
         "createUpdaterArtifacts": true,
         "resources": [
-            "resources/card-reader/*"
+            "resources/card-reader/*",
+            "resources/printer-drivers/**/*"
         ],
         "icon": [
             "icons/32x32.png",
@@ -42,7 +45,13 @@
             "icons/128x128@2x.png",
             "icons/icon.icns",
             "icons/icon.ico"
-        ]
+        ],
+        "windows": {
+            "nsis": {
+                "installMode": "both",
+                "installerHooks": "./windows/installer-hooks.nsh"
+            }
+        }
     },
     "plugins": {
         "updater": {

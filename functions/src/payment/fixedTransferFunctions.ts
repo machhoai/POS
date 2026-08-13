@@ -63,23 +63,19 @@ export function isFixedTransferActive(order: PosOrder): boolean {
 export async function getFixedTransferSettingsForUser(
   userId: string,
   data: unknown,
+  deviceId: string,
 ) {
   const warehouseId = readWarehouseId(data);
   await requireAccessibleWarehouse(userId, warehouseId);
-  const snapshot = await db
-    .collection(POS_COLLECTIONS.paymentSettings)
-    .doc(warehouseId)
-    .get();
   return {
-    settings: snapshot.exists
-      ? snapshot.data() as FixedTransferSettings
-      : null,
+    settings: await getFixedTransferSettingsForDevice(deviceId, warehouseId),
   };
 }
 
 export async function saveFixedTransferSettingsForUser(
   userId: string,
   data: unknown,
+  deviceId: string,
 ) {
   const rawInput = data && typeof data === "object"
     ? data as Partial<FixedTransferSettingsInput>
@@ -102,6 +98,7 @@ export async function saveFixedTransferSettingsForUser(
   let normalized: FixedTransferSettingsInput;
   try {
     normalized = normalizeFixedTransferSettings({
+      deviceId,
       warehouseId,
       enabled: rawInput.enabled === true,
       fixedTransferOnly: rawInput.fixedTransferOnly === true,
@@ -122,7 +119,7 @@ export async function saveFixedTransferSettingsForUser(
 
   const docRef = db
     .collection(POS_COLLECTIONS.paymentSettings)
-    .doc(warehouseId);
+    .doc(deviceId);
   const settings = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(docRef);
     const currentVersion = snapshot.exists
@@ -138,6 +135,45 @@ export async function saveFixedTransferSettingsForUser(
     return nextSettings;
   });
   return { settings };
+}
+
+export async function getFixedTransferSettingsForDevice(
+  deviceId: string,
+  warehouseId: string,
+): Promise<FixedTransferSettings | null> {
+  const collection = db.collection(POS_COLLECTIONS.paymentSettings);
+  const deviceSnapshot = await collection.doc(deviceId).get();
+  const snapshot = deviceSnapshot.exists
+    ? deviceSnapshot
+    : await collection.doc(warehouseId).get();
+  if (!snapshot.exists) return null;
+  const settings = snapshot.data() as Omit<FixedTransferSettings, "deviceId"> & {
+    deviceId?: string;
+  };
+  return {
+    ...settings,
+    deviceId,
+    warehouseId,
+    fixedTransferOnly: settings.fixedTransferOnly === true,
+  };
+}
+
+async function getFixedTransferSettingsForOrder(
+  order: PosOrder,
+): Promise<FixedTransferSettings | null> {
+  if (order.deviceId) {
+    return getFixedTransferSettingsForDevice(order.deviceId, order.warehouseId);
+  }
+  const snapshot = await db
+    .collection(POS_COLLECTIONS.paymentSettings)
+    .doc(order.warehouseId)
+    .get();
+  if (!snapshot.exists) return null;
+  return {
+    ...(snapshot.data() as Omit<FixedTransferSettings, "deviceId">),
+    deviceId: "legacy",
+    warehouseId: order.warehouseId,
+  };
 }
 
 export async function activateFixedTransferForOrder(
@@ -161,17 +197,13 @@ export async function activateFixedTransferForOrder(
     userId,
     order.warehouseId,
   );
-  const settingsSnapshot = await db
-    .collection(POS_COLLECTIONS.paymentSettings)
-    .doc(order.warehouseId)
-    .get();
-  if (!settingsSnapshot.exists) {
+  const settings = await getFixedTransferSettingsForOrder(order);
+  if (!settings) {
     throw new HttpsError(
       "failed-precondition",
       "PayOS không tạo được mã và điểm bán chưa cấu hình tài khoản chuyển khoản dự phòng.",
     );
   }
-  const settings = settingsSnapshot.data() as FixedTransferSettings;
   if (!settings.enabled) {
     throw new HttpsError(
       "failed-precondition",

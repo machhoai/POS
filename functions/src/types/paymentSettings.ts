@@ -1,4 +1,5 @@
 export interface FixedTransferSettings {
+  deviceId: string;
   warehouseId: string;
   enabled: boolean;
   fixedTransferOnly: boolean;
@@ -11,6 +12,7 @@ export interface FixedTransferSettings {
 }
 
 export interface FixedTransferSettingsInput {
+  deviceId: string;
   warehouseId: string;
   enabled: boolean;
   fixedTransferOnly: boolean;

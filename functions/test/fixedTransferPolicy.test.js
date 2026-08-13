@@ -9,6 +9,7 @@ const {
 test("normalizes fixed transfer settings before persistence", () => {
   assert.deepEqual(
     normalizeFixedTransferSettings({
+      deviceId: " DEVICE-01 ",
       warehouseId: " WH-01 ",
       enabled: true,
       fixedTransferOnly: true,
@@ -17,6 +18,7 @@ test("normalizes fixed transfer settings before persistence", () => {
       accountName: "  CONG   TY POS  ",
     }),
     {
+      deviceId: "DEVICE-01",
       warehouseId: "WH-01",
       enabled: true,
       fixedTransferOnly: true,
@@ -29,6 +31,7 @@ test("normalizes fixed transfer settings before persistence", () => {
 
 test("rejects invalid bank and account identifiers", () => {
   const valid = {
+    deviceId: "DEVICE-01",
     warehouseId: "WH-01",
     enabled: true,
     fixedTransferOnly: false,
@@ -50,6 +53,7 @@ test("rejects invalid bank and account identifiers", () => {
 test("requires fixed transfer to be enabled for fixed-only mode", () => {
   assert.throws(
     () => normalizeFixedTransferSettings({
+      deviceId: "DEVICE-01",
       warehouseId: "WH-01",
       enabled: false,
       fixedTransferOnly: true,
@@ -58,6 +62,21 @@ test("requires fixed transfer to be enabled for fixed-only mode", () => {
       accountName: "CONG TY POS",
     }),
     /Phải bật QR tài khoản cố định/,
+  );
+});
+
+test("requires a POS device id for device-scoped settings", () => {
+  assert.throws(
+    () => normalizeFixedTransferSettings({
+      deviceId: " ",
+      warehouseId: "WH-01",
+      enabled: true,
+      fixedTransferOnly: false,
+      bankBin: "970436",
+      accountNumber: "123456789",
+      accountName: "CONG TY POS",
+    }),
+    /Máy POS/,
   );
 });
 

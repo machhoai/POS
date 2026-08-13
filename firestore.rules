@@ -18,8 +18,8 @@ service cloud.firestore {
     }
 
     // Payment settings are managed exclusively by authenticated callable
-    // Functions so account changes receive warehouse-scoped RBAC checks.
-    match /pos_payment_settings/{warehouseId} {
+    // Functions so account changes receive device-scoped RBAC checks.
+    match /pos_payment_settings/{deviceId} {
       allow read, write: if false;
     }
 

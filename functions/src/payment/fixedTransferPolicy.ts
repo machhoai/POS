@@ -7,6 +7,7 @@ export function normalizeFixedTransferSettings(
   input: FixedTransferSettingsInput,
 ): FixedTransferSettingsInput {
   const normalized = {
+    deviceId: input.deviceId.trim(),
     warehouseId: input.warehouseId.trim(),
     enabled: input.enabled === true,
     fixedTransferOnly: input.fixedTransferOnly === true,
@@ -15,6 +16,7 @@ export function normalizeFixedTransferSettings(
     accountName: input.accountName.trim().replace(/\s+/g, " "),
   };
 
+  if (!normalized.deviceId) throw new Error("Máy POS không hợp lệ.");
   if (!normalized.warehouseId) throw new Error("Điểm bán không hợp lệ.");
   if (normalized.fixedTransferOnly && !normalized.enabled) {
     throw new Error("Phải bật QR tài khoản cố định trước khi dùng chế độ chỉ QR cố định.");

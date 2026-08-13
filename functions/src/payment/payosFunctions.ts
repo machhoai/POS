@@ -32,6 +32,7 @@ import {
   activateFixedTransferForOrder,
   cancelFixedTransferForOrder,
   confirmFixedTransferForOrder,
+  getFixedTransferSettingsForDevice,
   isFixedTransferActive,
 } from "./fixedTransferFunctions";
 
@@ -621,13 +622,11 @@ async function createPayOSOrFallback(
   order: PosOrder,
 ): Promise<PosOrder> {
   const docRef = db.collection(POS_COLLECTIONS.orders).doc(order.localOrderId);
-  const settingsSnapshot = await db
-    .collection(POS_COLLECTIONS.paymentSettings)
-    .doc(order.warehouseId)
-    .get();
-  const fixedTransferOnly = settingsSnapshot.exists &&
-    settingsSnapshot.data()?.enabled === true &&
-    settingsSnapshot.data()?.fixedTransferOnly === true;
+  const fixedTransferSettings = order.deviceId
+    ? await getFixedTransferSettingsForDevice(order.deviceId, order.warehouseId)
+    : null;
+  const fixedTransferOnly = fixedTransferSettings?.enabled === true &&
+    fixedTransferSettings.fixedTransferOnly === true;
   if (fixedTransferOnly) {
     logger.info("[Thanh toán] Dùng QR tài khoản cố định theo cấu hình", {
       localOrderId: order.localOrderId,

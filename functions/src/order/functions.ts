@@ -413,6 +413,7 @@ export async function stagePosOrderForPayOS(
       }
       const updatedAt = new Date().toISOString();
       await docRef.update({
+        ...(input.deviceId ? { deviceId: input.deviceId } : {}),
         paymentMethod: "QR_CODE",
         paymentMethodId: "QR_CODE",
         paymentMethodName: "Chuyển khoản",
@@ -420,6 +421,7 @@ export async function stagePosOrderForPayOS(
       });
       return {
         ...existing,
+        ...(input.deviceId ? { deviceId: input.deviceId } : {}),
         paymentMethod: "QR_CODE",
         paymentMethodId: "QR_CODE",
         paymentMethodName: "Chuyển khoản",
@@ -473,6 +475,7 @@ export async function stagePosOrderForPayOS(
 
     const stagedOrder: PosOrder = {
       ...existing,
+      ...(input.deviceId ? { deviceId: input.deviceId } : {}),
       invoiceRequestToken: isInvoiceRequestToken(existing.invoiceRequestToken)
         ? existing.invoiceRequestToken
         : createInvoiceRequestToken(),
@@ -493,6 +496,7 @@ export async function stagePosOrderForPayOS(
       updatedAt: now,
     };
     transaction.update(docRef, {
+      ...(stagedOrder.deviceId ? { deviceId: stagedOrder.deviceId } : {}),
       shopId: stagedOrder.shopId,
       warehouseId: stagedOrder.warehouseId,
       ...(stagedOrder.uid ? { uid: stagedOrder.uid } : {}),
