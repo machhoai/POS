@@ -29,4 +29,16 @@
     DetailPrint "Khong the cau hinh Sapo SP01 (ma loi $2)."
     MessageBox MB_ICONEXCLAMATION|MB_OK "JPOS da duoc cai dat, nhung driver Sapo SP01 XP-80C khong cau hinh duoc (ma loi $2). Vui long ket noi may in, bat nguon va thu cai lai JPOS."
   ${EndIf}
+
+  DetailPrint "Dang cai driver SNBC BT-T080 va cau hinh may in ITP080..."
+  ClearErrors
+  ExecWait '"$WINDIR\Sysnative\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\printer-drivers\itp080\install-itp080-driver.ps1" -DriverPackage "$INSTDIR\resources\printer-drivers\itp080\Setup_PosPrn_WinDrv_V2.2.33.1.zip"' $4
+  ${If} $4 == 0
+    DetailPrint "Da cai driver SNBC BT-T080 va tao may in ITP080."
+  ${ElseIf} $4 == 10
+    DetailPrint "Da cai driver SNBC BT-T080; hay ket noi va bat ITP080 de tao hang doi in."
+  ${Else}
+    DetailPrint "Khong the cau hinh ITP080 (ma loi $4)."
+    MessageBox MB_ICONEXCLAMATION|MB_OK "JPOS da duoc cai dat, nhung driver ITP080 khong cau hinh duoc (ma loi $4). Vui long ket noi may in, bat nguon va thu cai lai JPOS."
+  ${EndIf}
 !macroend

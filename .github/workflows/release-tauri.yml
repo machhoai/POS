@@ -58,10 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Thêm cấu hình máy in local và kiểm tra lề đầu giấy.
-            - Tối ưu khổ in riêng cho Sapo SP01/XP-80C, không ảnh hưởng các máy in khác.
-            - In tuần tự từng job: hóa đơn, vé 1, vé 2 và các vé tiếp theo.
-            - Bộ cài Windows tích hợp và tự nhận driver Sapo SP01/XP-80C và 4BARCODE 3B-365B.
+            - Tích hợp driver SNBC chính hãng cho máy in bill ITP080.
+            - Cài đặt hoàn toàn im lặng, không mở màn hình chọn cổng của hãng.
+            - Tự tạo queue `ITP080 (SNBC BT-T080)` trong danh sách máy in JPOS.
+            - Sửa ánh xạ USB OEM sang interface ID 738 để tránh trạng thái Offline và job in bị treo.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
