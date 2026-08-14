@@ -39,14 +39,12 @@ const TicketDocument: React.FC<TicketDocumentProps> = ({
                 fontFamily: "Arial, Helvetica, sans-serif",
                 fontSize: `${settings.bodyFontSizePt}pt`,
                 lineHeight: 1.0,
-                display: "flex",
-                flexDirection: "column",
-                textAlign: "center",
                 pageBreakAfter: "always",
                 breakAfter: "page",
+                overflowWrap: "anywhere",
             }}
         >
-            <header style={{ borderBottom: "1px dashed #000", paddingBottom: "2.5mm" }}>
+            <header style={{ borderBottom: "1px dashed #000", paddingBottom: "2.5mm", display: "flex" }}>
                 {settings.showLogo && settings.logoDataUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -62,11 +60,13 @@ const TicketDocument: React.FC<TicketDocumentProps> = ({
                         }}
                     />
                 ) : null}
-                <div style={{ fontWeight: 700, fontSize: `${settings.titleFontSizePt}pt`, letterSpacing: "0.5px" }}>
-                    {settings.ticketTitle}
+                <div style={{ margin: "auto 0", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "start" }}>
+                    <div style={{ fontWeight: 700, fontSize: `${settings.titleFontSizePt}pt`, letterSpacing: "0.5px" }}>
+                        {settings.ticketTitle}
+                    </div>
+                    <div style={{ marginTop: "1mm", fontWeight: 700 }}>{settings.storeName}</div>
+                    {settings.subtitle ? <div style={{ marginTop: "1mm" }}>{settings.subtitle}</div> : null}
                 </div>
-                <div style={{ marginTop: "1mm", fontWeight: 700 }}>{settings.storeName}</div>
-                {settings.subtitle ? <div style={{ marginTop: "1mm" }}>{settings.subtitle}</div> : null}
             </header>
 
             <main style={{ display: "flex", minHeight: 0, flex: 1, flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "1.5mm 0" }}>

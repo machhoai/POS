@@ -267,7 +267,7 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                 color: "#000",
                 fontFamily: 'Arial, "Microsoft YaHei", "Noto Sans SC", Helvetica, sans-serif',
                 fontSize: isCompact ? "10px" : "11.5px",
-                lineHeight: 1.35,
+                lineHeight: 1.1,
                 overflowWrap: "anywhere",
             }}
         >
