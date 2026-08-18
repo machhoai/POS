@@ -21,7 +21,7 @@ jobs:
       NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
       NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
       NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
-      NEXT_PUBLIC_SHOP_ID: "1"
+      NEXT_PUBLIC_SHOP_ID: "20692"
       NEXT_PUBLIC_JPULSE_API_URL: https://api-erp.joyworldcityfuns.vn
       NEXT_PUBLIC_INVOICE_REQUEST_BASE_URL: https://jpulse.joyworldcityfuns.vn/invoice-request
 
@@ -58,10 +58,8 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Đọc trực tiếp mã thành viên `CardNo` từ thẻ HK thay vì chỉ dùng serial chip.
-            - Cho phép gắn thẻ tùy chọn ngay khi đăng ký và gửi mã thẻ cùng hồ sơ `member_join`.
-            - Ưu tiên tra cứu thành viên bằng mã thẻ, giữ serial làm phương án dự phòng.
-            - Sửa khổ giấy tùy chỉnh, chiều cao bill và lề vé cho luồng in trực tiếp/in xem trước.
+            - Sửa cấu hình cửa hàng HK của bản phát hành sang Landmark 81 (`shopId 20692`).
+            - Khôi phục tra cứu thành viên bằng số điện thoại tại đúng cửa hàng hiện tại.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
