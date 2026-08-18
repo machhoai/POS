@@ -18,6 +18,10 @@ import { showError } from "@/lib/utils/toast";
 
 type ReceiptPrintMode = "silent" | "dialog";
 
+const MIN_RECEIPT_PAGE_HEIGHT_MM = 30;
+const MAX_RECEIPT_PAGE_HEIGHT_MM = 2_000;
+const RECEIPT_PAGE_HEIGHT_PADDING_MM = 3;
+
 interface ReceiptPrintButtonProps {
   order: PosOrder;
   settings?: ReceiptSettings;
@@ -54,6 +58,24 @@ async function waitForReceiptAssets(container: ParentNode): Promise<void> {
   await new Promise<void>((resolve) => {
     (ownerDocument.defaultView ?? window).requestAnimationFrame(() => resolve());
   });
+}
+
+function measureReceiptPageHeightMm(container: HTMLElement): number {
+  const receiptElement = container.firstElementChild as HTMLElement | null;
+  const receiptHeightPx = Math.max(
+    container.scrollHeight,
+    container.getBoundingClientRect().height,
+    receiptElement?.scrollHeight ?? 0,
+    receiptElement?.getBoundingClientRect().height ?? 0,
+  );
+
+  return Math.max(
+    MIN_RECEIPT_PAGE_HEIGHT_MM,
+    Math.min(
+      MAX_RECEIPT_PAGE_HEIGHT_MM,
+      receiptHeightPx * (25.4 / 96) + RECEIPT_PAGE_HEIGHT_PADDING_MM,
+    ),
+  );
 }
 
 async function resolveOrderForPrint(
@@ -104,6 +126,7 @@ export async function printReceiptWithDialog(
   language: ReceiptLanguage = "vi",
 ): Promise<void> {
   const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
+  const pageWidthMm = resolveLocalPrinterPageWidthMm(profile.printableWidthMm);
   const topMarginMm = usePrinterSettingsStore.getState().topMarginMm;
   const frame = document.createElement("iframe");
   frame.setAttribute("title", "Biên lai đang in thử");
@@ -125,8 +148,7 @@ export async function printReceiptWithDialog(
 
   printDocument.open();
   printDocument.write(`<!doctype html><html lang="${language === "zh" ? "zh-CN" : language}"><head><meta charset="utf-8"><style>
-    @page { size: ${profile.printableWidthMm}mm auto; margin: 0; }
-    html, body { width: ${profile.printableWidthMm}mm; margin: 0; padding: 0; background: #fff; }
+    html, body { width: ${pageWidthMm}mm; margin: 0; padding: 0; background: #fff; }
     *, *::before, *::after { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   </style></head><body></body></html>`);
   printDocument.close();
@@ -137,6 +159,7 @@ export async function printReceiptWithDialog(
     <ReceiptDocument
       order={order}
       settings={settings}
+      printableWidthMm={pageWidthMm}
       topMarginMm={topMarginMm}
       language={language}
       invoiceRequestUrlOverride={invoiceRequestUrlOverride}
@@ -144,6 +167,13 @@ export async function printReceiptWithDialog(
   );
 
   await waitForReceiptAssets(printDocument);
+  const pageHeightMm = measureReceiptPageHeightMm(printDocument.body);
+  const pageStyle = printDocument.createElement("style");
+  pageStyle.textContent = `@page { size: ${pageWidthMm}mm ${pageHeightMm}mm; margin: 0; }`;
+  printDocument.head.appendChild(pageStyle);
+  await new Promise<void>((resolve) => {
+    printWindow.requestAnimationFrame(() => resolve());
+  });
   let isCleanedUp = false;
   const cleanup = () => {
     if (isCleanedUp) return;
@@ -195,14 +225,7 @@ export async function printReceiptSilently(
     );
     await waitForReceiptAssets(rootElement);
 
-    const receiptHeightPx = Math.max(
-      rootElement.scrollHeight,
-      rootElement.getBoundingClientRect().height,
-    );
-    const pageHeightMm = Math.max(
-      30,
-      Math.min(2_000, receiptHeightPx * (25.4 / 96) + 3),
-    );
+    const pageHeightMm = measureReceiptPageHeightMm(rootElement);
 
     printStyle.textContent = `
       @page { size: ${pageWidthMm}mm ${pageHeightMm}mm; margin: 0; }

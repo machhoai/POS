@@ -38,6 +38,7 @@ export interface MemberLookupInput extends MemberScopeInput {
 export interface MemberRegistrationInput extends MemberScopeInput {
   fullName: string;
   phone: string;
+  memberCode: string | null;
   gender: MemberGender;
   birthDate: string | null;
   email: string | null;
@@ -46,7 +47,6 @@ export interface MemberRegistrationInput extends MemberScopeInput {
 export interface MemberProfileUpdateInput extends MemberRegistrationInput {
   uid: string;
   mid: string | null;
-  memberCode: string | null;
 }
 
 export class MemberInputError extends Error {
@@ -96,6 +96,16 @@ function normalizePhone(value: unknown): string {
   return phone;
 }
 
+function normalizeMemberCode(value: unknown): string | null {
+  const memberCode = optionalString(value, "Mã thẻ", 64);
+  if (memberCode && !/^[A-Za-z0-9_-]+$/.test(memberCode)) {
+    throw new MemberInputError(
+      "Mã thẻ chỉ được gồm chữ, số, dấu gạch ngang hoặc gạch dưới.",
+    );
+  }
+  return memberCode;
+}
+
 function normalizeEmail(value: unknown): string | null {
   const email = optionalString(value, "Email", 254);
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -143,6 +153,7 @@ function profileInput(data: Record<string, unknown>): MemberRegistrationInput {
     ...scopeInput(data),
     fullName: requiredString(data.fullName, "Họ tên", 120),
     phone: normalizePhone(data.phone),
+    memberCode: normalizeMemberCode(data.memberCode),
     gender: normalizeGender(data.gender),
     birthDate: normalizeBirthDate(data.birthDate),
     email: normalizeEmail(data.email),
@@ -284,7 +295,7 @@ export function validateMemberProfileUpdateInput(
     ...profileInput(input),
     uid: requiredString(input.uid, "UID thành viên", 128),
     mid: optionalString(input.mid, "MID thành viên", 128),
-    memberCode: optionalString(input.memberCode, "Mã thẻ", 64),
+    memberCode: normalizeMemberCode(input.memberCode),
   };
 }
 
@@ -309,7 +320,7 @@ export function validateMemberCompensationInput(
     ...scopeInput(input),
     operationId,
     uid: requiredString(input.uid, "UID thành viên", 128),
-    memberCode: optionalString(input.memberCode, "Mã thẻ", 64),
+    memberCode: normalizeMemberCode(input.memberCode),
     memberName: requiredString(input.memberName, "Tên thành viên", 120),
     amount: nonZeroInteger(input.amount, "Số điểm điều chỉnh", 10_000_000),
     reason,

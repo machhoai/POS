@@ -224,13 +224,28 @@ test("normalizes registration fields kept by POS", () => {
     ...scope,
     fullName: "  Nguyễn Văn A  ",
     phone: "0901234567",
+    memberCode: "  01PAYJOYW003467  ",
     gender: "MALE",
     birthDate: "1995-05-20",
     email: "MEMBER@EXAMPLE.COM",
   });
 
   assert.equal(input.fullName, "Nguyễn Văn A");
+  assert.equal(input.memberCode, "01PAYJOYW003467");
   assert.equal(input.email, "member@example.com");
+});
+
+test("keeps member card optional during registration", () => {
+  const input = validateMemberRegistrationInput({
+    ...scope,
+    fullName: "Nguyễn Văn B",
+    phone: "0901234568",
+    gender: "FEMALE",
+    birthDate: null,
+    email: null,
+  });
+
+  assert.equal(input.memberCode, null);
 });
 
 test("validates update identity and maps supported remote genders", () => {

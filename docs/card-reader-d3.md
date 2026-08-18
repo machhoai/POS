@@ -11,14 +11,17 @@
 
 1. Người dùng chọn **Mã thẻ** trên màn hình Thành viên.
 2. JPOS gọi command native `read_member_card` và khởi chạy bridge x86 ẩn.
-3. Bridge nạp SDK 32-bit, mở USB logic số `100` bằng `dc_init`, chờ thẻ qua
-   `dc_card`, sau đó luôn đóng thiết bị bằng `dc_exit`.
-4. Serial thẻ dạng số thập phân được gửi tới OpenAPI action
+3. Nếu có driver HK `rfid.dll`, bridge gọi `read_leaguer` để đọc trực tiếp
+   `CardNo` (ví dụ `01PAYJOYW003467`) và UUID chip. JPOS ưu tiên gửi `CardNo`
+   tới `member_getmember_membercode`.
+4. Nếu không có driver HK, bridge dùng `dcrf32.dll`, mở USB logic số `100` bằng
+   `dc_init` và đọc serial qua `dc_card`; serial được gửi tới
    `member_getmember_serialnumber`.
 5. Khi có kết quả, POS tự động tra cứu; người dùng không cần bấm nút lần nữa.
 
 Người dùng vẫn có thể nhập mã thẻ thủ công. Trường hợp này POS tiếp tục dùng
-`member_getmember_membercode`, nên hai loại định danh không bị nhầm lẫn.
+`member_getmember_membercode`, nên hai loại định danh không bị nhầm lẫn. Form
+đăng ký thành viên cũng cho phép đọc/nhập `CardNo`; trường này không bắt buộc.
 
 ## Đóng gói SDK Decard
 
@@ -34,10 +37,13 @@ Hai tệp runtime nằm trong `src-tauri/resources/card-reader` và được c�
 Tauri resource. Script `scripts/build-card-reader-sidecar.ps1` tự cài Rust target
 `i686-pc-windows-msvc` nếu thiếu, build bridge và chép kết quả vào thư mục
 resource. `beforeBuildCommand` gọi script này trước mỗi lần đóng gói ứng dụng,
-vì vậy máy POS chỉ cần chạy bộ cài JPOS, không cần cài Jingjian riêng.
+vì vậy máy POS vẫn đọc được serial chỉ với bộ cài JPOS. Để đọc `CardNo`, JPOS
+tự tìm `rfid.dll` trong resource hoặc bản hardware Jingjian mới nhất tại
+`%LOCALAPPDATA%\Programs\client-window-files\packages\hardware_*`.
 
-Khi phát triển có thể đặt `POS_CARD_READER_DLL` hoặc
-`POS_CARD_READER_BRIDGE` để trỏ tới tệp thử nghiệm ở vị trí khác. Giao diện báo
+Khi phát triển có thể đặt `POS_CARD_READER_DLL`, `POS_CARD_READER_RFID_DLL`,
+`POS_CARD_READER_KEY` hoặc `POS_CARD_READER_BRIDGE` để trỏ tới runtime/cấu hình
+thử nghiệm ở vị trí khác. Giao diện báo
 riêng các lỗi thiếu runtime, không tìm thấy thiết bị, hết thời gian chờ, hủy đọc
 và yêu cầu đang bận.
 

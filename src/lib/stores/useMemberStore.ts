@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   CardReaderStatus,
+  MemberCardLookupKind,
   MemberCompensationDraft,
   MemberLookupMode,
   MemberMutationKind,
@@ -17,6 +18,7 @@ interface MemberState {
   lookupQuery: string;
   cardReaderStatus: CardReaderStatus;
   cardReaderError: string | null;
+  lastCardLookupKind: MemberCardLookupKind | null;
   lookupRequest: RemoteRequestState;
   currentMember: MemberProfile | null;
   registrationDraft: MemberRegistrationDraft;
@@ -28,7 +30,7 @@ interface MemberState {
   setLookupMode: (mode: MemberLookupMode) => void;
   setLookupQuery: (query: string) => void;
   startCardRead: () => void;
-  completeCardRead: (cardNumber: string) => void;
+  completeCardRead: (cardNumber: string, kind: MemberCardLookupKind) => void;
   failCardRead: (message: string) => void;
   startLookup: () => void;
   completeLookup: (member: MemberProfile) => void;
@@ -59,6 +61,7 @@ const idleRequest: RemoteRequestState = {
 const emptyRegistrationDraft: MemberRegistrationDraft = {
   fullName: "",
   phone: "",
+  memberCode: "",
   gender: "MALE",
   birthDay: "",
   birthMonth: "",
@@ -84,6 +87,7 @@ export const useMemberStore = create<MemberState>((set) => ({
   lookupQuery: "",
   cardReaderStatus: "IDLE",
   cardReaderError: null,
+  lastCardLookupKind: null,
   lookupRequest: idleRequest,
   currentMember: null,
   registrationDraft: emptyRegistrationDraft,
@@ -100,18 +104,21 @@ export const useMemberStore = create<MemberState>((set) => ({
     currentMember: null,
     cardReaderStatus: "IDLE",
     cardReaderError: null,
+    lastCardLookupKind: null,
   }),
   setLookupQuery: (lookupQuery) => set({
     lookupQuery,
     cardReaderStatus: "IDLE",
     cardReaderError: null,
+    lastCardLookupKind: null,
   }),
   startCardRead: () => set({ cardReaderStatus: "READING", cardReaderError: null }),
-  completeCardRead: (cardNumber) => set({
+  completeCardRead: (cardNumber, lastCardLookupKind) => set({
     lookupMode: "CARD",
     lookupQuery: cardNumber.trim(),
     cardReaderStatus: "SUCCEEDED",
     cardReaderError: null,
+    lastCardLookupKind,
   }),
   failCardRead: (cardReaderError) => set({
     cardReaderStatus: "FAILED",
@@ -204,6 +211,7 @@ export const useMemberStore = create<MemberState>((set) => ({
     lookupQuery: "",
     cardReaderStatus: "IDLE",
     cardReaderError: null,
+    lastCardLookupKind: null,
     lookupRequest: idleRequest,
     currentMember: null,
     registrationDraft: emptyRegistrationDraft,

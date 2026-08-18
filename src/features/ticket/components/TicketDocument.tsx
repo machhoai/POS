@@ -33,14 +33,12 @@ const TicketDocument: React.FC<TicketDocumentProps> = ({
                 width: `${resolvedPrintableWidthMm}mm`,
                 height: `${settings.ticketHeightMm}mm`,
                 overflow: "hidden",
-                padding: `${resolvedTopMarginMm}mm 2mm 2mm`,
+                padding: `${resolvedTopMarginMm}mm 4mm 4mm`,
                 background: "#fff",
                 color: "#000",
                 fontFamily: "Arial, Helvetica, sans-serif",
                 fontSize: `${settings.bodyFontSizePt}pt`,
                 lineHeight: 1.0,
-                pageBreakAfter: "always",
-                breakAfter: "page",
                 overflowWrap: "anywhere",
             }}
         >

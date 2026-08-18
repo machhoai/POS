@@ -377,7 +377,7 @@ function registrationProfile(
   return {
     uid: remoteUid,
     mid,
-    memberCode: null,
+    memberCode: input.memberCode,
     phone: input.phone,
     fullName: input.fullName,
     gender: input.gender,
@@ -434,6 +434,7 @@ export async function registerPosMemberForUser(
       openId: createMemberOpenId(input.phone),
       phone: input.phone,
       realName: input.fullName,
+      ...(input.memberCode ? { memberCode: input.memberCode } : {}),
     }),
   );
   const remoteUid = response.data?.uid?.trim() || "";
@@ -452,7 +453,7 @@ export async function registerPosMemberForUser(
     userId,
     remoteUid,
     mid,
-    memberCode: null,
+    memberCode: input.memberCode,
   });
 
   return {
@@ -470,6 +471,7 @@ function updateInputAsRegistration(
     warehouseId: input.warehouseId,
     fullName: input.fullName,
     phone: input.phone,
+    memberCode: input.memberCode,
     gender: input.gender,
     birthDate: input.birthDate,
     email: input.email,

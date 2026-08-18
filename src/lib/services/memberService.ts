@@ -112,6 +112,7 @@ export function validateMemberRegistrationDraft(
 ): MemberRegistrationDraft {
   const fullName = draft.fullName.trim();
   const phone = draft.phone.trim().replace(/[\s().-]/g, "");
+  const memberCode = draft.memberCode.trim();
   const email = draft.email.trim().toLowerCase();
   if (!fullName || fullName.length > 120) {
     throw new MemberServiceError("Họ tên khách hàng không hợp lệ.", "invalid-name");
@@ -122,6 +123,12 @@ export function validateMemberRegistrationDraft(
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new MemberServiceError("Email không đúng định dạng.", "invalid-email");
   }
+  if (memberCode && !/^[A-Za-z0-9_-]{1,64}$/.test(memberCode)) {
+    throw new MemberServiceError(
+      "Mã thẻ chỉ được gồm chữ, số, dấu gạch ngang hoặc gạch dưới.",
+      "invalid-member-code",
+    );
+  }
   if (draft.gender !== "MALE" && draft.gender !== "FEMALE") {
     throw new MemberServiceError("Giới tính chỉ có thể là Nam hoặc Nữ.", "invalid-gender");
   }
@@ -130,6 +137,7 @@ export function validateMemberRegistrationDraft(
     ...draft,
     fullName,
     phone,
+    memberCode,
     email,
     birthDay: birthDate.birthDay,
     birthMonth: birthDate.birthMonth,
@@ -191,9 +199,10 @@ export async function registerMember(
   input: MemberRegistrationInput,
 ): Promise<MemberRegistrationResult> {
   const draft = validateMemberRegistrationDraft(input);
-  type RegistrationPayload = Omit<MemberRegistrationInput, "birthDay" | "birthMonth" | "birthYear" | "email"> & {
+  type RegistrationPayload = Omit<MemberRegistrationInput, "birthDay" | "birthMonth" | "birthYear" | "email" | "memberCode"> & {
     birthDate: string | null;
     email: string | null;
+    memberCode: string | null;
   };
   const birthDate = normalizedBirthDate(draft).birthDate;
   const callable = httpsCallable<
@@ -207,6 +216,7 @@ export async function registerMember(
       payload: {
         fullName: draft.fullName,
         phone: draft.phone,
+        memberCode: draft.memberCode || null,
         gender: draft.gender,
         shopId: input.shopId,
         warehouseId: input.warehouseId,

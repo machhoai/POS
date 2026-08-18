@@ -1,8 +1,10 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
 export interface CardReadResult {
-  serialNumber: string;
-  serialNumberHex: string;
+  serialNumber?: string;
+  serialNumberHex?: string;
+  memberCode?: string;
+  cardUuid?: string;
 }
 
 interface CardReaderErrorPayload {

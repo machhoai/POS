@@ -34,6 +34,7 @@ export interface HKMemberRegistrationBodyDto {
   openId: string;
   phone: string;
   realName: string;
+  memberCode?: string;
   password?: string;
 }
 

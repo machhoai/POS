@@ -565,7 +565,12 @@ export async function registerRemoteMember(
 ): Promise<HKApiResponse<HKMemberRegistrationDataDto>> {
   return sendToHKApi<HKMemberRegistrationDataDto>(
     "member_join",
-    { openId: input.openId, phone: input.phone, realName: input.realName },
+    {
+      openId: input.openId,
+      phone: input.phone,
+      realName: input.realName,
+      ...(input.memberCode ? { memberCode: input.memberCode } : {}),
+    },
     "10.11.8",
   );
 }

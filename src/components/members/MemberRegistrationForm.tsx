@@ -1,10 +1,14 @@
 import {
     CheckCircle2,
+    CreditCard,
     LoaderCircle,
     RotateCcw,
+    ScanLine,
+    X,
     UserPlus,
 } from "lucide-react";
 import type {
+    CardReaderStatus,
     MemberMutationState,
     MemberRegistrationDraft,
 } from "@/lib/types/member";
@@ -15,6 +19,10 @@ interface MemberRegistrationFormProps {
     onChange: (values: Partial<MemberRegistrationDraft>) => void;
     onRegister: () => void;
     onStartNew: () => void;
+    cardReaderStatus: CardReaderStatus;
+    cardReaderError: string | null;
+    onReadCard: () => void;
+    onCancelCardRead: () => void;
 }
 
 const fieldClass = "h-13 w-full rounded-2xl border border-[var(--color-border-subtle)] bg-white px-4 text-base font-semibold transition-colors focus:border-[var(--color-accent)] disabled:bg-neutral-50 disabled:text-[var(--color-text-muted)]";
@@ -50,6 +58,10 @@ export default function MemberRegistrationForm({
     onChange,
     onRegister,
     onStartNew,
+    cardReaderStatus,
+    cardReaderError,
+    onReadCard,
+    onCancelCardRead,
 }: MemberRegistrationFormProps) {
     const isWaiting = mutation.kind === "REGISTER" && mutation.status === "WAITING_API";
     const isSucceeded = mutation.kind === "REGISTER" && mutation.status === "SUCCEEDED";
@@ -112,6 +124,52 @@ export default function MemberRegistrationForm({
                 </fieldset>
                 <label className="block text-sm font-bold">Họ và tên *<input value={draft.fullName} onChange={(event) => onChange({ fullName: event.target.value })} disabled={isLocked} maxLength={120} autoComplete="name" className={`${fieldClass} mt-1.5`} placeholder="Nguyễn Văn A" /></label>
                 <label className="block text-sm font-bold">Số điện thoại *<input value={draft.phone} onChange={(event) => onChange({ phone: event.target.value })} disabled={isLocked} inputMode="tel" autoComplete="tel" className={`${fieldClass} mt-1.5`} placeholder="0901 234 567" /></label>
+                <div className="rounded-2xl border border-[var(--color-border-subtle)] bg-neutral-50 p-3">
+                    <div className="flex items-center gap-2 text-sm font-bold">
+                        <CreditCard className="size-4 text-[var(--color-accent)]" />
+                        Thẻ thành viên <span className="font-medium text-[var(--color-text-muted)]">(không bắt buộc)</span>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                        <input
+                            value={draft.memberCode}
+                            onChange={(event) => onChange({ memberCode: event.target.value.toUpperCase() })}
+                            disabled={isLocked || cardReaderStatus === "READING"}
+                            maxLength={64}
+                            className={`${fieldClass} min-w-0 flex-1 font-mono`}
+                            placeholder="01PAYJOYW003467"
+                            aria-label="Mã thẻ thành viên"
+                        />
+                        {cardReaderStatus === "READING" ? (
+                            <button
+                                type="button"
+                                onClick={onCancelCardRead}
+                                className="inline-flex min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-red-200 bg-white px-4 text-sm font-bold text-red-700"
+                            >
+                                <X className="size-4" /> Hủy
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={onReadCard}
+                                disabled={isLocked}
+                                className="inline-flex min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-orange-200 bg-white px-4 text-sm font-bold text-[var(--color-accent)] disabled:opacity-60"
+                            >
+                                <ScanLine className="size-4" /> Đọc thẻ
+                            </button>
+                        )}
+                    </div>
+                    {cardReaderStatus === "READING" ? (
+                        <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-[var(--color-accent)]">
+                            <LoaderCircle className="size-4 animate-spin" /> Đang chờ thẻ trên đầu đọc...
+                        </p>
+                    ) : cardReaderStatus === "SUCCEEDED" ? (
+                        <p className="mt-2 text-xs font-semibold text-emerald-700">Đã đọc mã thẻ {draft.memberCode}.</p>
+                    ) : cardReaderError ? (
+                        <p className="mt-2 text-xs font-semibold text-red-700">{cardReaderError}</p>
+                    ) : (
+                        <p className="mt-2 text-xs text-[var(--color-text-muted)]">Có thể đọc tự động hoặc nhập mã in trên thẻ. Để trống nếu chưa gắn thẻ.</p>
+                    )}
+                </div>
                 <label className="block text-sm font-bold">Giới tính<select value={draft.gender} onChange={(event) => onChange({ gender: event.target.value as MemberRegistrationDraft["gender"] })} disabled={isLocked} className={`${fieldClass} mt-1.5`}><option value="MALE">Nam</option><option value="FEMALE">Nữ</option></select></label>
                 <fieldset>
                     <legend className="text-sm font-bold">Ngày sinh</legend>

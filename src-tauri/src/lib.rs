@@ -15,8 +15,8 @@ use tauri::{
 use webview2_com::{
     Microsoft::Web::WebView2::Win32::{
         ICoreWebView2Environment6, ICoreWebView2PrintSettings2, ICoreWebView2_16,
-        COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT, COREWEBVIEW2_PRINT_STATUS_PRINTER_UNAVAILABLE,
-        COREWEBVIEW2_PRINT_STATUS_SUCCEEDED,
+        COREWEBVIEW2_PRINT_MEDIA_SIZE_CUSTOM, COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT,
+        COREWEBVIEW2_PRINT_STATUS_PRINTER_UNAVAILABLE, COREWEBVIEW2_PRINT_STATUS_SUCCEEDED,
     },
     PrintCompletedHandler,
 };
@@ -258,6 +258,13 @@ async fn print_webview_once(
                         .map_err(|error| {
                             DirectPrintError::Other(format!(
                                 "Không thể chọn máy in “{printer_name}”: {error}"
+                            ))
+                        })?;
+                    targeted_settings
+                        .SetMediaSize(COREWEBVIEW2_PRINT_MEDIA_SIZE_CUSTOM)
+                        .map_err(|error| {
+                            DirectPrintError::Other(format!(
+                                "Không thể chọn khổ giấy tùy chỉnh cho máy in “{printer_name}”: {error}"
                             ))
                         })?;
                     print_settings

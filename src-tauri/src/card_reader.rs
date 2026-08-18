@@ -8,8 +8,14 @@ const MAX_READ_TIMEOUT_MS: u64 = 60_000;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CardReadResult {
-    serial_number: String,
-    serial_number_hex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    serial_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    serial_number_hex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    member_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    card_uuid: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,6 +55,7 @@ mod windows_reader {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     const PROCESS_POLL_INTERVAL_MS: u64 = 50;
     const PROCESS_EXIT_GRACE_MS: u64 = 5_000;
+    const DEFAULT_JOYWORLD_CARD_KEY: &str = "uPREBNWpE36yQg+GmQRhsH9t/707dt7X";
 
     static READER_BUSY: AtomicBool = AtomicBool::new(false);
     static CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -60,6 +67,8 @@ mod windows_reader {
         success: bool,
         serial_number: Option<String>,
         serial_number_hex: Option<String>,
+        member_code: Option<String>,
+        card_uuid: Option<String>,
         code: Option<String>,
         message: Option<String>,
     }
@@ -144,6 +153,43 @@ mod windows_reader {
         candidates
     }
 
+    fn rfid_dll_candidates(app: &AppHandle) -> Vec<PathBuf> {
+        let mut candidates = Vec::new();
+        if let Some(configured_path) = env::var_os("POS_CARD_READER_RFID_DLL") {
+            candidates.push(PathBuf::from(configured_path));
+        }
+        for directory in application_directories(app) {
+            push_candidate(&mut candidates, &directory, "rfid.dll");
+        }
+
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            let packages_dir = PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("client-window-files")
+                .join("packages");
+            if let Ok(entries) = std::fs::read_dir(packages_dir) {
+                let mut package_directories = entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| {
+                        path.is_dir()
+                            && path
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .is_some_and(|name| name.starts_with("hardware_"))
+                    })
+                    .collect::<Vec<_>>();
+                package_directories.sort_by(|left, right| right.cmp(left));
+                for directory in package_directories {
+                    push_candidate(&mut candidates, &directory, "rfid.dll");
+                }
+            }
+        }
+
+        candidates.dedup();
+        candidates
+    }
+
     fn first_existing(
         candidates: Vec<PathBuf>,
         code: &str,
@@ -182,7 +228,14 @@ mod windows_reader {
             "Chưa tìm thấy SDK Decard dcrf32.dll x86 đi kèm ứng dụng.",
         )?;
 
-        let child = Command::new(&bridge_path)
+        let rfid_dll_path = rfid_dll_candidates(app)
+            .into_iter()
+            .find(|candidate| candidate.is_file());
+        let card_key = env::var("POS_CARD_READER_KEY")
+            .unwrap_or_else(|_| DEFAULT_JOYWORLD_CARD_KEY.to_string());
+
+        let mut command = Command::new(&bridge_path);
+        command
             .arg("--dll")
             .arg(&dll_path)
             .arg("--timeout-ms")
@@ -190,14 +243,24 @@ mod windows_reader {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|error| {
-                CardReaderError::new(
-                    "BRIDGE_START_FAILED",
-                    format!("Không thể khởi động sidecar đọc thẻ x86: {error}"),
-                )
-            })?;
+            .creation_flags(CREATE_NO_WINDOW);
+        if let Some(rfid_dll_path) = &rfid_dll_path {
+            command
+                .arg("--rfid-dll")
+                .arg(rfid_dll_path)
+                .arg("--card-key")
+                .arg(&card_key);
+            if let Some(directory) = rfid_dll_path.parent() {
+                command.current_dir(directory);
+            }
+        }
+
+        let child = command.spawn().map_err(|error| {
+            CardReaderError::new(
+                "BRIDGE_START_FAILED",
+                format!("Không thể khởi động sidecar đọc thẻ x86: {error}"),
+            )
+        })?;
 
         {
             let mut active_child = active_child().lock().map_err(|_| {
@@ -316,22 +379,18 @@ mod windows_reader {
             ));
         }
 
-        let serial_number = response.serial_number.ok_or_else(|| {
-            CardReaderError::new(
+        if response.member_code.is_none() && response.serial_number.is_none() {
+            return Err(CardReaderError::new(
                 "BRIDGE_INVALID_RESPONSE",
-                "Sidecar không trả số serial của thẻ.",
-            )
-        })?;
-        let serial_number_hex = response.serial_number_hex.ok_or_else(|| {
-            CardReaderError::new(
-                "BRIDGE_INVALID_RESPONSE",
-                "Sidecar không trả serial dạng hex.",
-            )
-        })?;
+                "Sidecar không trả mã thành viên hoặc serial của thẻ.",
+            ));
+        }
 
         Ok(CardReadResult {
-            serial_number,
-            serial_number_hex,
+            serial_number: response.serial_number,
+            serial_number_hex: response.serial_number_hex,
+            member_code: response.member_code,
+            card_uuid: response.card_uuid,
         })
     }
 

@@ -59,10 +59,11 @@ async function waitForAssets(container: ParentNode): Promise<void> {
 }
 
 async function printWithDialog(
-  content: React.ReactNode,
+  renderContent: (printableWidthMm: number) => React.ReactNode,
   settings: TicketSettings,
 ): Promise<void> {
   const profile = RECEIPT_PAPER_PROFILES[settings.paperSize];
+  const pageWidthMm = resolveLocalPrinterPageWidthMm(profile.printableWidthMm);
   const frame = document.createElement("iframe");
   frame.setAttribute("title", "Vé đang in thử");
   Object.assign(frame.style, {
@@ -85,8 +86,8 @@ async function printWithDialog(
 
   printDocument.open();
   printDocument.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><style>
-    @page { size: ${profile.printableWidthMm}mm ${settings.ticketHeightMm}mm; margin: 0; }
-    html, body { width: ${profile.printableWidthMm}mm; margin: 0; padding: 0; background: #fff; }
+    @page { size: ${pageWidthMm}mm ${settings.ticketHeightMm}mm; margin: 0; }
+    html, body { width: ${pageWidthMm}mm; margin: 0; padding: 0; background: #fff; }
     *, *::before, *::after { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     [data-ticket-page]:last-child { page-break-after: auto !important; break-after: auto !important; }
   </style></head><body></body></html>`);
@@ -94,7 +95,7 @@ async function printWithDialog(
 
   const { createRoot } = await import("react-dom/client");
   const root = createRoot(printDocument.body);
-  root.render(content);
+  root.render(renderContent(pageWidthMm));
   await waitForAssets(printDocument);
 
   let cleaned = false;
@@ -117,7 +118,14 @@ export async function printTicketPreviewWithDialog(
   const printSettings = await prepareTicketSettingsForPrint(settings);
   const topMarginMm = usePrinterSettingsStore.getState().topMarginMm;
   await printWithDialog(
-    <TicketDocument ticket={ticket} settings={printSettings} topMarginMm={topMarginMm} />,
+    (printableWidthMm) => (
+      <TicketDocument
+        ticket={ticket}
+        settings={printSettings}
+        printableWidthMm={printableWidthMm}
+        topMarginMm={topMarginMm}
+      />
+    ),
     printSettings,
   );
 }
@@ -132,7 +140,14 @@ export async function printTicketsWithDialog(
   const printSettings = await prepareTicketSettingsForPrint(settings);
   const topMarginMm = usePrinterSettingsStore.getState().topMarginMm;
   await printWithDialog(
-    <TicketBatchDocument order={order} settings={printSettings} topMarginMm={topMarginMm} />,
+    (printableWidthMm) => (
+      <TicketBatchDocument
+        order={order}
+        settings={printSettings}
+        printableWidthMm={printableWidthMm}
+        topMarginMm={topMarginMm}
+      />
+    ),
     printSettings,
   );
 }

@@ -135,12 +135,16 @@ export default function CashierPage() {
     try {
       const card = await readMemberCard();
       if (memberReadAttemptRef.current !== attemptId) return;
+      const cardNumber = card.memberCode ?? card.serialNumber;
+      if (!cardNumber) {
+        throw new Error("Đầu đọc không trả mã thành viên hoặc serial thẻ.");
+      }
       const result = await lookupMember({
         shopId,
         warehouseId: effectiveWarehouseId,
         mode: "CARD",
-        query: card.serialNumber,
-        cardLookupKind: "SERIAL_NUMBER",
+        query: cardNumber,
+        cardLookupKind: card.memberCode ? "MEMBER_CODE" : "SERIAL_NUMBER",
       });
       if (memberReadAttemptRef.current !== attemptId) return;
       setCartMember({

@@ -35,6 +35,7 @@ import { useMemberStore } from "@/lib/stores/useMemberStore";
 import { useCartStore } from "@/lib/stores/useCartStore";
 import { useProductStore } from "@/lib/stores/useProductStore";
 import type {
+    CardReaderStatus,
     MemberCardLookupKind,
     MemberLookupMode,
     MemberRegistrationDraft,
@@ -67,6 +68,8 @@ export default function MembersPage() {
     const auth = useAuth();
     const [operation, setOperation] = useState<MemberOperation>("LOOKUP");
     const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+    const [registrationCardReaderStatus, setRegistrationCardReaderStatus] = useState<CardReaderStatus>("IDLE");
+    const [registrationCardReaderError, setRegistrationCardReaderError] = useState<string | null>(null);
     const cardReadAttemptRef = useRef(0);
 
     const mode = useMemberStore((state) => state.lookupMode);
@@ -74,6 +77,7 @@ export default function MembersPage() {
     const request = useMemberStore((state) => state.lookupRequest);
     const cardReaderStatus = useMemberStore((state) => state.cardReaderStatus);
     const cardReaderError = useMemberStore((state) => state.cardReaderError);
+    const lastCardLookupKind = useMemberStore((state) => state.lastCardLookupKind);
     const member = useMemberStore((state) => state.currentMember);
     const draft = useMemberStore((state) => state.registrationDraft);
     const mutation = useMemberStore((state) => state.mutation);
@@ -117,7 +121,7 @@ export default function MembersPage() {
                 mode,
                 query,
                 cardLookupKind: mode === "CARD" && cardReaderStatus === "SUCCEEDED"
-                    ? "SERIAL_NUMBER"
+                    ? lastCardLookupKind ?? "MEMBER_CODE"
                     : undefined,
             });
             completeLookup(result.member);
@@ -126,7 +130,7 @@ export default function MembersPage() {
             const parsed = toMemberServiceError(error);
             showWarning("Đã nạp bù nhưng chưa tải lại được số dư", parsed.message);
         }
-    }, [auth.effectiveWarehouseId, cardReaderStatus, completeLookup, mode, query, shopId]);
+    }, [auth.effectiveWarehouseId, cardReaderStatus, completeLookup, lastCardLookupKind, mode, query, shopId]);
 
     const memberActivity = useMemberActivityController({
         member: operation === "LOOKUP" || operation === "COMPENSATION" ? member : null,
@@ -203,7 +207,7 @@ export default function MembersPage() {
         const lookupQuery = override?.query ?? query;
         const cardLookupKind = override?.cardLookupKind ?? (
             lookupMode === "CARD" && cardReaderStatus === "SUCCEEDED"
-                ? "SERIAL_NUMBER"
+                ? lastCardLookupKind ?? "MEMBER_CODE"
                 : "MEMBER_CODE"
         );
         if (!auth.effectiveWarehouseId) {
@@ -237,7 +241,7 @@ export default function MembersPage() {
             failLookup(memberError.message, memberError.code);
             setFetchedAt(null);
         }
-    }, [auth.effectiveWarehouseId, cardReaderStatus, completeLookup, failLookup, mode, query, shopId, startLookup]);
+    }, [auth.effectiveWarehouseId, cardReaderStatus, completeLookup, failLookup, lastCardLookupKind, mode, query, shopId, startLookup]);
 
     const handleCardRead = useCallback(async () => {
         const attemptId = cardReadAttemptRef.current + 1;
@@ -247,11 +251,18 @@ export default function MembersPage() {
         try {
             const result = await readMemberCard();
             if (cardReadAttemptRef.current !== attemptId) return;
-            completeCardRead(result.serialNumber);
+            const cardNumber = result.memberCode ?? result.serialNumber;
+            if (!cardNumber) {
+                throw new Error("Đầu đọc không trả mã thành viên hoặc serial thẻ.");
+            }
+            const cardLookupKind: MemberCardLookupKind = result.memberCode
+                ? "MEMBER_CODE"
+                : "SERIAL_NUMBER";
+            completeCardRead(cardNumber, cardLookupKind);
             await handleLookup({
                 mode: "CARD",
-                query: result.serialNumber,
-                cardLookupKind: "SERIAL_NUMBER",
+                query: cardNumber,
+                cardLookupKind,
             });
         } catch (error: unknown) {
             if (cardReadAttemptRef.current !== attemptId) return;
@@ -260,6 +271,48 @@ export default function MembersPage() {
             failCardRead(readerError.message);
         }
     }, [completeCardRead, failCardRead, handleLookup, startCardRead]);
+
+    const handleRegistrationCardRead = useCallback(async () => {
+        const attemptId = cardReadAttemptRef.current + 1;
+        cardReadAttemptRef.current = attemptId;
+        setRegistrationCardReaderStatus("READING");
+        setRegistrationCardReaderError(null);
+
+        try {
+            const result = await readMemberCard();
+            if (cardReadAttemptRef.current !== attemptId) return;
+            if (!result.memberCode) {
+                throw new Error(
+                    "Đã nhận diện thẻ nhưng chưa đọc được mã thành viên. Bạn có thể nhập mã thủ công.",
+                );
+            }
+            updateDraft({ memberCode: result.memberCode });
+            setRegistrationCardReaderStatus("SUCCEEDED");
+        } catch (error: unknown) {
+            if (cardReadAttemptRef.current !== attemptId) return;
+            const readerError = toCardReaderServiceError(error);
+            if (readerError.code === "READ_CANCELLED") return;
+            setRegistrationCardReaderStatus("FAILED");
+            setRegistrationCardReaderError(readerError.message);
+        }
+    }, [updateDraft]);
+
+    const handleCancelRegistrationCardRead = useCallback(() => {
+        cardReadAttemptRef.current += 1;
+        void cancelMemberCardRead().catch((error: unknown) => {
+            console.warn("[Đầu đọc thẻ] Không thể gửi lệnh hủy:", error);
+        });
+        setRegistrationCardReaderStatus("FAILED");
+        setRegistrationCardReaderError("Đã hủy chờ đọc thẻ. Có thể thử lại hoặc để trống.");
+    }, []);
+
+    const handleRegistrationDraftChange = useCallback((values: Partial<MemberRegistrationDraft>) => {
+        if (values.memberCode !== undefined && registrationCardReaderStatus !== "READING") {
+            setRegistrationCardReaderStatus("IDLE");
+            setRegistrationCardReaderError(null);
+        }
+        updateDraft(values);
+    }, [registrationCardReaderStatus, updateDraft]);
 
     const handleCancelCardRead = useCallback(() => {
         cardReadAttemptRef.current += 1;
@@ -299,8 +352,12 @@ export default function MembersPage() {
             }
             setCartMember(null);
         }
+        if (cardReaderStatus === "READING" || registrationCardReaderStatus === "READING") {
+            cardReadAttemptRef.current += 1;
+            void cancelMemberCardRead();
+        }
         setOperation(nextOperation);
-    }, [isPaymentLocked, setCartMember]);
+    }, [cardReaderStatus, isPaymentLocked, registrationCardReaderStatus, setCartMember]);
 
     const handleAddProduct = useCallback((product: Product): boolean => {
         if (isPaymentLocked) {
@@ -479,10 +536,16 @@ export default function MembersPage() {
                                 <MemberRegistrationForm
                                     draft={draft}
                                     mutation={mutation}
-                                    onChange={updateDraft}
+                                    cardReaderStatus={registrationCardReaderStatus}
+                                    cardReaderError={registrationCardReaderError}
+                                    onChange={handleRegistrationDraftChange}
+                                    onReadCard={() => void handleRegistrationCardRead()}
+                                    onCancelCardRead={handleCancelRegistrationCardRead}
                                     onRegister={() => void handleRegister()}
                                     onStartNew={() => {
                                         startNewRegistration();
+                                        setRegistrationCardReaderStatus("IDLE");
+                                        setRegistrationCardReaderError(null);
                                         setCartMember(null);
                                         setFetchedAt(null);
                                     }}

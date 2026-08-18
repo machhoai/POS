@@ -122,6 +122,7 @@ export interface MemberPassTicket {
 export interface MemberRegistrationDraft {
   fullName: string;
   phone: string;
+  memberCode: string;
   gender: MemberRegistrationGender;
   birthDay: string;
   birthMonth: string;
