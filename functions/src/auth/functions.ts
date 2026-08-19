@@ -40,6 +40,11 @@ import {
   sellMemberPackageForCashForUser,
 } from "../member/packageFunctions";
 import { throwMemberCallableError } from "../member/callable";
+import {
+  checkMemberCardForIssueForUser,
+  confirmMemberCardIssueForUser,
+  getMemberCardIssueInfoForUser,
+} from "../services/joyworldMemberCardService";
 const CALLABLE_OPTIONS = {
   region: "asia-southeast1",
   cors: true,
@@ -113,6 +118,9 @@ export const getPosAuthSession = onCall(
       action === "getMemberStoredValueHistory" ||
       action === "getMemberCards" ||
       action === "getMemberPassTickets" ||
+      action === "getMemberCardIssueInfo" ||
+      action === "checkMemberCardForIssue" ||
+      action === "confirmMemberCardIssue" ||
       action === "compensateMemberBalance" ||
       action === "getMemberPackages" ||
       action === "prepareMemberPackageOrder" ||
@@ -146,6 +154,24 @@ export const getPosAuthSession = onCall(
         }
         if (action === "getMemberPassTickets") {
           return await listPosMemberPassTicketsForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "getMemberCardIssueInfo") {
+          return await getMemberCardIssueInfoForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "checkMemberCardForIssue") {
+          return await checkMemberCardForIssueForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        if (action === "confirmMemberCardIssue") {
+          return await confirmMemberCardIssueForUser(
             request.auth.uid,
             request.data?.payload,
           );

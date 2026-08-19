@@ -1,5 +1,8 @@
 $ErrorActionPreference = "Stop"
 
+$env:PSModulePath = Join-Path $env:SystemRoot "system32\WindowsPowerShell\v1.0\Modules"
+Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+
 if ($env:OS -ne "Windows_NT") {
     throw "Printer driver resources can only be verified on Windows."
 }
@@ -33,12 +36,29 @@ $expectedHashes = @{
     $printer365Catalog = "B5ACA506A3C67B5F95EC911B43A5209869E6E404146F05A4B2DB82BCD0D0C3FF"
 }
 
+function Get-Sha256Hex {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace("-", "")
+    }
+    finally {
+        $sha256.Dispose()
+        $stream.Dispose()
+    }
+}
+
 foreach ($entry in $expectedHashes.GetEnumerator()) {
     if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
         throw "Missing printer driver resource: $($entry.Key)"
     }
 
-    $actualHash = (Get-FileHash -LiteralPath $entry.Key -Algorithm SHA256).Hash
+    $actualHash = Get-Sha256Hex -Path $entry.Key
     if ($actualHash -ne $entry.Value) {
         throw "Printer driver resource hash mismatch: $($entry.Key)"
     }

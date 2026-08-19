@@ -16,6 +16,8 @@ pub struct CardReadResult {
     member_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     card_uuid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dynamic_serial_no: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -204,6 +206,7 @@ mod windows_reader {
     fn read_bridge_output(
         app: &AppHandle,
         timeout: Duration,
+        dynamic_serial_no: Option<String>,
     ) -> Result<CardReadResult, CardReaderError> {
         if READER_BUSY
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -233,6 +236,16 @@ mod windows_reader {
             .find(|candidate| candidate.is_file());
         let card_key = env::var("POS_CARD_READER_KEY")
             .unwrap_or_else(|_| DEFAULT_JOYWORLD_CARD_KEY.to_string());
+        let effective_card_key = dynamic_serial_no.as_ref().map_or_else(
+            || card_key.clone(),
+            |dynamic_serial_no| {
+                serde_json::json!({
+                    "IcKey": card_key,
+                    "DynamicsCardNo": dynamic_serial_no,
+                })
+                .to_string()
+            },
+        );
 
         let mut command = Command::new(&bridge_path);
         command
@@ -249,7 +262,7 @@ mod windows_reader {
                 .arg("--rfid-dll")
                 .arg(rfid_dll_path)
                 .arg("--card-key")
-                .arg(&card_key);
+                .arg(&effective_card_key);
             if let Some(directory) = rfid_dll_path.parent() {
                 command.current_dir(directory);
             }
@@ -391,12 +404,17 @@ mod windows_reader {
             serial_number_hex: response.serial_number_hex,
             member_code: response.member_code,
             card_uuid: response.card_uuid,
+            dynamic_serial_no,
         })
     }
 
-    pub async fn read(app: AppHandle, timeout_ms: u64) -> Result<CardReadResult, CardReaderError> {
+    pub async fn read(
+        app: AppHandle,
+        timeout_ms: u64,
+        dynamic_serial_no: Option<String>,
+    ) -> Result<CardReadResult, CardReaderError> {
         tauri::async_runtime::spawn_blocking(move || {
-            read_bridge_output(&app, Duration::from_millis(timeout_ms))
+            read_bridge_output(&app, Duration::from_millis(timeout_ms), dynamic_serial_no)
         })
         .await
         .map_err(|error| {
@@ -426,6 +444,7 @@ mod windows_reader {
 pub async fn read_member_card(
     app: AppHandle,
     timeout_ms: Option<u64>,
+    dynamic_serial_no: Option<String>,
 ) -> Result<CardReadResult, CardReaderError> {
     let timeout_ms = timeout_ms
         .unwrap_or(DEFAULT_READ_TIMEOUT_MS)
@@ -433,12 +452,15 @@ pub async fn read_member_card(
 
     #[cfg(windows)]
     {
-        windows_reader::read(app, timeout_ms).await
+        let dynamic_serial_no = dynamic_serial_no
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        windows_reader::read(app, timeout_ms, dynamic_serial_no).await
     }
 
     #[cfg(not(windows))]
     {
-        let _ = (app, timeout_ms);
+        let _ = (app, timeout_ms, dynamic_serial_no);
         Err(CardReaderError::new(
             "UNSUPPORTED_PLATFORM",
             "Đầu đọc Decard D3-U hiện chỉ hỗ trợ ứng dụng POS trên Windows.",

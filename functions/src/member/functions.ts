@@ -94,7 +94,7 @@ export class MemberLocalPersistenceError extends Error {
   }
 }
 
-async function assertWarehouseAccess(
+export async function assertWarehouseAccess(
   userId: string,
   warehouseId: string,
 ): Promise<void> {

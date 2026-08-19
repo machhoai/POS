@@ -23,12 +23,14 @@ const tabs = [
 
 interface MemberDetailsPanelProps {
     member: MemberProfile;
+    shopId: number;
+    warehouseId: string;
     fetchedAt: string | null;
     activity: MemberActivityController;
     packageSale: MemberPackageSaleController;
 }
 
-const MemberDetailsPanel: React.FC<MemberDetailsPanelProps> = ({ member, fetchedAt, activity, packageSale }) => {
+const MemberDetailsPanel: React.FC<MemberDetailsPanelProps> = ({ member, shopId, warehouseId, fetchedAt, activity, packageSale }) => {
     const [tab, setTab] = useState<MemberDetailTab>("PROFILE");
 
     return <div className="min-w-0 space-y-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:space-y-0 lg:gap-3">
@@ -48,7 +50,7 @@ const MemberDetailsPanel: React.FC<MemberDetailsPanelProps> = ({ member, fetched
             </div> : null}
             {tab === "HISTORY" ? <MemberStoredValueHistoryView status={activity.history.status} history={activity.history.data} error={activity.history.error} category={activity.storedCategory} startDate={activity.startDate} endDate={activity.endDate} onCategoryChange={activity.setStoredCategory} onStartDateChange={activity.setStartDate} onEndDateChange={activity.setEndDate} onReload={(page) => void activity.loadHistory(page)} /> : null}
             {tab === "TICKETS" ? <MemberPassTicketList status={activity.tickets.status} tickets={activity.tickets.data} error={activity.tickets.error} onReload={() => void activity.loadTickets()} /> : null}
-            {tab === "CARDS" ? <MemberCardList status={activity.cards.status} cards={activity.cards.data} error={activity.cards.error} onReload={() => void activity.loadCards()} /> : null}
+            {tab === "CARDS" ? <MemberCardList status={activity.cards.status} cards={activity.cards.data} error={activity.cards.error} member={member} shopId={shopId} warehouseId={warehouseId} onReload={() => void activity.loadCards()} /> : null}
         </div>
     </div>;
 };

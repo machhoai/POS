@@ -29,6 +29,21 @@ export interface MemberPassTicketInput extends MemberRemoteScopeInput {
   category: 1 | 2 | 3 | null;
 }
 
+export interface MemberCardIssueInfoInput extends MemberRemoteScopeInput {
+  lookupQuery: string;
+}
+
+export interface MemberCardIssueCheckInput extends MemberScopeInput {
+  memberCode: string;
+}
+
+export interface MemberCardIssueConfirmInput extends MemberCardIssueInfoInput {
+  memberAcctId: string;
+  memberCode: string;
+  memberIcCard: string;
+  dynamicSerialNo: string;
+}
+
 export interface MemberLookupInput extends MemberScopeInput {
   mode: MemberLookupMode;
   query: string;
@@ -278,6 +293,47 @@ export function validateMemberPassTicketInput(data: unknown): MemberPassTicketIn
   return {
     ...remoteScopeInput(input),
     category: category as 1 | 2 | 3 | null,
+  };
+}
+
+export function validateMemberCardIssueInfoInput(
+  data: unknown,
+): MemberCardIssueInfoInput {
+  const input = inputRecord(data);
+  return {
+    ...remoteScopeInput(input),
+    lookupQuery: requiredString(input.lookupQuery, "Thông tin thành viên", 128),
+  };
+}
+
+export function validateMemberCardIssueCheckInput(
+  data: unknown,
+): MemberCardIssueCheckInput {
+  const input = inputRecord(data);
+  const memberCode = normalizeMemberCode(input.memberCode);
+  if (!memberCode) {
+    throw new MemberInputError("Mã thẻ mới không hợp lệ.");
+  }
+  return {
+    ...scopeInput(input),
+    memberCode,
+  };
+}
+
+export function validateMemberCardIssueConfirmInput(
+  data: unknown,
+): MemberCardIssueConfirmInput {
+  const input = inputRecord(data);
+  const memberCode = normalizeMemberCode(input.memberCode);
+  if (!memberCode) {
+    throw new MemberInputError("Mã thẻ mới không hợp lệ.");
+  }
+  return {
+    ...validateMemberCardIssueInfoInput(input),
+    memberAcctId: requiredString(input.memberAcctId, "Tài khoản thành viên", 128),
+    memberCode,
+    memberIcCard: requiredString(input.memberIcCard, "UUID thẻ", 128),
+    dynamicSerialNo: requiredString(input.dynamicSerialNo, "Mã xác thực thẻ", 256),
   };
 }
 
