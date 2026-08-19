@@ -58,8 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Sửa cấu hình cửa hàng HK của bản phát hành sang Landmark 81 (`shopId 20692`).
-            - Khôi phục tra cứu thành viên bằng số điện thoại tại đúng cửa hàng hiện tại.
+            - Cấp thêm thẻ miễn phí cho thành viên ngay tại quầy mà không cần mở hoặc đăng nhập ứng dụng HK.
+            - Xác thực thẻ vật lý hai lần và kiểm tra thẻ chưa được đăng ký trước khi cấp.
+            - Giữ giới hạn `maxReceiveCard` từ HK, không sử dụng `unitPrice` hoặc `surplusQty`.
+            - Bảo vệ tài khoản HK trong Firebase Secret Manager; thông tin đăng nhập không được đóng gói xuống máy POS.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

@@ -32,8 +32,12 @@ export interface JoyworldGiftCatalogItem {
   isOpenSales?: boolean;
 }
 
-function getBaseUrl(): string {
-  return (process.env.JOYWORLD_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
+export function getJoyworldBaseUrl(): string {
+  return (
+    process.env.JOYWORLD_BASE_URL ||
+    process.env.HK_API_BASE_URL ||
+    DEFAULT_BASE_URL
+  ).replace(/\/$/, "");
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -42,7 +46,9 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-async function getAccessToken(forceRefresh = false): Promise<string> {
+export async function getJoyworldManagerAccessToken(
+  forceRefresh = false,
+): Promise<string> {
   if (!forceRefresh && cachedToken && Date.now() < tokenExpiresAt) {
     return cachedToken;
   }
@@ -55,11 +61,14 @@ async function getAccessToken(forceRefresh = false): Promise<string> {
     );
   }
 
-  const response = await fetch(`${getBaseUrl()}/basic/manager/login/account`, {
+  const response = await fetch(
+    `${getJoyworldBaseUrl()}/basic/manager/login/account`,
+    {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userName, password }),
-  });
+    },
+  );
   if (!response.ok) {
     throw new Error(`JoyWorld login failed: HTTP ${response.status}`);
   }
@@ -86,7 +95,7 @@ async function fetchCatalogPage(
     _t: String(Date.now()),
   });
 
-  return fetch(`${getBaseUrl()}/gift/manager/base/list?${query}`, {
+  return fetch(`${getJoyworldBaseUrl()}/gift/manager/base/list?${query}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -103,12 +112,12 @@ async function fetchCatalogPage(
  */
 export async function fetchSouvenirCatalog(): Promise<JoyworldGiftCatalogItem[]> {
   const items: JoyworldGiftCatalogItem[] = [];
-  let token = await getAccessToken();
+  let token = await getJoyworldManagerAccessToken();
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     let response = await fetchCatalogPage(page, token);
     if (response.status === 401) {
-      token = await getAccessToken(true);
+      token = await getJoyworldManagerAccessToken(true);
       response = await fetchCatalogPage(page, token);
     }
     if (!response.ok) {

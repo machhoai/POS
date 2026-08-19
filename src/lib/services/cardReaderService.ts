@@ -5,6 +5,7 @@ export interface CardReadResult {
   serialNumberHex?: string;
   memberCode?: string;
   cardUuid?: string;
+  dynamicSerialNo?: string;
 }
 
 interface CardReaderErrorPayload {
@@ -46,7 +47,10 @@ export function toCardReaderServiceError(error: unknown): CardReaderServiceError
   return new CardReaderServiceError(message, code);
 }
 
-export async function readMemberCard(timeoutMs = 15_000): Promise<CardReadResult> {
+export async function readMemberCard(
+  timeoutMs = 15_000,
+  dynamicSerialNo?: string,
+): Promise<CardReadResult> {
   if (!isTauri()) {
     throw new CardReaderServiceError(
       "Đọc thẻ tự động chỉ hoạt động trong ứng dụng JPOS trên Windows. Bạn vẫn có thể nhập mã thẻ thủ công.",
@@ -55,7 +59,10 @@ export async function readMemberCard(timeoutMs = 15_000): Promise<CardReadResult
   }
 
   try {
-    return await invoke<CardReadResult>("read_member_card", { timeoutMs });
+    return await invoke<CardReadResult>("read_member_card", {
+      timeoutMs,
+      dynamicSerialNo: dynamicSerialNo?.trim() || null,
+    });
   } catch (error: unknown) {
     throw toCardReaderServiceError(error);
   }

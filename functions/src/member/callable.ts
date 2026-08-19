@@ -1,6 +1,7 @@
 import * as logger from "firebase-functions/logger";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { MemberMappingError } from "../services/memberMapper";
+import { MemberCardIssueError } from "../services/joyworldMemberCardService";
 import {
   lookupPosMemberForUser,
   MemberLocalPersistenceError,
@@ -36,6 +37,16 @@ export function throwMemberCallableError(
       error.message,
       { action: error.action, remoteCode: error.remoteCode },
     );
+  }
+  if (error instanceof MemberCardIssueError) {
+    const code = error.code === "HK_MEMBER_NOT_FOUND"
+      ? "not-found"
+      : error.code === "HK_UNAVAILABLE"
+        ? "unavailable"
+        : error.code === "HK_INVALID_RESPONSE"
+          ? "data-loss"
+          : "failed-precondition";
+    throw new HttpsError(code, error.message, { action: error.code });
   }
   if (error instanceof MemberMappingError) {
     throw new HttpsError("data-loss", error.message);

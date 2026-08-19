@@ -581,6 +581,8 @@ export default function MembersPage() {
                         ) : operation === "LOOKUP" && member ? (
                             <MemberDetailsPanel
                                 member={member}
+                                shopId={shopId}
+                                warehouseId={auth.effectiveWarehouseId || ""}
                                 fetchedAt={fetchedAt}
                                 activity={memberActivity}
                                 packageSale={memberPackageSale}

@@ -5,6 +5,9 @@ const {
   createMemberOpenId,
   toRemoteSex,
   validateMemberLookupInput,
+  validateMemberCardIssueCheckInput,
+  validateMemberCardIssueConfirmInput,
+  validateMemberCardIssueInfoInput,
   validateMemberCompensationInput,
   validateMemberPassTicketInput,
   validateMemberProfileUpdateInput,
@@ -79,6 +82,57 @@ test("keeps manually entered cards on the member-code lookup path", () => {
       query: "MR01PAY020000059",
       cardLookupKind: "MEMBER_CODE",
     },
+  );
+});
+
+test("validates member card issue requests without pricing fields", () => {
+  assert.deepEqual(validateMemberCardIssueInfoInput({
+    ...scope,
+    uid: "member-01",
+    lookupQuery: "0938571951",
+  }), {
+    ...scope,
+    uid: "member-01",
+    lookupQuery: "0938571951",
+  });
+  assert.deepEqual(validateMemberCardIssueCheckInput({
+    ...scope,
+    memberCode: "01PAYJOYW003467",
+  }), {
+    ...scope,
+    memberCode: "01PAYJOYW003467",
+  });
+  const confirm = validateMemberCardIssueConfirmInput({
+    ...scope,
+    uid: "member-01",
+    lookupQuery: "0938571951",
+    memberAcctId: "acct-01",
+    memberCode: "01PAYJOYW003467",
+    memberIcCard: "card-uuid-01",
+    dynamicSerialNo: "dynamic-01",
+    unitPrice: 999,
+    surplusQty: 0,
+  });
+  assert.equal(confirm.memberCode, "01PAYJOYW003467");
+  assert.equal("unitPrice" in confirm, false);
+  assert.equal("surplusQty" in confirm, false);
+});
+
+test("rejects incomplete member card issue requests", () => {
+  assert.throws(
+    () => validateMemberCardIssueCheckInput({ ...scope, memberCode: "" }),
+    /Mã thẻ mới không hợp lệ/,
+  );
+  assert.throws(
+    () => validateMemberCardIssueConfirmInput({
+      ...scope,
+      uid: "member-01",
+      lookupQuery: "0938571951",
+      memberAcctId: "acct-01",
+      memberCode: "01PAYJOYW003467",
+      memberIcCard: "card-uuid-01",
+    }),
+    /Mã xác thực thẻ không hợp lệ/,
   );
 });
 
