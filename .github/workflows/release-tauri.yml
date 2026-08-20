@@ -58,8 +58,8 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Sửa lỗi lệch lề khi in hóa đơn trên máy in BT-T080(U) 3.
-            - Cập nhật dịch vụ sản phẩm và sửa các lỗi phát sinh liên quan.
+            - Loại bỏ khoảng cách (padding) lề trái và phải của các mẫu in biên lai, vé và kết ca.
+            - Để hệ điều hành và máy in (đặc biệt là BT-T080) tự xử lý căn lề, khắc phục hoàn toàn hiện tượng lẹm chữ.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
