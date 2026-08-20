@@ -310,9 +310,13 @@ export const getPosAuthSession = onCall(
       try {
         return await synchronizePosProducts(request.auth.uid);
       } catch (error: unknown) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : String(error);
         logger.error("[getPosAuthSession] Product synchronization failed", {
           uid: request.auth.uid,
-          error,
+          errorMessage,
+          errorStack: error instanceof Error ? error.stack : undefined,
         });
         throw new HttpsError(
           "internal",

@@ -11,6 +11,8 @@ export interface SyncProductsResult {
   success: boolean;
   productCount: number;
   souvenirProductCount: number;
+  disabledProductCount: number;
+  removedProductCount: number;
   removedSouvenirCount: number;
   syncedAt: string;
 }
@@ -24,6 +26,7 @@ export interface StoredProduct {
   afterTaxPrice?: number;
   category: number;
   subCategory: string;
+  typeId?: string;
   foreColor?: string;
   backColor?: string;
   principalPoints?: number;
@@ -32,6 +35,10 @@ export interface StoredProduct {
   amount?: number;
   giftNo?: string;
   typeName?: string;
+  isEnabled?: boolean;
+  isOpenSales?: boolean;
+  isCategoryEnabled?: boolean;
+  syncStatus?: "active" | "disabled";
   lastSyncAt: string;
 }
 

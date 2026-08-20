@@ -4,6 +4,7 @@ import type {
 import type { JoyworldGiftCatalogItem } from "./joyworldCatalogService";
 import type { SyncProduct } from "../types/product";
 import { SOUVENIR_CATEGORY_ID } from "../types/product";
+import { resolveProductAvailability } from "./productAvailability";
 
 function toFiniteNumber(value: number | string | undefined): number | null {
   if (value === undefined || value === null || value === "") {
@@ -36,8 +37,13 @@ export function mapGroupedGoods(
       ticketsPerUnit?: number;
       principalPoints?: number;
       bonusPoints?: number;
+      isEnabled?: boolean;
+      isOpenSales?: boolean;
+      typeId?: string;
     }
   > = new Map(),
+  typeId = "",
+  isCategoryEnabled = true,
 ): SyncProduct[] {
   const normalizedTypeName = typeName.trim() || "Khác";
 
@@ -68,6 +74,12 @@ export function mapGroupedGoods(
     const ticketsPerUnit = category === 4
       ? visualColors?.ticketsPerUnit
       : undefined;
+    const availability = resolveProductAvailability({
+      isEnabled: visualColors?.isEnabled,
+      isOpenSales: visualColors?.isOpenSales,
+      isCategoryEnabled,
+      isSellable: true,
+    });
 
     return [{
       goodsId,
@@ -79,6 +91,7 @@ export function mapGroupedGoods(
         toFiniteNumber(item.AfterTaxPrice ?? item.afterTaxPrice) ?? price,
       category,
       subCategory,
+      typeId: visualColors?.typeId || typeId,
       typeName: normalizedTypeName,
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
@@ -89,6 +102,7 @@ export function mapGroupedGoods(
         ? { bonusPoints: visualColors.bonusPoints }
         : {}),
       ...(ticketsPerUnit !== undefined ? { ticketsPerUnit } : {}),
+      ...availability,
       lastSyncAt,
     }];
   });
@@ -151,6 +165,7 @@ export function mapSellableSouvenirs(
       giftNo,
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
+      ...resolveProductAvailability(),
       lastSyncAt,
     });
   }

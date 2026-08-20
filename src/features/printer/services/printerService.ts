@@ -17,7 +17,7 @@ let lastFallbackNoticeAt = 0;
 let lastFallbackPrinterName = "";
 
 function isSp01Printer(printerName: string): boolean {
-  return /(?:sapo\s*)?sp[\s_-]*0?1|xp[\s_-]*80c/i.test(printerName);
+  return /(?:sapo\s*)?sp[\s_-]*0?1|xp[\s_-]*80c|bt[\s_-]*t080/i.test(printerName);
 }
 
 /**

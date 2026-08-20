@@ -33,9 +33,15 @@ test("maps package products with the HK classification name", () => {
       afterTaxPrice: 100000,
       category: 4,
       subCategory: "1",
+      typeId: "",
       foreColor: "#743535",
       backColor: "#465288",
       typeName: "Vé một lượt",
+      isEnabled: true,
+      isOpenSales: true,
+      isCategoryEnabled: true,
+      syncStatus: "active",
+      disabledReason: null,
       lastSyncAt: "2026-07-31T00:00:00.000Z",
     },
   ]);
@@ -123,9 +129,33 @@ test("maps only enabled souvenirs with a positive after-tax price", () => {
       typeName: "Souvenirs",
       amount: 12,
       giftNo: "JWG-001",
+      isEnabled: true,
+      isOpenSales: true,
+      isCategoryEnabled: true,
+      syncStatus: "active",
+      disabledReason: null,
       lastSyncAt: "2026-07-31T00:00:00.000Z",
     },
   ]);
+});
+
+test("marks a remotely disabled ticket as hidden while retaining its record", () => {
+  const products = mapGroupedGoods(
+    [{ goodsId: "TICKET-OFF", goodsName: "Disabled ticket", price: 100 }],
+    4,
+    "Tickets",
+    "2026-08-20T00:00:00.000Z",
+    new Map([[
+      "TICKET-OFF",
+      { isEnabled: false, isOpenSales: true, typeId: "TYPE-01" },
+    ]]),
+    "TYPE-01",
+    true,
+  );
+
+  assert.equal(products[0].isEnabled, false);
+  assert.equal(products[0].syncStatus, "disabled");
+  assert.equal(products[0].disabledReason, "product_disabled");
 });
 
 test("uses the catalog goodsId and preserves before/after-tax prices", () => {

@@ -32,12 +32,42 @@ export interface JoyworldGiftCatalogItem {
   isOpenSales?: boolean;
 }
 
+export interface JoyworldMemberPointPackageItem {
+  setMealId?: string;
+  setMealName?: string;
+  typeId?: string;
+  typeName?: string;
+  category?: number | string;
+  foreColor?: string | null;
+  backColor?: string | null;
+  price?: number | string;
+  afterTaxPrice?: number | string;
+  isEnabled?: boolean;
+  isOpenSales?: boolean;
+}
+
+export function resolveJoyworldBaseUrl(
+  joyworldBaseUrl?: string,
+  hkApiBaseUrl?: string,
+): string {
+  if (joyworldBaseUrl?.trim()) {
+    return joyworldBaseUrl.trim().replace(/\/+$/, "");
+  }
+
+  if (hkApiBaseUrl?.trim()) {
+    // HK_API_BASE_URL points to `/openapi/action`; manager endpoints live at
+    // the same origin, not below the OpenAPI action path.
+    return new URL(hkApiBaseUrl.trim()).origin;
+  }
+
+  return DEFAULT_BASE_URL;
+}
+
 export function getJoyworldBaseUrl(): string {
-  return (
-    process.env.JOYWORLD_BASE_URL ||
-    process.env.HK_API_BASE_URL ||
-    DEFAULT_BASE_URL
-  ).replace(/\/$/, "");
+  return resolveJoyworldBaseUrl(
+    process.env.JOYWORLD_BASE_URL,
+    process.env.HK_API_BASE_URL,
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -85,17 +115,20 @@ export async function getJoyworldManagerAccessToken(
   return token;
 }
 
-async function fetchCatalogPage(
+async function fetchManagerCatalogPage(
+  path: string,
+  parameters: Record<string, string>,
   page: number,
   token: string,
 ): Promise<Response> {
   const query = new URLSearchParams({
+    ...parameters,
     page: String(page),
     limit: String(PAGE_LIMIT),
     _t: String(Date.now()),
   });
 
-  return fetch(`${getJoyworldBaseUrl()}/gift/manager/base/list?${query}`, {
+  return fetch(`${getJoyworldBaseUrl()}${path}?${query}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -104,31 +137,38 @@ async function fetchCatalogPage(
   });
 }
 
-/**
- * Load the manager-side souvenir master catalog.
- *
- * Unlike the OpenAPI `gift_realtime_stock` action, this endpoint returns the
- * authoritative `goodsId`, `afterTaxPrice`, selling flags, and aggregate stock.
- */
-export async function fetchSouvenirCatalog(): Promise<JoyworldGiftCatalogItem[]> {
-  const items: JoyworldGiftCatalogItem[] = [];
+async function fetchManagerCatalog<T>(
+  path: string,
+  parameters: Record<string, string> = {},
+): Promise<T[]> {
+  const items: T[] = [];
   let token = await getJoyworldManagerAccessToken();
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    let response = await fetchCatalogPage(page, token);
+    let response = await fetchManagerCatalogPage(
+      path,
+      parameters,
+      page,
+      token,
+    );
     if (response.status === 401) {
       token = await getJoyworldManagerAccessToken(true);
-      response = await fetchCatalogPage(page, token);
+      response = await fetchManagerCatalogPage(
+        path,
+        parameters,
+        page,
+        token,
+      );
     }
     if (!response.ok) {
       throw new Error(
-        `JoyWorld souvenir catalog failed: HTTP ${response.status}`,
+        `JoyWorld manager catalog ${path} failed: HTTP ${response.status}`,
       );
     }
 
     const result = asRecord(await response.json());
     const pageItems = Array.isArray(result.data)
-      ? result.data as JoyworldGiftCatalogItem[]
+      ? result.data as T[]
       : [];
     items.push(...pageItems);
 
@@ -138,5 +178,27 @@ export async function fetchSouvenirCatalog(): Promise<JoyworldGiftCatalogItem[]>
     }
   }
 
-  throw new Error("JoyWorld souvenir catalog exceeded the pagination limit");
+  throw new Error(`JoyWorld manager catalog ${path} exceeded pagination limit`);
+}
+
+/** Load all member point packages, including disabled and closed products. */
+export function fetchMemberPointPackageCatalog(): Promise<
+  JoyworldMemberPointPackageItem[]
+> {
+  return fetchManagerCatalog<JoyworldMemberPointPackageItem>(
+    "/setmeal/manager/coin/list",
+    { category: "1" },
+  );
+}
+
+/**
+ * Load the manager-side souvenir master catalog.
+ *
+ * Unlike the OpenAPI `gift_realtime_stock` action, this endpoint returns the
+ * authoritative `goodsId`, `afterTaxPrice`, selling flags, and aggregate stock.
+ */
+export async function fetchSouvenirCatalog(): Promise<JoyworldGiftCatalogItem[]> {
+  return fetchManagerCatalog<JoyworldGiftCatalogItem>(
+    "/gift/manager/base/list",
+  );
 }

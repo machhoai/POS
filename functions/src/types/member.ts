@@ -110,6 +110,8 @@ export interface HKMemberPackageDetailDto {
   setMealId?: string | null;
   setMealName?: string | null;
   category?: HKNumberish;
+  typeId?: string | null;
+  typeName?: string | null;
   price?: HKNumberish;
   afterTaxPrice?: HKNumberish;
   amount?: HKNumberish;
@@ -119,6 +121,8 @@ export interface HKMemberPackageDetailDto {
   GiveCoin1?: HKNumberish;
   foreColor?: string | null;
   backColor?: string | null;
+  isEnabled?: boolean | null;
+  isOpenSales?: boolean | null;
   giveConfigs?: HKPackageGiveConfigDto[] | null;
   exchangeSetts?: unknown[] | null;
 }

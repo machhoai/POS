@@ -20,6 +20,14 @@ export const SYNC_CATEGORY_IDS = [1, 2, 4, 6] as const;
 /** POS-owned category used for sellable physical souvenir products. */
 export const SOUVENIR_CATEGORY_ID = 10;
 
+export type ProductSyncStatus = "active" | "disabled";
+
+export type ProductDisabledReason =
+  | "product_disabled"
+  | "sales_disabled"
+  | "category_disabled"
+  | "not_sellable";
+
 /**
  * A product document stored in Firestore `products/{goodsId}`.
  * Synced from HK API via the `syncProducts` Cloud Function.
@@ -36,6 +44,8 @@ export interface SyncProduct {
   category: number;
   /** Sub-category name from HK API (if available) */
   subCategory: string;
+  /** HK package classification identifier, when available. */
+  typeId?: string;
   /** Text color used by HK for the product card. */
   foreColor?: string;
   /** Background color used by HK for the product card. */
@@ -52,6 +62,16 @@ export interface SyncProduct {
   giftNo?: string;
   /** HK product group name for physical souvenir products. */
   typeName?: string;
+  /** Product-level enabled switch from the authoritative HK catalog. */
+  isEnabled?: boolean;
+  /** Whether HK currently allows this product to be sold. */
+  isOpenSales?: boolean;
+  /** Whether the HK classification/category containing this product is enabled. */
+  isCategoryEnabled?: boolean;
+  /** Reconciliation status persisted for diagnostics and catalog filtering. */
+  syncStatus?: ProductSyncStatus;
+  /** Why a product is retained but hidden from JPOS. */
+  disabledReason?: ProductDisabledReason | null;
   /** ISO 8601 timestamp of last sync */
   lastSyncAt: string;
 }

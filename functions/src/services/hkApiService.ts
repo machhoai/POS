@@ -695,6 +695,12 @@ export interface HKProductVisualItem {
   backColor?: string;
   Amount?: number | string;
   amount?: number | string;
+  TypeId?: string;
+  typeId?: string;
+  IsEnabled?: boolean;
+  isEnabled?: boolean;
+  IsOpenSales?: boolean;
+  isOpenSales?: boolean;
 }
 
 /** Product classification returned by `setmeal_type_select`. */
@@ -707,6 +713,8 @@ export interface HKSetmealType {
   Value?: string;
   typeName?: string;
   TypeName?: string;
+  isEnabled?: boolean;
+  IsEnabled?: boolean;
 }
 
 /** Raw physical product returned by `gift_realtime_stock`. */
@@ -743,8 +751,8 @@ export async function fetchGoodsByCategory(
 }
 
 /**
- * Fetch the package-management catalog that carries ticket quantity and card
- * colors omitted by `setmeal_getsellgoods`.
+ * Fetch the ticket-management catalog that carries ticket quantity, status,
+ * and card colors omitted by `setmeal_getsellgoods`.
  */
 export async function fetchProductVisualCatalog(): Promise<HKApiResponse> {
   return sendToHKApi(

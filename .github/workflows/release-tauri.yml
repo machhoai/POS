@@ -58,10 +58,8 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Cấp thêm thẻ miễn phí cho thành viên ngay tại quầy mà không cần mở hoặc đăng nhập ứng dụng HK.
-            - Xác thực thẻ vật lý hai lần và kiểm tra thẻ chưa được đăng ký trước khi cấp.
-            - Giữ giới hạn `maxReceiveCard` từ HK, không sử dụng `unitPrice` hoặc `surplusQty`.
-            - Bảo vệ tài khoản HK trong Firebase Secret Manager; thông tin đăng nhập không được đóng gói xuống máy POS.
+            - Sửa lỗi lệch lề khi in hóa đơn trên máy in BT-T080(U) 3.
+            - Cập nhật dịch vụ sản phẩm và sửa các lỗi phát sinh liên quan.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

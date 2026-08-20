@@ -71,7 +71,7 @@ function toProduct(source: StoredProduct): Product {
     underlinePrice: 0,
     category: Number(source.category),
     subCategory: source.subCategory || "",
-    typeId: "",
+    typeId: source.typeId || "",
     typeName: source.typeName || source.subCategory || "",
     foreColor: source.foreColor || "#FFFFFF",
     backColor: source.backColor || "#F97316",
@@ -82,8 +82,10 @@ function toProduct(source: StoredProduct): Product {
       ? Math.max(0, Number(source.bonusPoints))
       : 0,
     taxRate: 0,
-    isOpenSales: true,
-    isEnabled: true,
+    isOpenSales: source.isOpenSales !== false,
+    isEnabled: source.isEnabled !== false &&
+      source.isCategoryEnabled !== false &&
+      source.syncStatus !== "disabled",
     ticketsPerUnit: Number.isInteger(Number(source.ticketsPerUnit)) && Number(source.ticketsPerUnit) >= 0
       ? Number(source.ticketsPerUnit)
       : 0,
@@ -123,6 +125,8 @@ export const useProductStore = create<ProductState>((set) => ({
             Boolean(CATEGORY_MAP[product.category]) &&
             Number.isFinite(product.price) &&
             Number.isFinite(product.afterTaxPrice) &&
+            product.isEnabled &&
+            product.isOpenSales &&
             (product.category !== 10 || product.afterTaxPrice > 0)
         );
 

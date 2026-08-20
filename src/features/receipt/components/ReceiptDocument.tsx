@@ -68,73 +68,6 @@ const valueStyle: CSSProperties = {
     fontVariantNumeric: "tabular-nums",
 };
 
-interface ThemeOrnamentProps {
-    theme: ReceiptTheme;
-    fontWeight: ReceiptFontWeight;
-    isCompact: boolean;
-    placement: "top" | "bottom";
-}
-
-
-
-const ThemeOrnament: React.FC<ThemeOrnamentProps> = ({
-    theme,
-    fontWeight,
-    isCompact,
-    placement,
-}) => {
-    const lineStyle: CSSProperties = {
-        flex: "1 1 auto",
-        height: theme === "NATIONAL_DAY" ? "1.2mm" : "0",
-        borderTop: "1px solid #000",
-        borderBottom: theme === "NATIONAL_DAY" ? "1px solid #000" : undefined,
-    };
-
-    return (
-        <div
-            aria-hidden="true"
-            style={{
-                display: "flex",
-                alignItems: "center",
-                gap: isCompact ? "1.5mm" : "2mm",
-                marginTop: placement === "bottom" ? "3.5mm" : "0",
-                marginBottom: placement === "top" ? "3.5mm" : "0",
-                fontWeight,
-            }}
-        >
-            <span style={lineStyle} />
-            {theme === "NATIONAL_DAY" ? (
-                <span
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: isCompact ? "6mm" : "7mm",
-                        height: isCompact ? "6mm" : "7mm",
-                        border: "1.5px solid #000",
-                        borderRadius: "50%",
-                        fontSize: isCompact ? "11px" : "14px",
-                        lineHeight: 1,
-                    }}
-                >
-                    ★
-                </span>
-            ) : theme === "TET" ? (
-                <span style={{ display: "flex", alignItems: "center", gap: "2mm", padding: "0 1mm" }}>
-                    <span style={{ width: "2mm", height: "2mm", background: "#000", transform: "rotate(45deg)" }} />
-                    <span style={{ width: "5mm", height: "5mm", border: "1.5px solid #000", transform: "rotate(45deg)", padding: "1mm" }}>
-                        <span style={{ display: "block", width: "100%", height: "100%", background: "#000" }} />
-                    </span>
-                    <span style={{ width: "2mm", height: "2mm", background: "#000", transform: "rotate(45deg)" }} />
-                </span>
-            ) : (
-                <span style={{ width: "3mm", height: "3mm", border: "1px solid #000", borderRadius: "50%" }} />
-            )}
-            <span style={lineStyle} />
-
-        </div>
-    );
-};
 
 interface ThemeMessageBannerProps {
     theme: ReceiptTheme;
@@ -177,11 +110,6 @@ const ThemeMessageBanner: React.FC<ThemeMessageBannerProps> = ({
     isCompact,
 }) => {
     const marker = theme === "NATIONAL_DAY" ? "★" : theme === "TET" ? "◆" : "•";
-    const border = theme === "NATIONAL_DAY"
-        ? "3px double #000"
-        : theme === "TET"
-            ? "2px solid #000"
-            : "1px dashed #000";
 
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '1mm', flexDirection: 'column' }}>

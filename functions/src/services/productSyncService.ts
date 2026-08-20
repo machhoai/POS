@@ -1,4 +1,5 @@
 import * as logger from "firebase-functions/logger";
+import type { DocumentReference } from "firebase-admin/firestore";
 import { db } from "../config/firebase";
 import { POS_COLLECTIONS } from "../config/collections";
 import {
@@ -10,11 +11,21 @@ import {
   type HKProductVisualItem,
   type HKSetmealType,
 } from "./hkApiService";
-import { fetchSouvenirCatalog } from "./joyworldCatalogService";
+import {
+  fetchMemberPointPackageCatalog,
+  fetchSouvenirCatalog,
+  type JoyworldGiftCatalogItem,
+  type JoyworldMemberPointPackageItem,
+} from "./joyworldCatalogService";
 import {
   mapGroupedGoods,
   mapSellableSouvenirs,
 } from "./productCatalog";
+import {
+  isConfirmedRemoteDeletion,
+  isProductAvailable,
+  resolveProductAvailability,
+} from "./productAvailability";
 import {
   SOUVENIR_CATEGORY_ID,
   SYNC_CATEGORY_IDS,
@@ -29,7 +40,27 @@ interface ProductVisualMetadata {
   ticketsPerUnit?: number;
   principalPoints?: number;
   bonusPoints?: number;
+  typeId?: string;
+  isEnabled?: boolean;
+  isOpenSales?: boolean;
 }
+
+interface ProductManagementCatalog {
+  categoryId: number;
+  isAuthoritative: boolean;
+  metadataByGoodsId: Map<string, ProductVisualMetadata>;
+}
+
+type ProductMutation =
+  | {
+    kind: "set";
+    ref: DocumentReference;
+    data: Partial<SyncProduct>;
+  }
+  | {
+    kind: "delete";
+    ref: DocumentReference;
+  };
 
 function toNonNegativeNumber(...values: unknown[]): number {
   for (const value of values) {
@@ -44,6 +75,8 @@ export interface ProductSyncResult {
   success: true;
   productCount: number;
   souvenirProductCount: number;
+  disabledProductCount: number;
+  removedProductCount: number;
   removedSouvenirCount: number;
   syncedAt: string;
 }
@@ -92,16 +125,36 @@ function mapProductVisualMetadata(items: HKProductVisualItem[]) {
     const ticketsPerUnit = Number.isInteger(rawTicketsPerUnit) && rawTicketsPerUnit >= 0
       ? rawTicketsPerUnit
       : undefined;
-    if (!foreColor && !backColor && ticketsPerUnit === undefined) continue;
+    const typeId = (item.TypeId || item.typeId || "").trim();
 
     metadataByGoodsId.set(goodsId, {
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
       ...(ticketsPerUnit !== undefined ? { ticketsPerUnit } : {}),
+      ...(typeId ? { typeId } : {}),
+      ...(typeof (item.IsEnabled ?? item.isEnabled) === "boolean"
+        ? { isEnabled: item.IsEnabled ?? item.isEnabled }
+        : {}),
+      ...(typeof (item.IsOpenSales ?? item.isOpenSales) === "boolean"
+        ? { isOpenSales: item.IsOpenSales ?? item.isOpenSales }
+        : {}),
     });
   }
 
   return metadataByGoodsId;
+}
+
+function mapMemberPointPackageManagementMetadata(
+  items: JoyworldMemberPointPackageItem[],
+): Map<string, ProductVisualMetadata> {
+  return mapProductVisualMetadata(items.map((item) => ({
+    SetMealId: item.setMealId,
+    ForeColor: item.foreColor ?? undefined,
+    BackColor: item.backColor ?? undefined,
+    TypeId: item.typeId,
+    IsEnabled: item.isEnabled,
+    IsOpenSales: item.isOpenSales,
+  })));
 }
 
 async function loadProductDetailMetadata(
@@ -141,6 +194,13 @@ async function loadProductDetailMetadata(
       ...(backColor ? { backColor } : {}),
       principalPoints,
       bonusPoints,
+      ...(detail?.typeId ? { typeId: detail.typeId } : {}),
+      ...(typeof detail?.isEnabled === "boolean"
+        ? { isEnabled: detail.isEnabled }
+        : {}),
+      ...(typeof detail?.isOpenSales === "boolean"
+        ? { isOpenSales: detail.isOpenSales }
+        : {}),
     });
     loadedCount += 1;
   }
@@ -155,6 +215,7 @@ async function loadProductDetailMetadata(
 interface SetmealTypeOption {
   typeId: string;
   typeName: string;
+  isEnabled: boolean;
 }
 
 function normalizeSetmealTypes(items: HKSetmealType[]): SetmealTypeOption[] {
@@ -174,8 +235,35 @@ function normalizeSetmealTypes(items: HKSetmealType[]): SetmealTypeOption[] {
       ""
     ).trim();
 
-    return typeId && typeName ? [{ typeId, typeName }] : [];
+    return typeId && typeName ? [{
+      typeId,
+      typeName,
+      isEnabled: (item.IsEnabled ?? item.isEnabled) !== false,
+    }] : [];
   });
+}
+
+function getSouvenirId(item: JoyworldGiftCatalogItem): string {
+  return (item.goodsId || item.id || "").trim();
+}
+
+async function commitProductMutations(
+  mutations: ProductMutation[],
+): Promise<void> {
+  for (let index = 0; index < mutations.length; index += BATCH_LIMIT) {
+    const batch = db.batch();
+    const chunk = mutations.slice(index, index + BATCH_LIMIT);
+
+    for (const mutation of chunk) {
+      if (mutation.kind === "delete") {
+        batch.delete(mutation.ref);
+      } else {
+        batch.set(mutation.ref, mutation.data, { merge: true });
+      }
+    }
+
+    await batch.commit();
+  }
 }
 
 export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
@@ -196,6 +284,7 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       !Number.isFinite(price) ||
       !Number.isFinite(afterTaxPrice) ||
       !Number.isFinite(category) ||
+      !isProductAvailable(data) ||
       (category === SOUVENIR_CATEGORY_ID && afterTaxPrice <= 0)
     ) {
       continue;
@@ -209,6 +298,7 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       afterTaxPrice,
       category,
       subCategory: data.subCategory ? String(data.subCategory) : "",
+      ...(data.typeId ? { typeId: String(data.typeId) } : {}),
       ...(data.foreColor ? { foreColor: String(data.foreColor) } : {}),
       ...(data.backColor ? { backColor: String(data.backColor) } : {}),
       ...(Number.isFinite(Number(data.principalPoints)) && Number(data.principalPoints) >= 0
@@ -225,6 +315,11 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
         : {}),
       ...(data.giftNo ? { giftNo: String(data.giftNo) } : {}),
       ...(data.typeName ? { typeName: String(data.typeName) } : {}),
+      isEnabled: data.isEnabled !== false,
+      isOpenSales: data.isOpenSales !== false,
+      isCategoryEnabled: data.isCategoryEnabled !== false,
+      syncStatus: data.syncStatus || "active",
+      disabledReason: data.disabledReason || null,
       lastSyncAt: data.lastSyncAt ? String(data.lastSyncAt) : "",
     });
   }
@@ -242,21 +337,71 @@ export async function synchronizePosProducts(
 
   const now = new Date().toISOString();
   const allProducts: SyncProduct[] = [];
+  const synchronizedCategoryIds = new Set<number>();
 
-  const visualResponse = await fetchProductVisualCatalog();
-  const visualColorsByGoodsId = visualResponse.success
-    ? mapProductVisualMetadata(extractList<HKProductVisualItem>(visualResponse.data))
-    : new Map<string, ProductVisualMetadata>();
+  const [ticketManagementResponse, memberPointPackageResult] = await Promise.all([
+    fetchProductVisualCatalog(),
+    fetchMemberPointPackageCatalog()
+      .then((items) => ({ items, error: null as unknown }))
+      .catch((error: unknown) => ({
+        items: [] as JoyworldMemberPointPackageItem[],
+        error,
+      })),
+  ]);
+  const memberPointPackageItems = memberPointPackageResult.items;
+  if (memberPointPackageResult.error) {
+    logger.warn("[productSync] Member point package catalog request failed", {
+      categoryId: 1,
+      error: memberPointPackageResult.error instanceof Error
+        ? memberPointPackageResult.error.message
+        : String(memberPointPackageResult.error),
+    });
+  }
+  const ticketManagementItems = ticketManagementResponse.success
+    ? extractList<HKProductVisualItem>(ticketManagementResponse.data)
+    : [];
+  if (!ticketManagementResponse.success) {
+    logger.warn("[productSync] Ticket management catalog request failed", {
+      categoryId: 4,
+      code: ticketManagementResponse.code,
+      message: ticketManagementResponse.msg,
+    });
+  }
 
-  if (!visualResponse.success) {
-    logger.warn("[productSync] Product visual catalog request failed", {
-      code: visualResponse.code,
-      message: visualResponse.msg,
+  const managementCatalogs: ProductManagementCatalog[] = [
+    {
+      categoryId: 1,
+      isAuthoritative: !memberPointPackageResult.error &&
+        memberPointPackageItems.length > 0,
+      metadataByGoodsId: mapMemberPointPackageManagementMetadata(
+        memberPointPackageItems,
+      ),
+    },
+    {
+      categoryId: 4,
+      isAuthoritative: ticketManagementResponse.success &&
+        ticketManagementItems.length > 0,
+      metadataByGoodsId: mapProductVisualMetadata(ticketManagementItems),
+    },
+  ];
+  for (const catalog of managementCatalogs) {
+    logger.info("[productSync] Product management metadata loaded", {
+      categoryId: catalog.categoryId,
+      metadataCount: catalog.metadataByGoodsId.size,
+      isAuthoritative: catalog.isAuthoritative,
     });
-  } else {
-    logger.info("[productSync] Product visual metadata loaded", {
-      metadataCount: visualColorsByGoodsId.size,
-    });
+  }
+  const managementCatalogByCategory = new Map(
+    managementCatalogs.map((catalog) => [catalog.categoryId, catalog]),
+  );
+  const visualColorsByGoodsId = new Map<string, ProductVisualMetadata>();
+  for (const catalog of managementCatalogs) {
+    for (const [goodsId, metadata] of catalog.metadataByGoodsId) {
+      visualColorsByGoodsId.set(goodsId, {
+        ...visualColorsByGoodsId.get(goodsId),
+        ...metadata,
+      });
+    }
   }
 
   const typeResponse = await fetchSetmealTypes();
@@ -272,6 +417,11 @@ export async function synchronizePosProducts(
   if (setmealTypes.length === 0) {
     throw new Error("setmeal_type_select returned no product classifications");
   }
+  const activeTypeIds = new Set(
+    setmealTypes
+      .filter((setmealType) => setmealType.isEnabled)
+      .map((setmealType) => setmealType.typeId),
+  );
 
   for (const categoryId of SYNC_CATEGORY_IDS) {
     const response = await fetchGoodsByCategory(categoryId);
@@ -321,6 +471,8 @@ export async function synchronizePosProducts(
         setmealType.typeName,
         now,
         visualColorsByGoodsId,
+        setmealType.typeId,
+        setmealType.isEnabled,
       );
 
       for (const product of groupedProducts) {
@@ -342,6 +494,7 @@ export async function synchronizePosProducts(
     }
 
     allProducts.push(...productsById.values());
+    synchronizedCategoryIds.add(categoryId);
 
     logger.info("[productSync] Category grouped", {
       categoryId,
@@ -369,29 +522,190 @@ export async function synchronizePosProducts(
     await batch.commit();
   }
 
+  const activePackageIds = new Set(
+    allProducts
+      .filter((product) => product.category !== SOUVENIR_CATEGORY_ID)
+      .map((product) => product.goodsId),
+  );
+  const sellableSouvenirIds = new Set(
+    sellableSouvenirs.map((product) => product.goodsId),
+  );
+  const souvenirById = new Map(
+    rawSouvenirs.flatMap((item) => {
+      const goodsId = getSouvenirId(item);
+      return goodsId ? [[goodsId, item] as const] : [];
+    }),
+  );
+  const existingSnapshot = await db
+    .collection(POS_COLLECTIONS.products)
+    .get();
+  const stalePackageDocs = existingSnapshot.docs.filter((doc) => {
+    const category = Number(doc.data().category);
+    return synchronizedCategoryIds.has(category) &&
+      !activePackageIds.has(doc.id);
+  });
+  const mutations: ProductMutation[] = [];
+  let disabledProductCount = allProducts.filter(
+    (product) => product.syncStatus === "disabled",
+  ).length;
+  let removedProductCount = 0;
+
+  const detailCandidates: typeof stalePackageDocs = [];
+
+  for (const doc of stalePackageDocs) {
+    const category = Number(doc.data().category);
+    const managementCatalog = managementCatalogByCategory.get(category);
+    const visualMetadata = managementCatalog?.metadataByGoodsId.get(doc.id);
+
+    if (visualMetadata) {
+      const isCategoryEnabled = !visualMetadata.typeId ||
+        activeTypeIds.has(visualMetadata.typeId);
+      mutations.push({
+        kind: "set",
+        ref: doc.ref,
+        data: {
+          ...(visualMetadata.typeId ? { typeId: visualMetadata.typeId } : {}),
+          ...resolveProductAvailability({
+            isEnabled: visualMetadata.isEnabled,
+            isOpenSales: visualMetadata.isOpenSales,
+            isCategoryEnabled,
+            isSellable: false,
+          }),
+          lastSyncAt: now,
+        },
+      });
+      disabledProductCount += 1;
+      continue;
+    }
+
+    // Each non-empty successful management catalog contains disabled products
+    // too. This applies the same deletion rule to member point packages and
+    // tickets while an empty/failed response remains non-destructive.
+    if (isConfirmedRemoteDeletion({
+      category,
+      managementCatalogIsAuthoritative: managementCatalog?.isAuthoritative,
+      managementCatalogContainsProduct: false,
+    })) {
+      mutations.push({ kind: "delete", ref: doc.ref });
+      removedProductCount += 1;
+      continue;
+    }
+
+    detailCandidates.push(doc);
+  }
+
+  const detailResults = await Promise.all(
+    detailCandidates.map(async (doc) => {
+      try {
+        return {
+          doc,
+          response: await fetchMemberPackageDetail(doc.id),
+        };
+      } catch (error: unknown) {
+        return { doc, error };
+      }
+    }),
+  );
+
+  for (const result of detailResults) {
+    const { doc } = result;
+    if ("response" in result && result.response) {
+      const { response } = result;
+
+      if (response.success && response.data) {
+        const detail = response.data;
+        const typeId = detail.typeId?.trim() || "";
+        mutations.push({
+          kind: "set",
+          ref: doc.ref,
+          data: {
+            ...(typeId ? { typeId } : {}),
+            ...resolveProductAvailability({
+              isEnabled: detail.isEnabled ?? undefined,
+              isOpenSales: detail.isOpenSales ?? undefined,
+              isCategoryEnabled: !typeId || activeTypeIds.has(typeId),
+              isSellable: false,
+            }),
+            lastSyncAt: now,
+          },
+        });
+        disabledProductCount += 1;
+        continue;
+      }
+
+      // OpenAPI documents 404 as the explicit response for a deleted package.
+      // Other failures are treated as transient and only hide the stale item.
+      if (isConfirmedRemoteDeletion({
+        category: Number(doc.data().category),
+        detailResponseCode: response.code,
+        detailResponseMessage: `${response.msg} ${response.desc || ""}`,
+      })) {
+        mutations.push({ kind: "delete", ref: doc.ref });
+        removedProductCount += 1;
+        continue;
+      }
+
+      logger.warn("[productSync] Stale product detail could not be verified", {
+        goodsId: doc.id,
+        code: response.code,
+        message: response.msg,
+      });
+      mutations.push({
+        kind: "set",
+        ref: doc.ref,
+        data: {
+          ...resolveProductAvailability({ isSellable: false }),
+          lastSyncAt: now,
+        },
+      });
+      disabledProductCount += 1;
+      continue;
+    }
+
+    logger.warn("[productSync] Stale product detail request failed", {
+      goodsId: doc.id,
+      error: "error" in result ? result.error : undefined,
+    });
+    mutations.push({
+      kind: "set",
+      ref: doc.ref,
+      data: {
+        ...resolveProductAvailability({ isSellable: false }),
+        lastSyncAt: now,
+      },
+    });
+    disabledProductCount += 1;
+  }
+
   let removedSouvenirCount = 0;
   if (rawSouvenirs.length > 0) {
-    const sellableIds = new Set(
-      sellableSouvenirs.map((product) => product.goodsId),
-    );
-    const existingSouvenirs = await db
-      .collection(POS_COLLECTIONS.products)
-      .where("category", "==", SOUVENIR_CATEGORY_ID)
-      .get();
-    const staleDocuments = existingSouvenirs.docs.filter(
-      (doc) => !sellableIds.has(doc.id),
+    const existingSouvenirs = existingSnapshot.docs.filter(
+      (doc) => Number(doc.data().category) === SOUVENIR_CATEGORY_ID,
     );
 
-    for (
-      let index = 0;
-      index < staleDocuments.length;
-      index += BATCH_LIMIT
-    ) {
-      const batch = db.batch();
-      const chunk = staleDocuments.slice(index, index + BATCH_LIMIT);
-      chunk.forEach((doc) => batch.delete(doc.ref));
-      await batch.commit();
-      removedSouvenirCount += chunk.length;
+    for (const doc of existingSouvenirs) {
+      if (sellableSouvenirIds.has(doc.id)) continue;
+
+      const remoteSouvenir = souvenirById.get(doc.id);
+      if (!remoteSouvenir) {
+        mutations.push({ kind: "delete", ref: doc.ref });
+        removedSouvenirCount += 1;
+        continue;
+      }
+
+      mutations.push({
+        kind: "set",
+        ref: doc.ref,
+        data: {
+          ...resolveProductAvailability({
+            isEnabled: remoteSouvenir.isEnabled,
+            isOpenSales: remoteSouvenir.isOpenSales,
+            isSellable: false,
+          }),
+          lastSyncAt: now,
+        },
+      });
+      disabledProductCount += 1;
     }
   } else {
     logger.warn(
@@ -399,9 +713,13 @@ export async function synchronizePosProducts(
     );
   }
 
+  await commitProductMutations(mutations);
+
   logger.info("[productSync] Product synchronization completed", {
     productCount: allProducts.length,
     souvenirProductCount: sellableSouvenirs.length,
+    disabledProductCount,
+    removedProductCount,
     removedSouvenirCount,
   });
 
@@ -409,6 +727,8 @@ export async function synchronizePosProducts(
     success: true,
     productCount: allProducts.length,
     souvenirProductCount: sellableSouvenirs.length,
+    disabledProductCount,
+    removedProductCount,
     removedSouvenirCount,
     syncedAt: now,
   };
