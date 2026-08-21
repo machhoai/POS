@@ -58,9 +58,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Sử dụng đúng khổ in 80 mm của SNBC BT-T080 thay vì giới hạn 72 mm dành cho XP-80C.
-            - Khôi phục lề an toàn cho biên lai, vé và báo cáo kết ca để nội dung không bị lẹm ở mép phải.
-            - Luôn gắn queue ITP080 của JPOS với đúng driver SNBC BT-T080 đã đóng gói.
+            - Khôi phục vùng in WebView2 72 mm đã được kiểm chứng thực tế cho SNBC BT-T080.
+            - Bỏ hoàn toàn padding ngang khỏi biên lai, vé và báo cáo kết ca để driver tự căn theo giấy.
+            - Giữ queue ITP080 của JPOS gắn với đúng driver SNBC BT-T080 đã đóng gói.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
