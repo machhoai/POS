@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { resolvePrinterPageWidthMm } from "../src/features/printer/helpers/resolvePrinterPageWidth.ts";
 
-test("BT-T080 keeps the configured 80 mm media width", () => {
+test("BT-T080 uses the empirically safe 72 mm WebView2 media width", () => {
   const printerNames = [
     "ITP080 (SNBC BT-T080)",
     "BT-T080(U) 3",
@@ -11,7 +11,7 @@ test("BT-T080 keeps the configured 80 mm media width", () => {
   ];
 
   for (const printerName of printerNames) {
-    assert.equal(resolvePrinterPageWidthMm(80, printerName), 80);
+    assert.equal(resolvePrinterPageWidthMm(80, printerName), 72);
   }
 });
 

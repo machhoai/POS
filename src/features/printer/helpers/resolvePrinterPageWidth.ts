@@ -1,21 +1,21 @@
-const SP01_MAX_CUSTOM_MEDIA_WIDTH_MM = 72;
+const THERMAL_80MM_CUSTOM_MEDIA_WIDTH_MM = 72;
 
-function isSp01PrinterName(printerName: string): boolean {
-  return /(?:sapo\s*)?sp[\s_-]*0?1|xp[\s_-]*80c/i.test(printerName);
+function usesNarrowCustomMedia(printerName: string): boolean {
+  return /(?:sapo\s*)?sp[\s_-]*0?1|xp[\s_-]*80c|bt[\s_-]*t080/i.test(printerName);
 }
 
 /**
- * XP-80C exposes only 72.07 mm of custom media on an 80 mm roll.
- * BT-T080 uses its native 80 mm / 640-dot driver profile and must not be
- * reduced to the XP-80C width.
+ * These Windows drivers reliably expose only about 72 mm to WebView2 custom
+ * print jobs on an 80 mm roll. Sending an 80 mm custom page to BT-T080 moves
+ * the right edge outside the raster that reaches the paper.
  */
 export function resolvePrinterPageWidthMm(
   configuredWidthMm: number,
   printerName: string | null,
 ): number {
-  if (!printerName || !isSp01PrinterName(printerName)) {
+  if (!printerName || !usesNarrowCustomMedia(printerName)) {
     return configuredWidthMm;
   }
 
-  return Math.min(configuredWidthMm, SP01_MAX_CUSTOM_MEDIA_WIDTH_MM);
+  return Math.min(configuredWidthMm, THERMAL_80MM_CUSTOM_MEDIA_WIDTH_MM);
 }
