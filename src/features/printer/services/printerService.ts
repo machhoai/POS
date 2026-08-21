@@ -1,4 +1,5 @@
 import { usePrinterSettingsStore } from "@/features/printer/store/usePrinterSettingsStore";
+import { resolvePrinterPageWidthMm } from "@/features/printer/helpers/resolvePrinterPageWidth";
 import type {
   LocalPrinter,
   PrintDispatchResult,
@@ -8,7 +9,6 @@ import { showWarning } from "@/lib/utils/toast";
 
 const FALLBACK_NOTICE_COOLDOWN_MS = 10_000;
 const CALIBRATION_PAGE_WIDTH_MM = 80;
-const SP01_MAX_CUSTOM_MEDIA_WIDTH_MM = 72;
 // Keep the page taller than it is wide. A landscape-shaped custom page can
 // make some Windows thermal-printer drivers rotate it despite WebView2 being
 // configured for portrait printing.
@@ -16,18 +16,9 @@ const CALIBRATION_PAGE_HEIGHT_MM = 100;
 let lastFallbackNoticeAt = 0;
 let lastFallbackPrinterName = "";
 
-function isSp01Printer(printerName: string): boolean {
-  return /(?:sapo\s*)?sp[\s_-]*0?1|xp[\s_-]*80c|bt[\s_-]*t080/i.test(printerName);
-}
-
-/**
- * XP-80C exposes only 72.07 mm of custom media on a physical 80 mm roll.
- * Other printers retain their configured width unchanged.
- */
 export function resolveLocalPrinterPageWidthMm(configuredWidthMm: number): number {
   const printerName = usePrinterSettingsStore.getState().selectedPrinterName;
-  if (!printerName || !isSp01Printer(printerName)) return configuredWidthMm;
-  return Math.min(configuredWidthMm, SP01_MAX_CUSTOM_MEDIA_WIDTH_MM);
+  return resolvePrinterPageWidthMm(configuredWidthMm, printerName);
 }
 
 async function waitForPrintLayout(): Promise<void> {

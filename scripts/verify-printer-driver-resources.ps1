@@ -99,6 +99,7 @@ if ($itp080InstallDefinition -notmatch '\$hardwareId = "USB\\VID_154F&PID_154F"'
     $itp080InstallDefinition -notmatch '\$apiPortDeviceId = 738' -or
     $itp080InstallDefinition -notmatch "'/VERYSILENT', '/SUPPRESSMSGBOXES'" -or
     $itp080InstallDefinition -notmatch 'Add-PrinterDriver -Name \$infDriverName' -or
+    $itp080InstallDefinition -notmatch '\$queueDriverName = \$infDriverName' -or
     $itp080InstallDefinition -match "'/add-driver'.*'/install'" -or
     $itp080InstallDefinition -match '\$setup\.FullName') {
     throw "The ITP080 installation script is not configured for SNBC BT-T080 silent setup."

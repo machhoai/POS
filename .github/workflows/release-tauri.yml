@@ -58,8 +58,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Loại bỏ khoảng cách (padding) lề trái và phải của các mẫu in biên lai, vé và kết ca.
-            - Để hệ điều hành và máy in (đặc biệt là BT-T080) tự xử lý căn lề, khắc phục hoàn toàn hiện tượng lẹm chữ.
+            - Sử dụng đúng khổ in 80 mm của SNBC BT-T080 thay vì giới hạn 72 mm dành cho XP-80C.
+            - Khôi phục lề an toàn cho biên lai, vé và báo cáo kết ca để nội dung không bị lẹm ở mép phải.
+            - Luôn gắn queue ITP080 của JPOS với đúng driver SNBC BT-T080 đã đóng gói.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

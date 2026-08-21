@@ -47,7 +47,7 @@ const CloseoutReceiptDocument: React.FC<CloseoutReceiptDocumentProps> = ({
       style={{
         boxSizing: "border-box",
         width: `${profile.printableWidthMm}mm`,
-        padding: isCompact ? "3mm 0 5mm" : "4mm 0 6mm",
+        padding: isCompact ? "3mm 2.5mm 5mm" : "4mm 4mm 6mm",
         background: "#fff",
         color: "#000",
         fontFamily: "Arial, sans-serif",
