@@ -190,7 +190,7 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                 boxSizing: "border-box",
                 width: `${resolvedPrintableWidthMm}mm`,
                 minHeight: "40mm",
-                padding: `${resolvedTopMarginMm}mm 0 ${horizontalAndBottomPaddingMm}mm`,
+                padding: `${resolvedTopMarginMm}mm ${horizontalAndBottomPaddingMm}mm ${horizontalAndBottomPaddingMm}mm`,
                 background: "#fff",
                 color: "#000",
                 fontFamily: 'Arial, "Microsoft YaHei", "Noto Sans SC", Helvetica, sans-serif',

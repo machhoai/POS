@@ -309,7 +309,10 @@ try {
     New-Item -Path "HKLM:\SOFTWARE\JPOS\PrinterDrivers" -Force | Out-Null
     Set-ItemProperty -Path "HKLM:\SOFTWARE\JPOS\PrinterDrivers" -Name "ITP080Version" -Value $driverVersion
 
-    $queueDriverName = if ($installedPrinter) { $installedPrinter.DriverName } else { $infDriverName }
+    # Always bind the stable JPOS queue to the pinned SNBC model. Reusing the
+    # driver of an older auto-created queue can preserve incompatible media
+    # defaults and shift the raster outside the BT-T080 printable area.
+    $queueDriverName = $infDriverName
     $existingQueue = Get-Printer -Name $queueName -ErrorAction SilentlyContinue
     if ($existingQueue) {
         Set-Printer -Name $queueName -DriverName $queueDriverName -PortName $apiPortName
