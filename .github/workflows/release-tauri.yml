@@ -58,9 +58,7 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Khôi phục vùng in WebView2 72 mm đã được kiểm chứng thực tế cho SNBC BT-T080.
-            - Bỏ hoàn toàn padding ngang khỏi biên lai, vé và báo cáo kết ca để driver tự căn theo giấy.
-            - Giữ queue ITP080 của JPOS gắn với đúng driver SNBC BT-T080 đã đóng gói.
+            - Sửa câu hướng dẫn quét mã QR yêu cầu xuất hóa đơn trên biên lai tiếng Việt.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
