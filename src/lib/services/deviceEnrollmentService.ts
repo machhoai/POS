@@ -14,6 +14,7 @@ import { mapReceiptSettingsToRemote } from "@/features/receipt/helpers/remoteRec
 import { mapTicketSettingsToRemote } from "@/features/ticket/helpers/remoteTicketSettings";
 import type { ReceiptSettings } from "@/features/receipt/types/receipt";
 import type { TicketSettings } from "@/features/ticket/types/ticket";
+import { parseRetryAfterMs } from "@/lib/utils/remoteSettingsPolling";
 import {
   clearWebDevDeviceCredential,
   getOrCreateWebDevInstallationId,
@@ -152,11 +153,27 @@ export async function activateDevice(input: {
 }
 
 export class DeviceSessionError extends Error {
-  constructor(message: string, public readonly revoked: boolean) {
+  constructor(
+    message: string,
+    public readonly revoked: boolean,
+    public readonly statusCode?: number,
+    public readonly retryAfterMs: number | null = null,
+  ) {
     super(message);
     this.name = "DeviceSessionError";
   }
 }
+
+const createDeviceSessionResponseError = (
+  response: Response,
+  message: string,
+): DeviceSessionError =>
+  new DeviceSessionError(
+    message,
+    response.status === 401 || response.status === 403,
+    response.status,
+    parseRetryAfterMs(response.headers.get("Retry-After")),
+  );
 
 export async function openDeviceSession(
   credential: PosDeviceCredential,
@@ -181,9 +198,9 @@ export async function openDeviceSession(
   }
   const envelope = (await response.json()) as ApiEnvelope<PosDeviceSessionResult>;
   if (!response.ok || !envelope.data) {
-    throw new DeviceSessionError(
+    throw createDeviceSessionResponseError(
+      response,
       envelope.messages?.vi || "Máy POS không còn quyền truy cập.",
-      response.status === 401 || response.status === 403,
     );
   }
   return envelope.data;
@@ -217,9 +234,9 @@ export async function watchRemoteReceiptSettings(
   }
   const envelope = (await response.json()) as ApiEnvelope<PosReceiptSettingsWatchResult>;
   if (!response.ok || !envelope.data) {
-    throw new DeviceSessionError(
+    throw createDeviceSessionResponseError(
+      response,
       envelope.messages?.vi || "Không thể nhận cấu hình hóa đơn POS.",
-      response.status === 401 || response.status === 403,
     );
   }
   return envelope.data;
@@ -253,9 +270,9 @@ export async function watchRemoteTicketSettings(
   }
   const envelope = (await response.json()) as ApiEnvelope<PosTicketSettingsWatchResult>;
   if (!response.ok || !envelope.data) {
-    throw new DeviceSessionError(
+    throw createDeviceSessionResponseError(
+      response,
       envelope.messages?.vi || "Không thể nhận cấu hình vé POS.",
-      response.status === 401 || response.status === 403,
     );
   }
   return envelope.data;
@@ -289,9 +306,9 @@ export async function watchRemoteCustomerDisplaySettings(
   }
   const envelope = (await response.json()) as ApiEnvelope<PosCustomerDisplaySettingsWatchResult>;
   if (!response.ok || !envelope.data) {
-    throw new DeviceSessionError(
+    throw createDeviceSessionResponseError(
+      response,
       envelope.messages?.vi || "Không thể nhận playlist quảng cáo.",
-      response.status === 401 || response.status === 403,
     );
   }
   return envelope.data;

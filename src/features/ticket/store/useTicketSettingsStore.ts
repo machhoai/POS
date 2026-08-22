@@ -15,6 +15,7 @@ interface TicketSettingsState {
     version: number,
     settings: TicketSettings,
   ) => void;
+  clearRemoteSettings: (warehouseId: string) => void;
   resetSettings: () => void;
 }
 
@@ -26,6 +27,12 @@ export const useTicketSettingsStore = create<TicketSettingsState>()(
       remoteWarehouseId: null,
       saveSettings: (settings) => set({ settings }),
       resetSettings: () => set({ settings: DEFAULT_TICKET_SETTINGS }),
+      clearRemoteSettings: (warehouseId) =>
+        set({
+          settings: DEFAULT_TICKET_SETTINGS,
+          remoteVersion: null,
+          remoteWarehouseId: warehouseId,
+        }),
       applyRemoteSettings: (warehouseId, version, settings) =>
         set((state) => {
           const changedWarehouse = state.remoteWarehouseId !== warehouseId;

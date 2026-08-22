@@ -15,6 +15,7 @@ interface ReceiptSettingsState {
     version: number,
     settings: ReceiptSettings,
   ) => void;
+  clearRemoteSettings: (warehouseId: string) => void;
   resetSettings: () => void;
 }
 
@@ -29,6 +30,12 @@ export const useReceiptSettingsStore = create<ReceiptSettingsState>()(
           settings: { ...state.settings, ...patch },
         })),
       resetSettings: () => set({ settings: DEFAULT_RECEIPT_SETTINGS }),
+      clearRemoteSettings: (warehouseId) =>
+        set({
+          settings: DEFAULT_RECEIPT_SETTINGS,
+          remoteVersion: null,
+          remoteWarehouseId: warehouseId,
+        }),
       applyRemoteSettings: (warehouseId, version, settings) =>
         set((state) => {
           const isNewerWarehouse = state.remoteWarehouseId !== warehouseId;

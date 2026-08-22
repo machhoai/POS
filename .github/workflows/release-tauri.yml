@@ -58,7 +58,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Sửa câu hướng dẫn quét mã QR yêu cầu xuất hóa đơn trên biên lai tiếng Việt.
+            - Ngăn vòng lặp gọi dồn dập API cấu hình khi chuyển máy sang cửa hàng mới.
+            - Tự đặt lại cache cấu hình khi JPULSE chưa có cấu hình cho cửa hàng.
+            - Tôn trọng Retry-After và tự tăng thời gian chờ khi JPULSE giới hạn request.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
