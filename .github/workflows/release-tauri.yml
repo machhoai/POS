@@ -58,9 +58,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Cho phép lưu số tài khoản doanh nghiệp gồm chữ cái và chữ số.
-            - Chọn ngân hàng từ danh sách thay vì phải nhập mã BIN thủ công.
-            - Đồng bộ validation cấu hình chuyển khoản giữa JPOS và JPULSE.
+            - Gắn thẻ vật lý vào tài khoản ngay trong luồng tạo thành viên.
+            - Xác thực hai lần cùng một thẻ bằng mã thẻ và UUID trước khi xác nhận.
+            - Cho phép thử gắn lại thẻ mà không tạo trùng thành viên khi kết nối gián đoạn.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

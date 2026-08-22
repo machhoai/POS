@@ -19,9 +19,12 @@
    `member_getmember_serialnumber`.
 5. Khi có kết quả, POS tự động tra cứu; người dùng không cần bấm nút lần nữa.
 
-Người dùng vẫn có thể nhập mã thẻ thủ công. Trường hợp này POS tiếp tục dùng
-`member_getmember_membercode`, nên hai loại định danh không bị nhầm lẫn. Form
-đăng ký thành viên cũng cho phép đọc/nhập `CardNo`; trường này không bắt buộc.
+Người dùng vẫn có thể nhập mã thẻ thủ công khi **tra cứu**; POS tiếp tục dùng
+`member_getmember_membercode`, nên hai loại định danh không bị nhầm lẫn. Khi
+**đăng ký thành viên**, thẻ vật lý phải được đọc bằng đầu đọc để lấy cả `CardNo`
+và UUID chip. Sau `member_join`, JPOS gọi luồng `take/check` → đọc xác thực lần
+hai → `take/confirm`, rồi mới lưu mã thẻ vào `pos_members`. Nếu bước cấp thẻ lỗi,
+JPOS giữ UID vừa tạo để thử lại bước gắn thẻ mà không tạo thêm thành viên.
 
 ## Đóng gói SDK Decard
 

@@ -41,7 +41,7 @@ export interface MemberCardIssueConfirmInput extends MemberCardIssueInfoInput {
   memberAcctId: string;
   memberCode: string;
   memberIcCard: string;
-  dynamicSerialNo: string;
+  dynamicSerialNo: string | null;
 }
 
 export interface MemberLookupInput extends MemberScopeInput {
@@ -333,7 +333,7 @@ export function validateMemberCardIssueConfirmInput(
     memberAcctId: requiredString(input.memberAcctId, "Tài khoản thành viên", 128),
     memberCode,
     memberIcCard: requiredString(input.memberIcCard, "UUID thẻ", 128),
-    dynamicSerialNo: requiredString(input.dynamicSerialNo, "Mã xác thực thẻ", 256),
+    dynamicSerialNo: optionalString(input.dynamicSerialNo, "Mã xác thực thẻ", 256),
   };
 }
 

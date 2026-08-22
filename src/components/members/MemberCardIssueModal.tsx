@@ -4,16 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, CreditCard, LoaderCircle, Radio, ShieldAlert, X } from "lucide-react";
 import {
   cancelMemberCardRead,
-  readMemberCard,
   toCardReaderServiceError,
-  type CardReadResult,
 } from "@/lib/services/cardReaderService";
 import {
-  checkMemberCardForIssue,
   confirmMemberCardIssue,
   getMemberCardIssueInfo,
+  prepareMemberCardForIssue,
   toMemberCardIssueServiceError,
   type MemberCardIssueInfo,
+  type PreparedMemberCard,
 } from "@/lib/services/memberCardIssueService";
 import type { MemberProfile } from "@/lib/types/member";
 
@@ -28,17 +27,6 @@ interface MemberCardIssueModalProps {
   onSuccess: () => void;
 }
 
-function sameCard(left: CardReadResult, right: CardReadResult): boolean {
-  return Boolean(
-    left.memberCode
-      && right.memberCode
-      && left.memberCode === right.memberCode
-      && left.cardUuid
-      && right.cardUuid
-      && left.cardUuid === right.cardUuid,
-  );
-}
-
 const MemberCardIssueModal: React.FC<MemberCardIssueModalProps> = ({
   open,
   member,
@@ -49,7 +37,7 @@ const MemberCardIssueModal: React.FC<MemberCardIssueModalProps> = ({
 }) => {
   const [step, setStep] = useState<IssueStep>("LOADING");
   const [info, setInfo] = useState<MemberCardIssueInfo | null>(null);
-  const [card, setCard] = useState<CardReadResult | null>(null);
+  const [card, setCard] = useState<PreparedMemberCard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -95,22 +83,13 @@ const MemberCardIssueModal: React.FC<MemberCardIssueModalProps> = ({
     setError(null);
     setCard(null);
     try {
-      const firstRead = await readMemberCard(20_000);
-      if (!firstRead.memberCode || !firstRead.cardUuid) {
-        throw new Error("Đầu đọc không trả đủ mã thẻ và UUID của thẻ HK.");
-      }
-
-      setStep("VERIFYING");
-      const availability = await checkMemberCardForIssue({
+      const preparedCard = await prepareMemberCardForIssue({
         shopId,
         warehouseId,
-        memberCode: firstRead.memberCode,
+      }, (phase) => {
+        setStep(phase);
       });
-      const verifiedRead = await readMemberCard(20_000, availability.dynamicSerialNo);
-      if (!sameCard(firstRead, verifiedRead)) {
-        throw new Error("Thẻ ở lần xác thực không trùng thẻ vừa đọc. Vui lòng giữ nguyên một thẻ trên đầu đọc.");
-      }
-      setCard({ ...verifiedRead, dynamicSerialNo: availability.dynamicSerialNo });
+      setCard(preparedCard);
       setStep("READY");
     } catch (readError: unknown) {
       const message = readError instanceof Error && readError.message
@@ -122,7 +101,7 @@ const MemberCardIssueModal: React.FC<MemberCardIssueModalProps> = ({
   }, [info, shopId, warehouseId]);
 
   const handleConfirm = useCallback(async () => {
-    if (!card?.memberCode || !card.cardUuid || !card.dynamicSerialNo) return;
+    if (!card) return;
     setStep("CONFIRMING");
     setError(null);
     try {
@@ -133,7 +112,7 @@ const MemberCardIssueModal: React.FC<MemberCardIssueModalProps> = ({
         lookupQuery: member.phone || member.memberCode || member.uid,
         memberAcctId: info?.memberAcctId || member.uid,
         memberCode: card.memberCode,
-        memberIcCard: card.cardUuid,
+        memberIcCard: card.memberIcCard,
         dynamicSerialNo: card.dynamicSerialNo,
       });
       setSuccessMessage(result.message || "Đã cấp thêm thẻ thành viên thành công.");
@@ -184,7 +163,7 @@ const MemberCardIssueModal: React.FC<MemberCardIssueModalProps> = ({
           <div className="min-w-0 flex-1">
             <p className="font-black text-slate-900">{step === "READING" ? "Đang đọc thẻ lần 1..." : step === "VERIFYING" ? "Giữ nguyên thẻ — đang xác thực lần 2..." : card ? "Thẻ mới đã được xác thực" : "Đặt thẻ HK chưa kích hoạt lên đầu đọc"}</p>
             <p className="mt-1 text-sm font-semibold text-slate-600">Thẻ được cấp miễn phí theo chính sách cửa hàng. Thẻ cũ vẫn hoạt động; nếu khách báo mất thẻ, cần thu hồi hoặc khóa thẻ cũ riêng.</p>
-            {card?.memberCode ? <div className="mt-3 rounded-xl bg-white px-3 py-2"><p className="font-mono text-base font-black text-slate-950">{card.memberCode}</p><p className="mt-1 break-all text-xs text-slate-500">UUID: {card.cardUuid}</p></div> : null}
+            {card?.memberCode ? <div className="mt-3 rounded-xl bg-white px-3 py-2"><p className="font-mono text-base font-black text-slate-950">{card.memberCode}</p><p className="mt-1 break-all text-xs text-slate-500">UUID: {card.memberIcCard}</p></div> : null}
           </div>
         </div>
       </div> : null}

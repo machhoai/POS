@@ -2,6 +2,8 @@ import {
   getJoyworldBaseUrl,
   getJoyworldManagerAccessToken,
 } from "./joyworldCatalogService";
+import { fetchRemoteMemberCards } from "./hkApiService";
+import { saveStoredMemberCardIfPresent } from "./memberRepository";
 import { assertWarehouseAccess } from "../member/functions";
 import {
   validateMemberCardIssueCheckInput,
@@ -33,7 +35,7 @@ export interface MemberCardIssueInfo {
 }
 
 export interface MemberCardAvailability {
-  dynamicSerialNo: string;
+  dynamicSerialNo: string | null;
 }
 
 export interface ConfirmMemberCardIssueResult {
@@ -47,7 +49,8 @@ export type MemberCardIssueErrorCode =
   | "HK_MEMBER_NOT_FOUND"
   | "MEMBER_DISABLED"
   | "CARD_LIMIT_REACHED"
-  | "CARD_STATE_CHANGED";
+  | "CARD_STATE_CHANGED"
+  | "LOCAL_PERSISTENCE_FAILED";
 
 export class MemberCardIssueError extends Error {
   constructor(
@@ -223,13 +226,42 @@ async function checkCard(
     query: { memberCode },
   });
   const dynamicSerialNo = valueAsString(response.data);
-  if (!dynamicSerialNo) {
+  return { dynamicSerialNo };
+}
+
+async function isCardAlreadyAttached(
+  uid: string,
+  memberCode: string,
+): Promise<boolean> {
+  try {
+    const response = await fetchRemoteMemberCards(uid);
+    return response.success && Array.isArray(response.data) && response.data.some(
+      (card) => valueAsString(card.memberCode) === memberCode,
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function persistConfirmedCard(params: {
+  uid: string;
+  memberCode: string;
+  userId: string;
+}): Promise<void> {
+  try {
+    await saveStoredMemberCardIfPresent({
+      remoteUid: params.uid,
+      memberCode: params.memberCode,
+      updatedBy: params.userId,
+      lastRemoteSyncAt: new Date().toISOString(),
+    });
+  } catch {
     throw new MemberCardIssueError(
-      "HK_INVALID_RESPONSE",
-      "HK không trả mã xác thực động cho thẻ chưa kích hoạt.",
+      "LOCAL_PERSISTENCE_FAILED",
+      "Joyworld đã gắn thẻ nhưng POS chưa lưu được mã thẻ local. " +
+      "Có thể thử lại an toàn để đồng bộ hồ sơ.",
     );
   }
-  return { dynamicSerialNo };
 }
 
 export async function getMemberCardIssueInfoForUser(
@@ -271,6 +303,17 @@ export async function confirmMemberCardIssueForUser(
   }
   await assertMemberEnabled(input.shopId, resolvedMemberAcctId);
 
+  if (await isCardAlreadyAttached(input.uid, input.memberCode)) {
+    await persistConfirmedCard({
+      uid: input.uid,
+      memberCode: input.memberCode,
+      userId,
+    });
+    return {
+      message: "Thẻ đã được gắn trên Joyworld và đã đồng bộ vào POS.",
+    };
+  }
+
   const issueInfo = await loadIssueInfo(input.shopId, resolvedMemberAcctId);
   if (
     issueInfo.maxReceiveCard > 0 &&
@@ -299,9 +342,16 @@ export async function confirmMemberCardIssueForUser(
       cardInfoList: [{
         memberICCard: input.memberIcCard,
         memberCode: input.memberCode,
-        dynamicSerialNo: input.dynamicSerialNo,
+        ...(input.dynamicSerialNo
+          ? { dynamicSerialNo: input.dynamicSerialNo }
+          : {}),
       }],
     },
+  });
+  await persistConfirmedCard({
+    uid: input.uid,
+    memberCode: input.memberCode,
+    userId,
   });
   return {
     message: remoteMessage(response) || "Đã cấp thêm thẻ thành viên thành công.",

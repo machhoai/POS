@@ -114,8 +114,20 @@ test("validates member card issue requests without pricing fields", () => {
     surplusQty: 0,
   });
   assert.equal(confirm.memberCode, "01PAYJOYW003467");
+  assert.equal(confirm.dynamicSerialNo, "dynamic-01");
   assert.equal("unitPrice" in confirm, false);
   assert.equal("surplusQty" in confirm, false);
+
+  const withoutDynamicSerial = validateMemberCardIssueConfirmInput({
+    ...scope,
+    uid: "member-01",
+    lookupQuery: "0938571951",
+    memberAcctId: "acct-01",
+    memberCode: "01PAYJOYW003467",
+    memberIcCard: "card-uuid-01",
+    dynamicSerialNo: null,
+  });
+  assert.equal(withoutDynamicSerial.dynamicSerialNo, null);
 });
 
 test("rejects incomplete member card issue requests", () => {
@@ -130,9 +142,8 @@ test("rejects incomplete member card issue requests", () => {
       lookupQuery: "0938571951",
       memberAcctId: "acct-01",
       memberCode: "01PAYJOYW003467",
-      memberIcCard: "card-uuid-01",
     }),
-    /Mã xác thực thẻ không hợp lệ/,
+    /UUID thẻ không hợp lệ/,
   );
 });
 

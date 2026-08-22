@@ -1,11 +1,14 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
+import { readMemberCard } from "@/lib/services/cardReaderService";
 import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 
 interface MemberCardIssueScope {
   shopId: number;
   warehouseId: string;
 }
+
+export type MemberCardPreparationInput = MemberCardIssueScope;
 
 export interface MemberCardIssueInfoInput extends MemberCardIssueScope {
   uid: string;
@@ -19,7 +22,7 @@ export interface MemberCardIssueInfo {
 }
 
 export interface MemberCardAvailability {
-  dynamicSerialNo: string;
+  dynamicSerialNo: string | null;
 }
 
 export interface MemberCardIssueCheckInput extends MemberCardIssueScope {
@@ -30,8 +33,16 @@ export interface ConfirmMemberCardIssueInput extends MemberCardIssueInfoInput {
   memberAcctId: string;
   memberCode: string;
   memberIcCard: string;
-  dynamicSerialNo: string;
+  dynamicSerialNo: string | null;
 }
+
+export interface PreparedMemberCard {
+  memberCode: string;
+  memberIcCard: string;
+  dynamicSerialNo: string | null;
+}
+
+export type MemberCardPreparationPhase = "READING" | "VERIFYING";
 
 export interface ConfirmMemberCardIssueResult {
   message: string;
@@ -102,6 +113,54 @@ export function checkMemberCardForIssue(
     "checkMemberCardForIssue",
     input,
   );
+}
+
+function samePhysicalCard(
+  left: { memberCode?: string; cardUuid?: string },
+  right: { memberCode?: string; cardUuid?: string },
+): boolean {
+  return Boolean(
+    left.memberCode &&
+    right.memberCode &&
+    left.memberCode === right.memberCode &&
+    left.cardUuid &&
+    right.cardUuid &&
+    left.cardUuid === right.cardUuid,
+  );
+}
+
+export async function prepareMemberCardForIssue(
+  input: MemberCardPreparationInput,
+  onPhase?: (phase: MemberCardPreparationPhase) => void,
+): Promise<PreparedMemberCard> {
+  onPhase?.("READING");
+  const firstRead = await readMemberCard(20_000);
+  if (!firstRead.memberCode || !firstRead.cardUuid) {
+    throw new Error("Đầu đọc không trả đủ mã thẻ và UUID của thẻ Joyworld.");
+  }
+
+  onPhase?.("VERIFYING");
+  const availability = await checkMemberCardForIssue({
+    shopId: input.shopId,
+    warehouseId: input.warehouseId,
+    memberCode: firstRead.memberCode,
+  });
+  const verifiedRead = await readMemberCard(
+    20_000,
+    availability.dynamicSerialNo ?? undefined,
+  );
+  if (!samePhysicalCard(firstRead, verifiedRead)) {
+    throw new Error(
+      "Thẻ ở lần xác thực không trùng thẻ vừa đọc. " +
+      "Vui lòng giữ nguyên một thẻ trên đầu đọc.",
+    );
+  }
+
+  return {
+    memberCode: firstRead.memberCode,
+    memberIcCard: firstRead.cardUuid,
+    dynamicSerialNo: availability.dynamicSerialNo,
+  };
 }
 
 export function confirmMemberCardIssue(

@@ -70,6 +70,23 @@ export type RemoteMemberCompensationBody = {
   remark: string;
 };
 
+export type RemoteMemberRegistrationBody = {
+  openId: string;
+  phone: string;
+  realName: string;
+};
+
+/** `member_join` does not accept or attach a physical membership card. */
+export function buildRemoteMemberRegistrationBody(
+  input: HKMemberRegistrationBodyDto,
+): RemoteMemberRegistrationBody {
+  return {
+    openId: input.openId,
+    phone: input.phone,
+    realName: input.realName,
+  };
+}
+
 export function buildRemoteMemberCompensationBody(params: {
   uid: string;
   operationId: string;
@@ -565,12 +582,7 @@ export async function registerRemoteMember(
 ): Promise<HKApiResponse<HKMemberRegistrationDataDto>> {
   return sendToHKApi<HKMemberRegistrationDataDto>(
     "member_join",
-    {
-      openId: input.openId,
-      phone: input.phone,
-      realName: input.realName,
-      ...(input.memberCode ? { memberCode: input.memberCode } : {}),
-    },
+    buildRemoteMemberRegistrationBody(input),
     "10.11.8",
   );
 }

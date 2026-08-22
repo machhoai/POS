@@ -2,9 +2,26 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  buildRemoteMemberRegistrationBody,
   buildRemoteOrderCreateBody,
   buildRemoteOrderPayBody,
 } = require("../lib/services/hkApiService");
+
+test("member_join never sends an unsupported physical card field", () => {
+  const body = buildRemoteMemberRegistrationBody({
+    openId: "stable-open-id",
+    phone: "0901234567",
+    realName: "Khách hàng",
+    memberCode: "01PAYJOYW003467",
+  });
+
+  assert.deepEqual(body, {
+    openId: "stable-open-id",
+    phone: "0901234567",
+    realName: "Khách hàng",
+  });
+  assert.equal("memberCode" in body, false);
+});
 
 test("order_create sends only member and goods fields to the HK system", () => {
   const body = buildRemoteOrderCreateBody({

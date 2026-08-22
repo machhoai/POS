@@ -130,3 +130,30 @@ export async function saveStoredMemberProfile(
   });
 }
 
+/** Persist a card only after Joyworld confirms that it belongs to the member. */
+export async function saveStoredMemberCardIfPresent(params: {
+  remoteUid: string;
+  memberCode: string;
+  updatedBy: string;
+  lastRemoteSyncAt: string;
+}): Promise<StoredMemberProfile | null> {
+  const document = memberDocument(params.remoteUid);
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(document);
+    if (!snapshot.exists) return null;
+
+    const existing = parseStoredMemberProfile(snapshot.id, snapshot.data());
+    const updatedAt = new Date().toISOString();
+    const profile: StoredMemberProfile = {
+      ...existing,
+      memberCode: params.memberCode,
+      updatedBy: params.updatedBy,
+      updatedAt,
+      lastRemoteSyncAt: params.lastRemoteSyncAt,
+    };
+    transaction.set(document, profile);
+    return profile;
+  });
+}
+

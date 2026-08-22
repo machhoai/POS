@@ -434,7 +434,6 @@ export async function registerPosMemberForUser(
       openId: createMemberOpenId(input.phone),
       phone: input.phone,
       realName: input.fullName,
-      ...(input.memberCode ? { memberCode: input.memberCode } : {}),
     }),
   );
   const remoteUid = response.data?.uid?.trim() || "";
@@ -453,11 +452,11 @@ export async function registerPosMemberForUser(
     userId,
     remoteUid,
     mid,
-    memberCode: input.memberCode,
+    memberCode: null,
   });
 
   return {
-    member: registrationProfile(input, remoteUid, mid),
+    member: registrationProfile({ ...input, memberCode: null }, remoteUid, mid),
     remoteMessage: response.msg || null,
     createdAt: stored.createdAt,
   };

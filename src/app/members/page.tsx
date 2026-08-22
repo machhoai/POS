@@ -27,6 +27,12 @@ import {
     validateMemberRegistrationDraft,
 } from "@/lib/services/memberService";
 import {
+    confirmMemberCardIssue,
+    getMemberCardIssueInfo,
+    prepareMemberCardForIssue,
+    type PreparedMemberCard,
+} from "@/lib/services/memberCardIssueService";
+import {
     cancelMemberCardRead,
     readMemberCard,
     toCardReaderServiceError,
@@ -38,6 +44,7 @@ import type {
     CardReaderStatus,
     MemberCardLookupKind,
     MemberLookupMode,
+    MemberProfile,
     MemberRegistrationDraft,
 } from "@/lib/types/member";
 import type { Product } from "@/lib/types/product";
@@ -70,6 +77,8 @@ export default function MembersPage() {
     const [fetchedAt, setFetchedAt] = useState<string | null>(null);
     const [registrationCardReaderStatus, setRegistrationCardReaderStatus] = useState<CardReaderStatus>("IDLE");
     const [registrationCardReaderError, setRegistrationCardReaderError] = useState<string | null>(null);
+    const [registrationCard, setRegistrationCard] = useState<PreparedMemberCard | null>(null);
+    const [pendingRegistrationMember, setPendingRegistrationMember] = useState<MemberProfile | null>(null);
     const cardReadAttemptRef = useRef(0);
 
     const mode = useMemberStore((state) => state.lookupMode);
@@ -164,7 +173,9 @@ export default function MembersPage() {
         showLookupBalances: operation === "LOOKUP",
         draft,
         mutationStatus: mutation.status,
-        member: operation === "LOOKUP" ? member : registrationMember,
+        member: operation === "LOOKUP"
+            ? member
+            : registrationMember ?? pendingRegistrationMember,
     });
     useMemberPackageCustomerDisplayPublisher({
         enabled: isMemberPackageDisplayEnabled,
@@ -273,20 +284,25 @@ export default function MembersPage() {
     }, [completeCardRead, failCardRead, handleLookup, startCardRead]);
 
     const handleRegistrationCardRead = useCallback(async () => {
+        if (!auth.effectiveWarehouseId) {
+            showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi đọc thẻ.");
+            return;
+        }
         const attemptId = cardReadAttemptRef.current + 1;
         cardReadAttemptRef.current = attemptId;
         setRegistrationCardReaderStatus("READING");
         setRegistrationCardReaderError(null);
+        setRegistrationCard(null);
+        updateDraft({ memberCode: "" });
 
         try {
-            const result = await readMemberCard();
+            const result = await prepareMemberCardForIssue({
+                shopId,
+                warehouseId: auth.effectiveWarehouseId,
+            });
             if (cardReadAttemptRef.current !== attemptId) return;
-            if (!result.memberCode) {
-                throw new Error(
-                    "Đã nhận diện thẻ nhưng chưa đọc được mã thành viên. Bạn có thể nhập mã thủ công.",
-                );
-            }
             updateDraft({ memberCode: result.memberCode });
+            setRegistrationCard(result);
             setRegistrationCardReaderStatus("SUCCEEDED");
         } catch (error: unknown) {
             if (cardReadAttemptRef.current !== attemptId) return;
@@ -295,24 +311,22 @@ export default function MembersPage() {
             setRegistrationCardReaderStatus("FAILED");
             setRegistrationCardReaderError(readerError.message);
         }
-    }, [updateDraft]);
+    }, [auth.effectiveWarehouseId, shopId, updateDraft]);
 
     const handleCancelRegistrationCardRead = useCallback(() => {
         cardReadAttemptRef.current += 1;
         void cancelMemberCardRead().catch((error: unknown) => {
             console.warn("[Đầu đọc thẻ] Không thể gửi lệnh hủy:", error);
         });
+        setRegistrationCard(null);
+        updateDraft({ memberCode: "" });
         setRegistrationCardReaderStatus("FAILED");
         setRegistrationCardReaderError("Đã hủy chờ đọc thẻ. Có thể thử lại hoặc để trống.");
-    }, []);
+    }, [updateDraft]);
 
     const handleRegistrationDraftChange = useCallback((values: Partial<MemberRegistrationDraft>) => {
-        if (values.memberCode !== undefined && registrationCardReaderStatus !== "READING") {
-            setRegistrationCardReaderStatus("IDLE");
-            setRegistrationCardReaderError(null);
-        }
         updateDraft(values);
-    }, [registrationCardReaderStatus, updateDraft]);
+    }, [updateDraft]);
 
     const handleCancelCardRead = useCallback(() => {
         cardReadAttemptRef.current += 1;
@@ -397,7 +411,8 @@ export default function MembersPage() {
     });
 
     const handleRegister = useCallback(async (): Promise<boolean> => {
-        if (!auth.effectiveWarehouseId) {
+        const warehouseId = auth.effectiveWarehouseId;
+        if (!warehouseId) {
             showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi đăng ký.");
             return false;
         }
@@ -412,25 +427,89 @@ export default function MembersPage() {
             return false;
         }
 
+        if (
+            normalizedDraft.memberCode &&
+            (!registrationCard || registrationCard.memberCode !== normalizedDraft.memberCode)
+        ) {
+            showError(
+                "Thẻ chưa được xác thực",
+                "Vui lòng đọc thẻ vật lý bằng đầu đọc trước khi đăng ký.",
+            );
+            return false;
+        }
+        if (pendingRegistrationMember && !registrationCard) {
+            showError(
+                "Cần đọc lại thẻ",
+                "Thành viên đã được tạo. Vui lòng đọc thẻ vật lý để hoàn tất bước gắn thẻ.",
+            );
+            return false;
+        }
+
         startMutation("REGISTER");
+        let registeredMember = pendingRegistrationMember;
+        let createdAt = fetchedAt;
         try {
             const result = await showPromise(
-                registerMember({
-                    ...normalizedDraft,
-                    shopId,
-                    warehouseId: auth.effectiveWarehouseId,
-                }),
+                (async () => {
+                    if (!registeredMember) {
+                        const registration = await registerMember({
+                            ...normalizedDraft,
+                            memberCode: "",
+                            shopId,
+                            warehouseId,
+                        });
+                        registeredMember = registration.member;
+                        createdAt = registration.createdAt;
+                        setPendingRegistrationMember(registration.member);
+                        completeLookup(registration.member);
+                    }
+
+                    let completedMember = registeredMember;
+                    if (registrationCard) {
+                        const issueInfo = await getMemberCardIssueInfo({
+                            shopId,
+                            warehouseId,
+                            uid: registeredMember.uid,
+                            lookupQuery: registeredMember.phone || registeredMember.uid,
+                        });
+                        await confirmMemberCardIssue({
+                            shopId,
+                            warehouseId,
+                            uid: registeredMember.uid,
+                            lookupQuery: registeredMember.phone || registeredMember.uid,
+                            memberAcctId: issueInfo.memberAcctId,
+                            memberCode: registrationCard.memberCode,
+                            memberIcCard: registrationCard.memberIcCard,
+                            dynamicSerialNo: registrationCard.dynamicSerialNo,
+                        });
+                        completedMember = {
+                            ...registeredMember,
+                            memberCode: registrationCard.memberCode,
+                        };
+                    }
+
+                    return { member: completedMember, createdAt };
+                })(),
                 {
-                    loading: "Đang chờ OpenAPI đăng ký...",
-                    success: "Đăng ký thành viên thành công",
+                    loading: pendingRegistrationMember
+                        ? "Đang thử gắn lại thẻ trên Joyworld..."
+                        : registrationCard
+                            ? "Đang tạo thành viên và gắn thẻ..."
+                            : "Đang chờ OpenAPI đăng ký...",
+                    success: registrationCard
+                        ? "Đăng ký và gắn thẻ thành công"
+                        : "Đăng ký thành viên thành công",
                     error: "Đăng ký không thành công",
-                    successDescription: "OpenAPI đã xác nhận và POS đã lưu hồ sơ.",
-                    errorDescription: "Hồ sơ chưa được lưu. Xem lý do trên màn hình và thử lại.",
+                    successDescription: registrationCard
+                        ? "Joyworld đã xác nhận thẻ và POS đã lưu mã thẻ."
+                        : "OpenAPI đã xác nhận và POS đã lưu hồ sơ.",
+                    errorDescription: "Xem trạng thái chi tiết trên màn hình và thử lại an toàn.",
                     onRetry: retryRegistration,
                 }
             );
             completeLookup(result.member);
             completeMutation();
+            setPendingRegistrationMember(null);
             setCartMember({
                 uid: result.member.uid,
                 memberCode: result.member.memberCode,
@@ -438,15 +517,20 @@ export default function MembersPage() {
                 phone: result.member.phone,
                 levelName: result.member.levelName,
             });
-            setFetchedAt(result.createdAt);
+            setFetchedAt(result.createdAt ?? new Date().toISOString());
             return true;
         } catch (error: unknown) {
             const memberError = toMemberServiceError(error);
             console.error("[Thành viên] Đăng ký thất bại:", memberError);
-            failMutation(memberError.message, memberError.code);
+            failMutation(
+                registeredMember
+                    ? `Thành viên đã được tạo nhưng thẻ chưa được gắn: ${memberError.message}`
+                    : memberError.message,
+                memberError.code,
+            );
             return false;
         }
-    }, [auth.effectiveWarehouseId, completeLookup, completeMutation, draft, failMutation, setCartMember, shopId, startMutation, updateDraft]);
+    }, [auth.effectiveWarehouseId, completeLookup, completeMutation, draft, failMutation, fetchedAt, pendingRegistrationMember, registrationCard, setCartMember, shopId, startMutation, updateDraft]);
 
     const handleRegisterAndCheckout = useCallback(async () => {
         if (!registrationMember) {
@@ -541,9 +625,12 @@ export default function MembersPage() {
                                     onChange={handleRegistrationDraftChange}
                                     onReadCard={() => void handleRegistrationCardRead()}
                                     onCancelCardRead={handleCancelRegistrationCardRead}
+                                    memberCreated={Boolean(pendingRegistrationMember)}
                                     onRegister={() => void handleRegister()}
                                     onStartNew={() => {
                                         startNewRegistration();
+                                        setPendingRegistrationMember(null);
+                                        setRegistrationCard(null);
                                         setRegistrationCardReaderStatus("IDLE");
                                         setRegistrationCardReaderError(null);
                                         setCartMember(null);
