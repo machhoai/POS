@@ -58,10 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Cấp thẻ qua đơn bán thẻ Joyworld khi thành viên không còn suất thẻ chờ nhận.
-            - Tự lấy đầu cuối thu ngân hợp lệ từ tài khoản cấu hình để hoàn tất giao dịch thẻ.
-            - Không báo thiếu thẻ khi đơn đã hoàn tất và Joyworld đã gắn thẻ vào thành viên.
-            - Cho phép xóa thẻ lỗi hoặc rời phiên đăng ký mà không xóa thành viên đã tạo.
+            - Hiển thị đúng số dư Lượt và Điểm theo cấu hình tài khoản mới trên HK.
+            - Xem lịch sử riêng theo Tiền, Điểm thưởng và Lượt; mặc định mở lịch sử Lượt.
+            - Nạp bù hoặc trừ số dư vào đúng cột Lượt khi tra cứu bằng điện thoại hoặc thẻ.
+            - Bao gồm các cải tiến cấp thẻ Joyworld đã có trong bản 0.1.39.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
