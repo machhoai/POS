@@ -23,6 +23,7 @@ interface MemberRegistrationFormProps {
     cardReaderError: string | null;
     onReadCard: () => void;
     onCancelCardRead: () => void;
+    onClearCard: () => void;
     memberCreated: boolean;
 }
 
@@ -63,6 +64,7 @@ export default function MemberRegistrationForm({
     cardReaderError,
     onReadCard,
     onCancelCardRead,
+    onClearCard,
     memberCreated,
 }: MemberRegistrationFormProps) {
     const isWaiting = mutation.kind === "REGISTER" && mutation.status === "WAITING_API";
@@ -136,13 +138,13 @@ export default function MemberRegistrationForm({
                         <CreditCard className="size-4 text-[var(--color-accent)]" />
                         Thẻ thành viên <span className="font-medium text-[var(--color-text-muted)]">(không bắt buộc)</span>
                     </div>
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex flex-wrap gap-2">
                         <input
                             value={draft.memberCode}
                             readOnly
                             disabled={isLocked || cardReaderStatus === "READING"}
                             maxLength={64}
-                            className={`${fieldClass} min-w-0 flex-1 font-mono`}
+                            className={`${fieldClass} min-w-0 basis-full font-mono sm:flex-1 sm:basis-0`}
                             placeholder="01PAYJOYW003467"
                             aria-label="Mã thẻ thành viên"
                         />
@@ -155,14 +157,26 @@ export default function MemberRegistrationForm({
                                 <X className="size-4" /> Hủy
                             </button>
                         ) : (
-                            <button
-                                type="button"
-                                onClick={onReadCard}
-                                disabled={isLocked}
-                                className="inline-flex min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-orange-200 bg-white px-4 text-sm font-bold text-[var(--color-accent)] disabled:opacity-60"
-                            >
-                                <ScanLine className="size-4" /> Đọc thẻ
-                            </button>
+                            <>
+                                {draft.memberCode ? (
+                                    <button
+                                        type="button"
+                                        onClick={onClearCard}
+                                        disabled={isLocked}
+                                        className="inline-flex min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-red-200 bg-white px-4 text-sm font-bold text-red-700 disabled:opacity-60"
+                                    >
+                                        <X className="size-4" /> Xóa thẻ
+                                    </button>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={onReadCard}
+                                    disabled={isLocked}
+                                    className="inline-flex min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-orange-200 bg-white px-4 text-sm font-bold text-[var(--color-accent)] disabled:opacity-60"
+                                >
+                                    <ScanLine className="size-4" /> {draft.memberCode ? "Đọc thẻ khác" : "Đọc thẻ"}
+                                </button>
+                            </>
                         )}
                     </div>
                     {cardReaderStatus === "READING" ? (
@@ -192,11 +206,22 @@ export default function MemberRegistrationForm({
                     <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{mutation.failureReason}</p>
                 ) : null}
 
-                {memberCreated && mutation.status === "FAILED" ? (
-                    <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Thành viên đã được tạo. JPOS sẽ chỉ thử lại bước gắn thẻ, không tạo thêm tài khoản.</p>
+                {memberCreated ? (
+                    <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <p className="font-semibold">Thành viên đã được tạo. JPOS sẽ chỉ thử lại bước gắn thẻ, không tạo thêm tài khoản.</p>
+                        <p className="mt-1 text-xs text-amber-800">Nếu không muốn tiếp tục gắn thẻ, bạn có thể rời phiên này. Thành viên đã tạo trên Joyworld vẫn được giữ nguyên.</p>
+                        <button
+                            type="button"
+                            onClick={onStartNew}
+                            disabled={isWaiting}
+                            className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-4 font-bold text-amber-900 disabled:opacity-60"
+                        >
+                            <RotateCcw className="size-4" /> Rời phiên và đăng ký người khác
+                        </button>
+                    </div>
                 ) : null}
 
-                <button id="member-register-button" type="submit" disabled={isWaiting} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--color-accent)] px-5 font-bold text-white shadow-[var(--shadow-glow)] active:scale-[0.98] disabled:opacity-60">{isWaiting ? <LoaderCircle className="size-5 animate-spin" /> : <UserPlus className="size-5" />}{isWaiting ? (memberCreated ? "Đang gắn thẻ" : "Đang đăng ký") : memberCreated ? "Thử gắn thẻ lại" : mutation.status === "FAILED" ? "Thử đăng ký lại" : "Đăng ký"}</button>
+                <button id="member-register-button" type="submit" disabled={isWaiting || (memberCreated && !draft.memberCode)} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--color-accent)] px-5 font-bold text-white shadow-[var(--shadow-glow)] active:scale-[0.98] disabled:opacity-60">{isWaiting ? <LoaderCircle className="size-5 animate-spin" /> : <UserPlus className="size-5" />}{isWaiting ? (memberCreated ? "Đang gắn thẻ" : "Đang đăng ký") : memberCreated ? (draft.memberCode ? "Thử gắn thẻ lại" : "Đọc thẻ để tiếp tục") : mutation.status === "FAILED" ? "Thử đăng ký lại" : "Đăng ký"}</button>
             </form>
         </section>
     );

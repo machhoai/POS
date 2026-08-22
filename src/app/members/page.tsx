@@ -324,6 +324,38 @@ export default function MembersPage() {
         setRegistrationCardReaderError("Đã hủy chờ đọc thẻ. Có thể thử lại hoặc để trống.");
     }, [updateDraft]);
 
+    const handleClearRegistrationCard = useCallback(() => {
+        cardReadAttemptRef.current += 1;
+        setRegistrationCard(null);
+        updateDraft({ memberCode: "" });
+        setRegistrationCardReaderStatus("IDLE");
+        setRegistrationCardReaderError(null);
+    }, [updateDraft]);
+
+    const handleResetRegistrationFlow = useCallback(() => {
+        const retainedMember = pendingRegistrationMember;
+        cardReadAttemptRef.current += 1;
+        if (registrationCardReaderStatus === "READING") {
+            void cancelMemberCardRead().catch((error: unknown) => {
+                console.warn("[Đầu đọc thẻ] Không thể gửi lệnh hủy khi rời phiên đăng ký:", error);
+            });
+        }
+        startNewRegistration();
+        setPendingRegistrationMember(null);
+        setRegistrationCard(null);
+        setRegistrationCardReaderStatus("IDLE");
+        setRegistrationCardReaderError(null);
+        setCartMember(null);
+        setFetchedAt(null);
+
+        if (retainedMember) {
+            showWarning(
+                "Đã rời phiên đăng ký",
+                "Thông tin trên màn hình đã được xóa. Thành viên đã tạo trên Joyworld vẫn được giữ và có thể tra cứu lại.",
+            );
+        }
+    }, [pendingRegistrationMember, registrationCardReaderStatus, setCartMember, startNewRegistration]);
+
     const handleRegistrationDraftChange = useCallback((values: Partial<MemberRegistrationDraft>) => {
         updateDraft(values);
     }, [updateDraft]);
@@ -625,17 +657,10 @@ export default function MembersPage() {
                                     onChange={handleRegistrationDraftChange}
                                     onReadCard={() => void handleRegistrationCardRead()}
                                     onCancelCardRead={handleCancelRegistrationCardRead}
+                                    onClearCard={handleClearRegistrationCard}
                                     memberCreated={Boolean(pendingRegistrationMember)}
                                     onRegister={() => void handleRegister()}
-                                    onStartNew={() => {
-                                        startNewRegistration();
-                                        setPendingRegistrationMember(null);
-                                        setRegistrationCard(null);
-                                        setRegistrationCardReaderStatus("IDLE");
-                                        setRegistrationCardReaderError(null);
-                                        setCartMember(null);
-                                        setFetchedAt(null);
-                                    }}
+                                    onStartNew={handleResetRegistrationFlow}
                                 />
                             )}
                             {operation !== "REGISTER" ? (

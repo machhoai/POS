@@ -19,6 +19,7 @@ export interface MemberCardIssueInfo {
   memberAcctId: string;
   maxReceiveCard: number;
   takeCardNum: number;
+  surplusQty: number;
 }
 
 export interface MemberCardAvailability {

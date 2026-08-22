@@ -11,6 +11,13 @@ const MAX_PAGES = 100;
 
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
+interface CachedCashierToken {
+  token: string;
+  expiresAt: number;
+}
+
+const cachedCashierTokens = new Map<number, CachedCashierToken>();
+const cashierTokenRequests = new Map<number, Promise<string>>();
 
 /** Secrets that must be bound to every Cloud Function invoking this service. */
 export const joyworldUserSecret = defineSecret("JOYWORLD_USER");
@@ -113,6 +120,129 @@ export async function getJoyworldManagerAccessToken(
   cachedToken = token;
   tokenExpiresAt = Date.now() + TOKEN_TTL_MS;
   return token;
+}
+
+async function loadCashierWorkPlaceIds(
+  shopId: number,
+): Promise<string[]> {
+  const request = async (token: string) => fetch(
+    `${getJoyworldBaseUrl()}/device/manager/workplace/getsimpleworkplace?category=1`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "JJ-SHOPID": String(shopId),
+      },
+    },
+  );
+  let managerToken = await getJoyworldManagerAccessToken();
+  let response = await request(managerToken);
+  if (response.status === 401) {
+    managerToken = await getJoyworldManagerAccessToken(true);
+    response = await request(managerToken);
+  }
+  if (!response.ok) {
+    throw new Error(
+      `JoyWorld workplace lookup failed: HTTP ${response.status}`,
+    );
+  }
+
+  const result = asRecord(await response.json());
+  if (result.success !== true || !Array.isArray(result.data)) {
+    throw new Error("JoyWorld did not return cashier workplaces");
+  }
+  return [...new Set(result.data
+    .map((entry) => asRecord(entry).workPlaceId)
+    .filter((value): value is string => (
+      typeof value === "string" && value.length > 0
+    )))];
+}
+
+async function loginCashier(shopId: number): Promise<string> {
+  const userName = process.env.JOYWORLD_USER;
+  const password = process.env.JOYWORLD_PASS;
+  if (!userName || !password) {
+    throw new Error(
+      "Missing JOYWORLD_USER or JOYWORLD_PASS for cashier login",
+    );
+  }
+
+  const workPlaceIds = await loadCashierWorkPlaceIds(shopId);
+  if (workPlaceIds.length === 0) {
+    throw new Error("JoyWorld account has no cashier workplace for this shop");
+  }
+
+  for (const workPlaceId of workPlaceIds) {
+    const response = await fetch(
+      `${getJoyworldBaseUrl()}/basic/cashier/login/account`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "JJ-SHOPID": String(shopId),
+        },
+        body: JSON.stringify({ workPlaceId, userName, password }),
+      },
+    );
+    if (!response.ok) continue;
+
+    const result = asRecord(await response.json());
+    const data = asRecord(result.data);
+    const token = data.token;
+    if (result.success !== true || typeof token !== "string" || !token) {
+      continue;
+    }
+    if (String(data.shopId) !== String(shopId)) continue;
+
+    const expiresInMinutes = Number(data.expiresIn);
+    const ttlMs = Number.isFinite(expiresInMinutes) && expiresInMinutes > 5
+      ? (expiresInMinutes - 5) * 60 * 1000
+      : TOKEN_TTL_MS;
+    cachedCashierTokens.set(shopId, {
+      token,
+      expiresAt: Date.now() + ttlMs,
+    });
+    return token;
+  }
+
+  throw new Error(
+    "JoyWorld account could not log in to any cashier workplace for this shop",
+  );
+}
+
+/** Get a terminal-scoped cashier token using only the configured account. */
+export async function getJoyworldCashierAccessToken(
+  shopId: number,
+  forceRefresh = false,
+): Promise<string> {
+  if (forceRefresh) {
+    cachedCashierTokens.delete(shopId);
+  } else {
+    const cached = cachedCashierTokens.get(shopId);
+    if (cached && Date.now() < cached.expiresAt) return cached.token;
+  }
+
+  const pending = cashierTokenRequests.get(shopId);
+  if (pending && !forceRefresh) return pending;
+
+  const request = loginCashier(shopId);
+  cashierTokenRequests.set(shopId, request);
+  try {
+    return await request;
+  } finally {
+    if (cashierTokenRequests.get(shopId) === request) {
+      cashierTokenRequests.delete(shopId);
+    }
+  }
+}
+
+/** @internal Test-only cache reset. */
+export function resetJoyworldAccessTokenCachesForTest(): void {
+  cachedToken = null;
+  tokenExpiresAt = 0;
+  cachedCashierTokens.clear();
+  cashierTokenRequests.clear();
 }
 
 async function fetchManagerCatalogPage(
