@@ -46,7 +46,7 @@ import {
   validateMemberStoredValueHistoryInput,
 } from "./memberPolicy";
 
-const STORED_VALUE_CATEGORIES = [1, 2, 5, 6, 7] as const;
+const STORED_VALUE_CATEGORIES = [1, 2, 4, 5, 6, 7] as const;
 const REMOTE_HISTORY_PAGE_LIMIT = 100;
 
 interface StoredValueHistoryPage {
@@ -70,8 +70,9 @@ const EMPTY_BALANCES: MemberBalances = {
   principalVnd: 0,
   bonus: 0,
   totalAvailable: 0,
+  turns: 0,
   integral: 0,
-  lottery: 0,
+  points: 0,
   other: {},
 };
 

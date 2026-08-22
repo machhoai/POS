@@ -19,6 +19,7 @@ test("maps the confirmed member balance categories", () => {
     mapMemberBalances([
       { category: 101, value: "693" },
       { category: 102, value: 50 },
+      { category: 104, value: 11 },
       { category: 105, value: 7 },
       { category: 106, value: 3 },
       { category: 112, value: 9 },
@@ -27,8 +28,9 @@ test("maps the confirmed member balance categories", () => {
       principalVnd: 693,
       bonus: 50,
       totalAvailable: 743,
+      turns: 11,
       integral: 7,
-      lottery: 3,
+      points: 3,
       other: { 112: 9 },
     },
   );
@@ -61,6 +63,16 @@ test("selects the current shop when mapping a phone lookup", () => {
   assert.equal(member.uid, "current-shop");
   assert.equal(member.gender, "FEMALE");
   assert.equal(member.balances.totalAvailable, 120);
+});
+
+test("normalizes member-card balance category variants", () => {
+  const balances = mapMemberBalances([
+    { category: 4, value: 2 },
+    { category: 1006, value: 9 },
+  ]);
+
+  assert.equal(balances.turns, 2);
+  assert.equal(balances.points, 9);
 });
 
 test("preserves the queried card number when the card response omits it", () => {
@@ -121,7 +133,11 @@ test("maps total points as package amount plus configured give amounts", () => {
   const accounts = mapMemberAccounts([
     { key: "principal", value: "VND", extendAttr: 1, unit: "Đồng" },
     { key: "bonus", value: "赠币", extendAttr: 2, unit: "Đồng" },
+    { key: "turns", value: "Lượt", extendAttr: 4, unit: "Một" },
+    { key: "points", value: "Điểm", extendAttr: 6, unit: "Trương" },
   ]);
+  assert.equal(accounts.find((account) => account.accountId === "turns").bucket, "TURNS");
+  assert.equal(accounts.find((account) => account.accountId === "points").bucket, "POINTS");
   const result = mapMemberPointPackage({
     listItem: {
       goodsId: "silver-50",

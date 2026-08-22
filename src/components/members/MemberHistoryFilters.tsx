@@ -5,6 +5,7 @@ import {
   IoGameControllerOutline,
   IoGiftOutline,
   IoLayersOutline,
+  IoRepeatOutline,
 } from "react-icons/io5";
 import { memberHistoryCategories } from "@/components/members/memberHistoryPresentation";
 import type {
@@ -13,8 +14,9 @@ import type {
 } from "@/lib/types/member";
 
 const primaryCategories = [
-  { value: 1, label: "Xu / điểm chơi", icon: IoGameControllerOutline },
+  { value: 1, label: "Tiền", icon: IoGameControllerOutline },
   { value: 2, label: "Điểm thưởng", icon: IoGiftOutline },
+  { value: 4, label: "Lượt", icon: IoRepeatOutline },
 ] as const;
 const otherCategories: MemberStoredValueCategory[] = [5, 6, 7];
 const rangePresets = [7, 30, 90] as const;

@@ -3,23 +3,26 @@ export type HKNumberish = number | string | null | undefined;
 export const MEMBER_BALANCE_CATEGORIES = {
   PRINCIPAL_VND: 101,
   BONUS: 102,
+  TURNS: 104,
   INTEGRAL: 105,
-  LOTTERY: 106,
+  POINTS: 106,
 } as const;
 
 export const MEMBER_ACCOUNT_ATTRIBUTES = {
   PRINCIPAL_VND: 1,
   BONUS: 2,
+  TURNS: 4,
   INTEGRAL: 5,
-  LOTTERY: 6,
+  POINTS: 6,
 } as const;
 
 export type MemberGender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
 export type MemberBalanceBucket =
   | "PRINCIPAL_VND"
   | "BONUS"
+  | "TURNS"
   | "INTEGRAL"
-  | "LOTTERY"
+  | "POINTS"
   | "OTHER";
 
 export interface HKApiResponseDto<TData> {
@@ -184,7 +187,11 @@ export interface MemberCompensationRecord {
   member_uid: string;
   member_code: string | null;
   member_name: string;
-  stored_category: 1;
+  /** Legacy records used 1/6; HK's current playable balance is "Lượt" (4). */
+  stored_category:
+    | 1
+    | typeof MEMBER_ACCOUNT_ATTRIBUTES.TURNS
+    | typeof MEMBER_ACCOUNT_ATTRIBUTES.POINTS;
   amount: number;
   reason: string;
   accounting_category: 1004;
@@ -208,8 +215,9 @@ export interface MemberBalances {
   principalVnd: number;
   bonus: number;
   totalAvailable: number;
+  turns: number;
   integral: number;
-  lottery: number;
+  points: number;
   other: Record<string, number>;
 }
 
@@ -265,7 +273,7 @@ export interface MemberPointPackage {
   credits: MemberPackageCredit[];
 }
 
-export type MemberStoredValueCategory = 1 | 2 | 5 | 6 | 7;
+export type MemberStoredValueCategory = 1 | 2 | 4 | 5 | 6 | 7;
 
 export interface MemberStoredValueRecord {
   storedCategory: MemberStoredValueCategory;

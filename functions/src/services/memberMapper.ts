@@ -49,6 +49,12 @@ function toRequiredNumber(value: HKNumberish, fieldName: string): number {
   return numberValue;
 }
 
+function normalizeBalanceCategory(value: number): number {
+  if (value >= 1 && value <= 99) return value + 100;
+  if (value >= 1001 && value <= 1099) return value - 900;
+  return value;
+}
+
 function normalizeGender(value: string | number | null | undefined): MemberGender {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (["male", "m", "1", "nam", "男"].includes(normalized)) return "MALE";
@@ -65,10 +71,12 @@ function accountBucket(extendAttr: number): MemberBalanceBucket {
       return "PRINCIPAL_VND";
     case MEMBER_ACCOUNT_ATTRIBUTES.BONUS:
       return "BONUS";
+    case MEMBER_ACCOUNT_ATTRIBUTES.TURNS:
+      return "TURNS";
     case MEMBER_ACCOUNT_ATTRIBUTES.INTEGRAL:
       return "INTEGRAL";
-    case MEMBER_ACCOUNT_ATTRIBUTES.LOTTERY:
-      return "LOTTERY";
+    case MEMBER_ACCOUNT_ATTRIBUTES.POINTS:
+      return "POINTS";
     default:
       return "OTHER";
   }
@@ -78,15 +86,18 @@ export function mapMemberBalances(values: HKStoredValueDto[] | null | undefined)
   const valuesByCategory = new Map<number, number>();
 
   for (const item of values ?? []) {
-    const category = toFiniteNumber(item.category);
+    const rawCategory = toFiniteNumber(item.category);
     const value = toFiniteNumber(item.value);
-    if (category !== null && value !== null) valuesByCategory.set(category, value);
+    if (rawCategory !== null && value !== null) {
+      valuesByCategory.set(normalizeBalanceCategory(rawCategory), value);
+    }
   }
 
   const principalVnd = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.PRINCIPAL_VND) ?? 0;
   const bonus = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.BONUS) ?? 0;
+  const turns = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.TURNS) ?? 0;
   const integral = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.INTEGRAL) ?? 0;
-  const lottery = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.LOTTERY) ?? 0;
+  const points = valuesByCategory.get(MEMBER_BALANCE_CATEGORIES.POINTS) ?? 0;
   const knownCategories = new Set<number>(Object.values(MEMBER_BALANCE_CATEGORIES));
   const other = Object.fromEntries(
     [...valuesByCategory].filter(([category]) => !knownCategories.has(category)),
@@ -96,8 +107,9 @@ export function mapMemberBalances(values: HKStoredValueDto[] | null | undefined)
     principalVnd,
     bonus,
     totalAvailable: principalVnd + bonus,
+    turns,
     integral,
-    lottery,
+    points,
     other,
   };
 }

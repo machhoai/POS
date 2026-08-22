@@ -54,7 +54,7 @@ export function useMemberActivityController({
   warehouseId,
 }: UseMemberActivityControllerInput) {
   const [storedCategory, setStoredCategory] =
-    useState<MemberStoredValueCategoryFilter>(1);
+    useState<MemberStoredValueCategoryFilter>(4);
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(() => dateValue(new Date()));
   const [history, setHistory] = useState<LoadState<MemberStoredValueHistory>>({

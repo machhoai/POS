@@ -264,7 +264,7 @@ export function validateMemberStoredValueHistoryInput(
   const storedCategory = input.storedCategory === "ALL"
     ? "ALL"
     : Number(input.storedCategory);
-  if (storedCategory !== "ALL" && ![1, 2, 5, 6, 7].includes(storedCategory)) {
+  if (storedCategory !== "ALL" && ![1, 2, 4, 5, 6, 7].includes(storedCategory)) {
     throw new MemberInputError("Loại số dư không hợp lệ.");
   }
   const startTime = remoteDateTime(input.startTime, "Thời gian bắt đầu");

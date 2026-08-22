@@ -210,7 +210,7 @@ test("builds the documented member_addstored idempotent payload", () => {
     uid: "member-01",
     tradeNo: "019fe98d-d856-7c63-9404-6c0587d0c4ac",
     category: 1004,
-    storedCategory: 1,
+    storedCategory: 4,
     storedValue: 50,
     effectiveDays: 0,
     bizCode: "019fe98d-d856-7c63-9404-6c0587d0c4ac",
@@ -263,6 +263,17 @@ test("validates member stored-value history filters", () => {
     limit: 20,
   });
   assert.equal(bonusHistory.storedCategory, 2);
+
+  const turnsHistory = validateMemberStoredValueHistoryInput({
+    ...scope,
+    uid: "member-01",
+    storedCategory: 4,
+    startTime: "2026-08-01 00:00:00",
+    endTime: "2026-08-10 23:59:59",
+    page: 1,
+    limit: 20,
+  });
+  assert.equal(turnsHistory.storedCategory, 4);
 });
 
 test("rejects reversed history dates and invalid ticket categories", () => {

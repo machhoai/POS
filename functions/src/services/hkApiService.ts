@@ -13,18 +13,19 @@
 
 import { generateHkApiRequest } from "../utils/hk-signature";
 import * as functions from "firebase-functions";
-import type {
-  HKAccountDto,
-  HKMemberCardDto,
-  HKMemberCompensationDataDto,
-  HKMemberLookupDataDto,
-  HKMemberPackageDetailDto,
-  HKMemberPassTicketDto,
-  HKMemberProfileUpdateBodyDto,
-  HKMemberRegistrationBodyDto,
-  HKMemberRegistrationDataDto,
-  HKMemberStoredValueLogDto,
-  HKOrderPrecalculationDto,
+import {
+  MEMBER_ACCOUNT_ATTRIBUTES,
+  type HKAccountDto,
+  type HKMemberCardDto,
+  type HKMemberCompensationDataDto,
+  type HKMemberLookupDataDto,
+  type HKMemberPackageDetailDto,
+  type HKMemberPassTicketDto,
+  type HKMemberProfileUpdateBodyDto,
+  type HKMemberRegistrationBodyDto,
+  type HKMemberRegistrationDataDto,
+  type HKMemberStoredValueLogDto,
+  type HKOrderPrecalculationDto,
 } from "../types/member";
 
 // =============================================================================
@@ -63,7 +64,7 @@ export type RemoteMemberCompensationBody = {
   uid: string;
   tradeNo: string;
   category: 1004;
-  storedCategory: 1;
+  storedCategory: typeof MEMBER_ACCOUNT_ATTRIBUTES.TURNS;
   storedValue: number;
   effectiveDays: 0;
   bizCode: string;
@@ -97,7 +98,7 @@ export function buildRemoteMemberCompensationBody(params: {
     uid: params.uid,
     tradeNo: params.operationId,
     category: 1004,
-    storedCategory: 1,
+    storedCategory: MEMBER_ACCOUNT_ATTRIBUTES.TURNS,
     storedValue: params.amount,
     effectiveDays: 0,
     bizCode: params.operationId,

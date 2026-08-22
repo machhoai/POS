@@ -7,8 +7,8 @@ function genderLabel(gender: MemberGender): string {
   return { MALE: "Nam", FEMALE: "Nữ", OTHER: "Khác", UNKNOWN: "Chưa cập nhật" }[gender];
 }
 
-function pointValue(value: number): string {
-  return `${pointFormatter.format(value)} điểm`;
+function balanceValue(value: number, unit: string): string {
+  return `${pointFormatter.format(value)} ${unit}`;
 }
 
 interface MemberProfileCardProps {
@@ -26,10 +26,12 @@ export default function MemberProfileCard({ member, fetchedAt }: MemberProfileCa
     { icon: Mail, label: "Email", value: member.email || "Chưa cập nhật" },
   ];
   const balances = [
-    { label: "Tài khoản VND", value: member.balances.principalVnd, tone: "text-blue-700 bg-blue-50" },
-    { label: "Điểm thưởng", value: member.balances.bonus, tone: "text-amber-700 bg-amber-50" },
-    { label: "Tổng khả dụng", value: member.balances.totalAvailable, tone: "text-emerald-700 bg-emerald-50" },
-    { label: "Điểm tích lũy", value: member.balances.integral, tone: "text-violet-700 bg-violet-50" },
+    { label: "Tài khoản VND", value: member.balances.principalVnd, unit: "đ", tone: "text-blue-700 bg-blue-50" },
+    { label: "Tiền thưởng", value: member.balances.bonus, unit: "đ", tone: "text-amber-700 bg-amber-50" },
+    { label: "Tổng khả dụng", value: member.balances.totalAvailable, unit: "đ", tone: "text-emerald-700 bg-emerald-50" },
+    { label: "Lượt", value: member.balances.turns, unit: "lượt", tone: "text-orange-700 bg-orange-50" },
+    { label: "Điểm", value: member.balances.points, unit: "điểm", tone: "text-sky-700 bg-sky-50" },
+    { label: "Điểm tích lũy", value: member.balances.integral, unit: "điểm", tone: "text-violet-700 bg-violet-50" },
   ];
 
   return (
@@ -53,11 +55,11 @@ export default function MemberProfileCard({ member, fetchedAt }: MemberProfileCa
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 p-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 p-4 xl:grid-cols-3">
         {balances.map((balance) => (
           <div key={balance.label} className={`rounded-2xl p-4 ${balance.tone}`}>
             <p className="text-xs font-bold uppercase tracking-wide opacity-75">{balance.label}</p>
-            <p className="mt-2 text-xl font-black">{pointValue(balance.value)}</p>
+            <p className="mt-2 text-xl font-black">{balanceValue(balance.value, balance.unit)}</p>
           </div>
         ))}
       </div>

@@ -3,9 +3,10 @@ import { POS_COLLECTIONS } from "../config/collections";
 import { db } from "../config/firebase";
 import { compensateRemoteMemberBalance } from "../services/hkApiService";
 import { getPosAuthSession } from "../services/posAuthService";
-import type {
-  MemberCompensationRecord,
-  MemberCompensationStatus,
+import {
+  MEMBER_ACCOUNT_ATTRIBUTES,
+  type MemberCompensationRecord,
+  type MemberCompensationStatus,
 } from "../types/member";
 import { MemberRemoteApiError } from "./functions";
 import {
@@ -96,7 +97,7 @@ async function beginCompensation(params: {
         member_uid: params.input.uid,
         member_code: params.input.memberCode,
         member_name: params.input.memberName,
-        stored_category: 1,
+        stored_category: MEMBER_ACCOUNT_ATTRIBUTES.TURNS,
         amount: params.input.amount,
         reason: params.input.reason,
         accounting_category: 1004,

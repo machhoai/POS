@@ -58,9 +58,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Gắn thẻ vật lý vào tài khoản ngay trong luồng tạo thành viên.
-            - Xác thực hai lần cùng một thẻ bằng mã thẻ và UUID trước khi xác nhận.
-            - Cho phép thử gắn lại thẻ mà không tạo trùng thành viên khi kết nối gián đoạn.
+            - Hiển thị đúng số dư Lượt và Điểm theo cấu hình tài khoản mới trên HK.
+            - Xem lịch sử riêng theo Tiền, Điểm thưởng và Lượt; mặc định mở lịch sử Lượt.
+            - Nạp bù hoặc trừ số dư vào đúng cột Lượt và hỗ trợ cả tra cứu điện thoại lẫn thẻ.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

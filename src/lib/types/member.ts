@@ -5,8 +5,9 @@ export type MemberRegistrationGender = Extract<MemberGender, "MALE" | "FEMALE">;
 export type MemberBalanceBucket =
   | "PRINCIPAL_VND"
   | "BONUS"
+  | "TURNS"
   | "INTEGRAL"
-  | "LOTTERY"
+  | "POINTS"
   | "OTHER";
 
 export type RemoteRequestStatus = "IDLE" | "WAITING_API" | "SUCCEEDED" | "FAILED";
@@ -26,8 +27,9 @@ export interface MemberBalances {
   principalVnd: number;
   bonus: number;
   totalAvailable: number;
+  turns: number;
   integral: number;
-  lottery: number;
+  points: number;
   other: Record<string, number>;
 }
 
@@ -76,7 +78,7 @@ export interface MemberPointPackage {
   credits: MemberPackageCredit[];
 }
 
-export type MemberStoredValueCategory = 1 | 2 | 5 | 6 | 7;
+export type MemberStoredValueCategory = 1 | 2 | 4 | 5 | 6 | 7;
 export type MemberStoredValueCategoryFilter = MemberStoredValueCategory | "ALL";
 
 export interface MemberStoredValueRecord {
