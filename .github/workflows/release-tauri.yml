@@ -58,10 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Hiển thị đúng số dư Lượt và Điểm theo cấu hình tài khoản mới trên HK.
-            - Xem lịch sử riêng theo Tiền, Điểm thưởng và Lượt; mặc định mở lịch sử Lượt.
-            - Nạp bù hoặc trừ số dư vào đúng cột Lượt khi tra cứu bằng điện thoại hoặc thẻ.
-            - Bao gồm các cải tiến cấp thẻ Joyworld đã có trong bản 0.1.39.
+            - Bắt buộc đọc và xác thực thẻ vật lý trước khi đăng ký thành viên.
+            - Tự chọn tra cứu theo mã thẻ và kích hoạt đầu đọc khi mở trang Thành viên.
+            - Tự xóa trắng biểu mẫu sau khi đăng ký thành công, đồng thời giữ đúng thành viên cho bước thanh toán.
+            - Bổ sung quản lý lịch sử đơn hàng, bộ lọc, thử đồng bộ lại và số liệu tổng quan.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
