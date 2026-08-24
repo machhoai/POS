@@ -22,7 +22,14 @@ const EMPTY_ORDERS: PosOrder[] = [];
 
 export default function OrderHistoryPage() {
     const router = useRouter();
-    const { user, userDoc, isLoading: authLoading, logout } = useAuth();
+    const {
+        user,
+        userDoc,
+        effectiveWarehouseId,
+        effectiveWarehouseName,
+        isLoading: authLoading,
+        logout,
+    } = useAuth();
     const [filters, setFilters] = useState<OrderFilterState>(DEFAULT_FILTERS);
     const [selectedOrder, setSelectedOrder] = useState<PosOrder | null>(null);
     const [isRetrying, setIsRetrying] = useState(false);
@@ -43,18 +50,46 @@ export default function OrderHistoryPage() {
     }, [authLoading, user, userDoc, router]);
 
     useEffect(() => {
-        if (!user || !userDoc) return;
-        void fetchOrders().catch(() => {
+        if (!user || !userDoc || !effectiveWarehouseId) return;
+        void fetchOrders(effectiveWarehouseId).catch(() => {
             showError(
                 "Không thể tải lịch sử đơn",
                 "Vui lòng kiểm tra kết nối và thử lại.",
             );
         });
-    }, [user, userDoc, fetchOrders]);
+    }, [user, userDoc, effectiveWarehouseId, fetchOrders]);
+
+    const employeeOptions = useMemo(() => {
+        const employees = new Map<string, string>();
+        const todayOrders = effectiveWarehouseId
+            ? filterAndSortOrders(orders, DEFAULT_FILTERS, effectiveWarehouseId)
+            : [];
+        todayOrders.forEach((order) => {
+            const employeeId = order.createdBy || order.operatorFirebaseUid;
+            if (!employeeId) return;
+            employees.set(
+                employeeId,
+                order.operatorName?.trim() || order.operatorId?.trim() || employeeId,
+            );
+        });
+        return Array.from(employees, ([id, name]) => ({ id, name })).sort(
+            (left, right) => left.name.localeCompare(right.name, "vi"),
+        );
+    }, [effectiveWarehouseId, orders]);
+
+    const effectiveFilters = useMemo(
+        () => filters.employeeFilter === "all" ||
+            employeeOptions.some((employee) => employee.id === filters.employeeFilter)
+            ? filters
+            : { ...filters, employeeFilter: "all" },
+        [employeeOptions, filters],
+    );
 
     const filteredOrders = useMemo(
-        () => filterAndSortOrders(orders, filters),
-        [filters, orders],
+        () => effectiveWarehouseId
+            ? filterAndSortOrders(orders, effectiveFilters, effectiveWarehouseId)
+            : [],
+        [effectiveFilters, effectiveWarehouseId, orders],
     );
 
     const handleRetrySync = useCallback(async (orderToRetry?: PosOrder) => {
@@ -69,7 +104,9 @@ export default function OrderHistoryPage() {
                 successDescription: "Hệ thống sẽ tiếp tục thanh toán đơn ở chế độ nền.",
                 errorDescription: "Vui lòng kiểm tra cấu hình thanh toán và thử lại.",
             });
-            await fetchOrders();
+            if (effectiveWarehouseId) {
+                await fetchOrders(effectiveWarehouseId);
+            }
             if (selectedOrder && selectedOrder.localOrderId === targetOrder.localOrderId) {
                 setSelectedOrder(null);
             }
@@ -78,7 +115,7 @@ export default function OrderHistoryPage() {
         } finally {
             setIsRetrying(false);
         }
-    }, [selectedOrder, fetchOrders]);
+    }, [selectedOrder, fetchOrders, effectiveWarehouseId]);
 
     // Stats calculation
     const totalRevenue = useMemo(
@@ -131,7 +168,7 @@ export default function OrderHistoryPage() {
 
                         <button
                             type="button"
-                            onClick={() => void fetchOrders()}
+                            onClick={() => effectiveWarehouseId && void fetchOrders(effectiveWarehouseId)}
                             disabled={isLoadingOrders}
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:bg-[var(--color-surface-hover)] text-sm font-bold text-[var(--color-text-primary)] transition-all duration-150 active:scale-[0.98] disabled:opacity-50 shadow-sm"
                         >
@@ -214,7 +251,12 @@ export default function OrderHistoryPage() {
 
                         {/* Filters Bar */}
                         <div className="p-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-sm">
-                            <OrderFilters filters={filters} onChange={setFilters} />
+                            <OrderFilters
+                                filters={effectiveFilters}
+                                warehouseName={effectiveWarehouseName || "Chưa chọn cửa hàng"}
+                                employees={employeeOptions}
+                                onChange={setFilters}
+                            />
                         </div>
 
                         {/* Row Cards List */}

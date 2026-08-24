@@ -15,7 +15,7 @@ import {
 } from "@/lib/stores/useMemberStore";
 import type { PaymentMethod } from "@/lib/types/order";
 import type { Product } from "@/lib/types/product";
-import { showPromise } from "@/lib/utils/toast";
+import { showPromise, showWarning } from "@/lib/utils/toast";
 
 function clickButton(id: string): void {
   const button = document.getElementById(id);
@@ -29,6 +29,7 @@ interface MemberPackageSaleControllerInput {
   productsLoading: boolean;
   productsError: string | null;
   reloadProducts: () => Promise<void>;
+  onSaleCompleted?: (localOrderId: string) => void | Promise<void>;
 }
 
 const MEMBER_PACKAGE_CATEGORIES = new Set([1, 2, 6]);
@@ -70,6 +71,7 @@ export function useMemberPackageSaleController({
   productsLoading,
   productsError,
   reloadProducts,
+  onSaleCompleted,
 }: MemberPackageSaleControllerInput) {
   const member = useMemberStore((state) => state.currentMember);
   const packages = useMemberStore((state) => state.packages);
@@ -142,6 +144,28 @@ export function useMemberPackageSaleController({
     completeLookup(result.member);
   }, [cardReaderStatus, completeLookup, lookupMode, lookupQuery, member, shopId, warehouseId]);
 
+  const completeSuccessfulSale = useCallback(async (
+    orderId: string,
+    remoteOrderNumber: string | null,
+  ) => {
+    completeMutation(remoteOrderNumber ?? undefined);
+    try {
+      await onSaleCompleted?.(orderId);
+    } catch (error: unknown) {
+      console.error("[Thành viên] Hậu xử lý biên lai thất bại:", error);
+    }
+    try {
+      await refreshMember();
+    } catch (error: unknown) {
+      const serviceError = toMemberServiceError(error);
+      console.error("[Thành viên] Không thể tải lại số dư sau khi nạp gói:", serviceError);
+      showWarning(
+        "Đã nạp gói nhưng chưa tải lại được số dư",
+        serviceError.message,
+      );
+    }
+  }, [completeMutation, onSaleCompleted, refreshMember]);
+
   const finishRemoteSale = useCallback(async (orderId: string) => {
     setPaymentCollected(true);
     setCheckoutOpen(false);
@@ -155,14 +179,13 @@ export function useMemberPackageSaleController({
         errorDescription: "Tiền đã được ghi nhận. Không tạo đơn mới; hãy thử lại đơn hiện tại.",
         onRetry: () => clickButton("member-package-retry-remote"),
       });
-      completeMutation(result.remoteOrderNumber ?? undefined);
-      await refreshMember();
+      await completeSuccessfulSale(orderId, result.remoteOrderNumber);
     } catch (error: unknown) {
       const serviceError = toMemberServiceError(error);
       console.error("[Thành viên] Hoàn tất gói thất bại:", serviceError);
       failMutation(serviceError.message, serviceError.code);
     }
-  }, [completeMutation, failMutation, markWaitingApi, refreshMember]);
+  }, [completeSuccessfulSale, failMutation, markWaitingApi]);
 
   const orderItems = useMemo(() => selectedPackage ? [{
     goodsId: selectedPackage.goodsId,
@@ -215,9 +238,8 @@ export function useMemberPackageSaleController({
         errorDescription: "Đã ghi nhận tiền mặt. Hãy thử lại đúng đơn hiện tại.",
         onRetry: () => clickButton("member-package-retry-remote"),
       });
-      completeMutation(result.remoteOrderNumber ?? undefined);
       setCheckoutOpen(false);
-      await refreshMember();
+      await completeSuccessfulSale(localOrderId, result.remoteOrderNumber);
     } catch (error: unknown) {
       const serviceError = toMemberServiceError(error);
       console.error("[Thành viên] Bán gói tiền mặt thất bại:", serviceError);
@@ -225,11 +247,10 @@ export function useMemberPackageSaleController({
       setCheckoutOpen(false);
     }
   }, [
-    completeMutation,
+    completeSuccessfulSale,
     failMutation,
     localOrderId,
     member,
-    refreshMember,
     selectedPackage,
     shopId,
     startMutation,

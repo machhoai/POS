@@ -7,7 +7,7 @@ interface OrderHistoryState {
   isLoading: boolean;
   error: string | null;
   fetchedAt: string | null;
-  fetchOrders: () => Promise<void>;
+  fetchOrders: (warehouseId: string) => Promise<void>;
 }
 
 export const useOrderHistoryStore = create<OrderHistoryState>((set) => ({
@@ -16,10 +16,10 @@ export const useOrderHistoryStore = create<OrderHistoryState>((set) => ({
   error: null,
   fetchedAt: null,
 
-  fetchOrders: async () => {
+  fetchOrders: async (warehouseId) => {
     set({ isLoading: true, error: null });
     try {
-      const result = await fetchOrderHistory();
+      const result = await fetchOrderHistory({ warehouseId });
       set({
         orders: result.orders,
         isLoading: false,

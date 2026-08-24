@@ -46,6 +46,7 @@ interface CheckoutInput extends OrderInput {
 }
 
 interface OrderListInput {
+  warehouseId?: string;
   limit?: number;
 }
 
@@ -838,6 +839,42 @@ async function loadAccessibleOrders(
     );
 }
 
+async function loadAccessibleOrdersForWarehouse(
+  userId: string,
+  warehouseId: string,
+  requestedLimit: number,
+): Promise<PosOrder[]> {
+  const session = await getPosAuthSession(userId);
+  const hasWarehouseAccess = session.warehouses.some(
+    (warehouse) => warehouse.id === warehouseId,
+  );
+  if (!hasWarehouseAccess) {
+    throw new HttpsError(
+      "permission-denied",
+      "Bạn không có quyền xem đơn hàng tại cửa hàng này.",
+    );
+  }
+  const canReadWarehouseOrders = hasScopedPermission(
+    session.permissions,
+    "pos.orders.read",
+    warehouseId,
+  );
+  const snapshot = await db
+    .collection(POS_COLLECTIONS.orders)
+    .where("warehouseId", "==", warehouseId)
+    .orderBy("createdAt", "desc")
+    .limit(requestedLimit)
+    .get();
+
+  return snapshot.docs
+    .map((document) => document.data() as PosOrder)
+    .filter(
+      (order) =>
+        order.warehouseId === warehouseId &&
+        (order.createdBy === userId || canReadWarehouseOrders),
+    );
+}
+
 export async function listPosOrdersForUser(
   userId: string,
   data: unknown,
@@ -846,10 +883,22 @@ export async function listPosOrdersForUser(
     data && typeof data === "object"
       ? (data as OrderListInput).limit
       : undefined;
+  const warehouseId =
+    data && typeof data === "object" &&
+      typeof (data as OrderListInput).warehouseId === "string"
+      ? (data as OrderListInput).warehouseId?.trim()
+      : "";
+  if (!warehouseId) {
+    throw new HttpsError("invalid-argument", "Cửa hàng không hợp lệ.");
+  }
   const requestedLimit = Number.isInteger(rawLimit)
     ? Math.min(Math.max(Number(rawLimit), 1), 500)
     : 500;
-  const orders = await loadAccessibleOrders(userId, requestedLimit);
+  const orders = await loadAccessibleOrdersForWarehouse(
+    userId,
+    warehouseId,
+    requestedLimit,
+  );
 
   return {
     orders,

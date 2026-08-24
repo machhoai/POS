@@ -5,6 +5,7 @@ import { getOrderCustomerDisplay } from "@/lib/utils/orderCustomer";
 export function filterAndSortOrders(
   orders: PosOrder[],
   filters: OrderFilterState,
+  warehouseId: string,
 ): PosOrder[] {
   const now = new Date();
   const startOfToday = new Date(
@@ -19,12 +20,30 @@ export function filterAndSortOrders(
   ).getTime();
   let result = orders.filter((order) => {
     const createdAt = new Date(order.createdAt).getTime();
-    return createdAt >= startOfToday && createdAt < startOfTomorrow;
+    return order.warehouseId === warehouseId &&
+      createdAt >= startOfToday &&
+      createdAt < startOfTomorrow;
   });
 
   if (filters.statusFilter !== "all") {
     result = result.filter(
       (order) => order.status === filters.statusFilter,
+    );
+  }
+
+  if (filters.paymentMethodFilter !== "all") {
+    result = result.filter(
+      (order) =>
+        (order.paymentMethodId || order.paymentMethod) ===
+        filters.paymentMethodFilter,
+    );
+  }
+
+  if (filters.employeeFilter !== "all") {
+    result = result.filter(
+      (order) =>
+        (order.createdBy || order.operatorFirebaseUid) ===
+        filters.employeeFilter,
     );
   }
 

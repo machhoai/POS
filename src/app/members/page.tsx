@@ -12,6 +12,11 @@ import MemberPackageCheckoutModal from "@/components/members/MemberPackageChecko
 import MemberProductCatalog from "@/components/members/MemberProductCatalog";
 import MemberRegistrationForm from "@/components/members/MemberRegistrationForm";
 import StoreSelector from "@/components/pos/StoreSelector";
+import {
+    describeReceiptPrintError,
+    printReceiptSilently,
+} from "@/features/receipt/components/ReceiptPrintButton";
+import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
 import { useBarcodeScanner } from "@/lib/hooks/useBarcodeScanner";
@@ -20,6 +25,7 @@ import { useMemberActivityController } from "@/lib/hooks/useMemberActivityContro
 import { useMemberCompensationController } from "@/lib/hooks/useMemberCompensationController";
 import { useMemberPackageCustomerDisplayPublisher } from "@/lib/hooks/useMemberPackageCustomerDisplayPublisher";
 import { useMemberPackageSaleController } from "@/lib/hooks/useMemberPackageSaleController";
+import { fetchOrderForReceipt } from "@/lib/services/orderService";
 import {
     lookupMember,
     registerMember,
@@ -102,6 +108,7 @@ export default function MembersPage() {
     const requestCheckoutModal = useCartStore((state) => state.requestCheckoutModal);
     const setCheckoutContext = useCartStore((state) => state.setCheckoutContext);
     const hydrateCheckoutJournal = useCartStore((state) => state.hydrateCheckoutJournal);
+    const receiptSettings = useReceiptSettingsStore((state) => state.settings);
 
     const setMode = useMemberStore((state) => state.setLookupMode);
     const setQuery = useMemberStore((state) => state.setLookupQuery);
@@ -155,6 +162,34 @@ export default function MembersPage() {
     });
 
     const canCompensate = auth.hasPermission("pos.members.compensate", auth.effectiveWarehouseId || undefined);
+    const handleMemberPackageAutoPrint = useCallback(async (localOrderId: string) => {
+        console.info("[Biên lai thành viên] Bắt đầu in tự động", { localOrderId });
+        let order: Awaited<ReturnType<typeof fetchOrderForReceipt>>;
+        try {
+            order = await fetchOrderForReceipt(localOrderId);
+        } catch (error: unknown) {
+            console.error("[Biên lai thành viên] Không thể tải đơn để in tự động:", error);
+            showError(
+                "Nạp thẻ thành công nhưng chưa tải được biên lai",
+                "Dịch vụ đơn hàng chưa sẵn sàng. Vui lòng in lại từ lịch sử đơn hàng.",
+            );
+            return;
+        }
+
+        try {
+            await printReceiptSilently(order, receiptSettings);
+        } catch (error: unknown) {
+            console.error("[Biên lai thành viên] In tự động thất bại:", error);
+            showError(
+                "Nạp thẻ thành công nhưng chưa in được biên lai",
+                describeReceiptPrintError(
+                    error,
+                    "Không thể gửi biên lai tới máy in mặc định của Windows.",
+                ),
+            );
+        }
+    }, [receiptSettings]);
+
     const memberPackageSale = useMemberPackageSaleController({
         shopId,
         warehouseId: operation === "LOOKUP" ? auth.effectiveWarehouseId : null,
@@ -162,6 +197,7 @@ export default function MembersPage() {
         productsLoading,
         productsError,
         reloadProducts: fetchProducts,
+        onSaleCompleted: handleMemberPackageAutoPrint,
     });
     const isMemberPackageDisplayEnabled = operation === "LOOKUP" &&
         Boolean(member && memberPackageSale.selectedPackage);
