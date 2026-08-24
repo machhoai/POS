@@ -83,7 +83,7 @@ const idleMutation: MemberMutationState = {
 };
 
 export const useMemberStore = create<MemberState>((set) => ({
-  lookupMode: "PHONE",
+  lookupMode: "CARD",
   lookupQuery: "",
   cardReaderStatus: "IDLE",
   cardReaderError: null,

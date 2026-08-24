@@ -85,7 +85,9 @@ export default function MembersPage() {
     const [registrationCardReaderError, setRegistrationCardReaderError] = useState<string | null>(null);
     const [registrationCard, setRegistrationCard] = useState<PreparedMemberCard | null>(null);
     const [pendingRegistrationMember, setPendingRegistrationMember] = useState<MemberProfile | null>(null);
+    const [completedRegistrationMember, setCompletedRegistrationMember] = useState<MemberProfile | null>(null);
     const cardReadAttemptRef = useRef(0);
+    const hasStartedInitialCardReadRef = useRef(false);
 
     const mode = useMemberStore((state) => state.lookupMode);
     const query = useMemberStore((state) => state.lookupQuery);
@@ -121,11 +123,9 @@ export default function MembersPage() {
     const updateDraft = useMemberStore((state) => state.updateRegistrationDraft);
     const startNewRegistration = useMemberStore((state) => state.startNewRegistration);
     const startMutation = useMemberStore((state) => state.startMutation);
-    const completeMutation = useMemberStore((state) => state.completeMutation);
     const failMutation = useMemberStore((state) => state.failMutation);
     const resetSession = useMemberStore((state) => state.resetMemberSession);
 
-    const registrationMember = mutation.kind === "REGISTER" && mutation.status === "SUCCEEDED" ? member : null;
     const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
 
     const refreshAfterCompensation = useCallback(async () => {
@@ -211,7 +211,7 @@ export default function MembersPage() {
         mutationStatus: mutation.status,
         member: operation === "LOOKUP"
             ? member
-            : registrationMember ?? pendingRegistrationMember,
+            : completedRegistrationMember ?? pendingRegistrationMember,
     });
     useMemberPackageCustomerDisplayPublisher({
         enabled: isMemberPackageDisplayEnabled,
@@ -319,11 +319,35 @@ export default function MembersPage() {
         }
     }, [completeCardRead, failCardRead, handleLookup, startCardRead]);
 
+    useEffect(() => {
+        if (
+            hasStartedInitialCardReadRef.current ||
+            auth.isLoading ||
+            !auth.user ||
+            !auth.userDoc ||
+            !auth.effectiveWarehouseId ||
+            operation !== "LOOKUP"
+        ) {
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            hasStartedInitialCardReadRef.current = true;
+            setFetchedAt(null);
+            setMode("CARD");
+            void handleCardRead();
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [auth.effectiveWarehouseId, auth.isLoading, auth.user, auth.userDoc, handleCardRead, operation, setMode]);
+
     const handleRegistrationCardRead = useCallback(async () => {
         if (!auth.effectiveWarehouseId) {
             showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi đọc thẻ.");
             return;
         }
+        setCompletedRegistrationMember(null);
+        setCartMember(null);
         const attemptId = cardReadAttemptRef.current + 1;
         cardReadAttemptRef.current = attemptId;
         setRegistrationCardReaderStatus("READING");
@@ -347,7 +371,7 @@ export default function MembersPage() {
             setRegistrationCardReaderStatus("FAILED");
             setRegistrationCardReaderError(readerError.message);
         }
-    }, [auth.effectiveWarehouseId, shopId, updateDraft]);
+    }, [auth.effectiveWarehouseId, setCartMember, shopId, updateDraft]);
 
     const handleCancelRegistrationCardRead = useCallback(() => {
         cardReadAttemptRef.current += 1;
@@ -357,7 +381,7 @@ export default function MembersPage() {
         setRegistrationCard(null);
         updateDraft({ memberCode: "" });
         setRegistrationCardReaderStatus("FAILED");
-        setRegistrationCardReaderError("Đã hủy chờ đọc thẻ. Có thể thử lại hoặc để trống.");
+        setRegistrationCardReaderError("Đã hủy chờ đọc thẻ. Vui lòng đọc lại thẻ để có thể đăng ký.");
     }, [updateDraft]);
 
     const handleClearRegistrationCard = useCallback(() => {
@@ -378,6 +402,7 @@ export default function MembersPage() {
         }
         startNewRegistration();
         setPendingRegistrationMember(null);
+        setCompletedRegistrationMember(null);
         setRegistrationCard(null);
         setRegistrationCardReaderStatus("IDLE");
         setRegistrationCardReaderError(null);
@@ -393,8 +418,12 @@ export default function MembersPage() {
     }, [pendingRegistrationMember, registrationCardReaderStatus, setCartMember, startNewRegistration]);
 
     const handleRegistrationDraftChange = useCallback((values: Partial<MemberRegistrationDraft>) => {
+        if (completedRegistrationMember) {
+            setCompletedRegistrationMember(null);
+            setCartMember(null);
+        }
         updateDraft(values);
-    }, [updateDraft]);
+    }, [completedRegistrationMember, setCartMember, updateDraft]);
 
     const handleCancelCardRead = useCallback(() => {
         cardReadAttemptRef.current += 1;
@@ -432,6 +461,7 @@ export default function MembersPage() {
                 );
                 return;
             }
+            setCompletedRegistrationMember(null);
             setCartMember(null);
         }
         if (cardReaderStatus === "READING" || registrationCardReaderStatus === "READING") {
@@ -485,6 +515,20 @@ export default function MembersPage() {
             return false;
         }
 
+        if (
+            registrationCardReaderStatus !== "SUCCEEDED" ||
+            !registrationCard ||
+            registrationCard.memberCode !== draft.memberCode.trim()
+        ) {
+            showError(
+                pendingRegistrationMember ? "Cần đọc lại thẻ" : "Chưa đọc thẻ",
+                pendingRegistrationMember
+                    ? "Thành viên đã được tạo. Vui lòng đọc thẻ vật lý để hoàn tất bước gắn thẻ."
+                    : "Vui lòng đọc và xác thực thẻ vật lý bằng đầu đọc trước khi đăng ký.",
+            );
+            return false;
+        }
+
         let normalizedDraft: MemberRegistrationDraft;
         try {
             normalizedDraft = validateMemberRegistrationDraft(draft);
@@ -492,24 +536,6 @@ export default function MembersPage() {
         } catch (error: unknown) {
             const memberError = toMemberServiceError(error);
             showError("Thông tin chưa hợp lệ", memberError.message);
-            return false;
-        }
-
-        if (
-            normalizedDraft.memberCode &&
-            (!registrationCard || registrationCard.memberCode !== normalizedDraft.memberCode)
-        ) {
-            showError(
-                "Thẻ chưa được xác thực",
-                "Vui lòng đọc thẻ vật lý bằng đầu đọc trước khi đăng ký.",
-            );
-            return false;
-        }
-        if (pendingRegistrationMember && !registrationCard) {
-            showError(
-                "Cần đọc lại thẻ",
-                "Thành viên đã được tạo. Vui lòng đọc thẻ vật lý để hoàn tất bước gắn thẻ.",
-            );
             return false;
         }
 
@@ -575,9 +601,8 @@ export default function MembersPage() {
                     onRetry: retryRegistration,
                 }
             );
-            completeLookup(result.member);
-            completeMutation();
             setPendingRegistrationMember(null);
+            setCompletedRegistrationMember(result.member);
             setCartMember({
                 uid: result.member.uid,
                 memberCode: result.member.memberCode,
@@ -585,6 +610,10 @@ export default function MembersPage() {
                 phone: result.member.phone,
                 levelName: result.member.levelName,
             });
+            setRegistrationCard(null);
+            setRegistrationCardReaderStatus("IDLE");
+            setRegistrationCardReaderError(null);
+            startNewRegistration();
             setFetchedAt(result.createdAt ?? new Date().toISOString());
             return true;
         } catch (error: unknown) {
@@ -598,17 +627,17 @@ export default function MembersPage() {
             );
             return false;
         }
-    }, [auth.effectiveWarehouseId, completeLookup, completeMutation, draft, failMutation, fetchedAt, pendingRegistrationMember, registrationCard, setCartMember, shopId, startMutation, updateDraft]);
+    }, [auth.effectiveWarehouseId, completeLookup, draft, failMutation, fetchedAt, pendingRegistrationMember, registrationCard, registrationCardReaderStatus, setCartMember, shopId, startMutation, startNewRegistration, updateDraft]);
 
     const handleRegisterAndCheckout = useCallback(async () => {
-        if (!registrationMember) {
+        if (!completedRegistrationMember) {
             const registered = await handleRegister();
             if (!registered) return;
         }
 
         requestCheckoutModal();
         router.push("/");
-    }, [handleRegister, registrationMember, requestCheckoutModal, router]);
+    }, [completedRegistrationMember, handleRegister, requestCheckoutModal, router]);
 
     if (auth.isLoading || !auth.user || !auth.userDoc) {
         return (
@@ -719,7 +748,7 @@ export default function MembersPage() {
                                 isLoading={productsLoading}
                                 error={productsError}
                                 isPaymentLocked={isPaymentLocked}
-                                memberReady={Boolean(registrationMember)}
+                                memberReady={Boolean(completedRegistrationMember)}
                                 isRegistering={mutation.kind === "REGISTER" && mutation.status === "WAITING_API"}
                                 onReload={() => void fetchProducts()}
                                 onAdd={handleAddProduct}

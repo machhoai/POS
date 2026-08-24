@@ -712,8 +712,8 @@ def build():
     add_heading(doc, "8.2. Tra cứu thành viên", 2)
     add_figure(doc, "08_thanh_vien_tra_cuu.png", "Tra cứu theo số điện thoại và thẻ Hồ sơ thành viên")
     add_steps(doc, [
-        ("Chọn Tra cứu.", "Chế độ mặc định khi mở trang Thành viên."),
-        ("Chọn Số điện thoại hoặc Mã thẻ.", "Nếu chọn Mã thẻ, có thể đọc thẻ hoặc nhập mã thủ công."),
+        ("Mở trang Thành viên.", "Hệ thống mặc định chọn Tra cứu theo Mã thẻ và tự động kích hoạt đầu đọc thẻ."),
+        ("Đọc thẻ hoặc chuyển sang Số điện thoại.", "Giữ thẻ trên đầu đọc để tra cứu tự động; vẫn có thể nhập mã thủ công hoặc đổi phương thức tra cứu."),
         ("Nhập thông tin và bấm Tra cứu thành viên.", "Hệ thống lấy dữ liệu mới nhất từ OpenAPI."),
         ("Kiểm tra đúng khách.", "Đối chiếu họ tên, điện thoại, mã thẻ, hạng và UID/MID nếu cần."),
         ("Bấm Xóa phiên tra cứu.", "Xóa thông tin hiện tại trước khi phục vụ khách tiếp theo."),
@@ -731,10 +731,11 @@ def build():
     add_steps(doc, [
         ("Chọn Đăng ký mới.", "Không thể chuyển nếu giỏ đang bị khóa bởi phiên thanh toán."),
         ("Chọn danh xưng.", "Ông, Bà, Anh, Chị hoặc dấu -; danh xưng được ghép vào họ tên."),
-        ("Nhập Họ và tên và Số điện thoại.", "Hai trường có dấu * là bắt buộc."),
+        ("Nhập Họ và tên và Số điện thoại.", "Các trường có dấu * là bắt buộc."),
+        ("Đọc thẻ thành viên mới.", "Đặt thẻ vật lý lên đầu đọc, bấm Đọc thẻ và giữ nguyên thẻ trong hai lần xác thực. Đây là bước bắt buộc."),
         ("Chọn giới tính.", "Nam hoặc Nữ theo dữ liệu khách cung cấp."),
         ("Nhập ngày sinh và email nếu có.", "Ngày/tháng/năm tách riêng; email phải đúng định dạng."),
-        ("Bấm Đăng ký.", "Chờ OpenAPI xác nhận; khi thành công hồ sơ được lưu tại POS."),
+        ("Bấm Đăng ký.", "Nút chỉ được bật sau khi đọc thẻ hoàn tất. Khi thành công, hệ thống tự xóa trắng biểu mẫu và giữ thành viên vừa đăng ký cho bước thanh toán."),
         ("Tùy chọn chọn sản phẩm.", "Dùng nhóm Gói điểm, Vé hoặc Quà lưu niệm; bấm Thêm để giữ vào giỏ."),
         ("Bấm Đăng ký và thanh toán.", "Sau khi thành viên đã sẵn sàng, JPOS gắn thành viên vào đơn và quay về cửa sổ checkout."),
     ])

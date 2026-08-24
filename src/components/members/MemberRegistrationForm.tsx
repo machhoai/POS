@@ -1,5 +1,4 @@
 import {
-    CheckCircle2,
     CreditCard,
     LoaderCircle,
     RotateCcw,
@@ -27,7 +26,7 @@ interface MemberRegistrationFormProps {
     memberCreated: boolean;
 }
 
-const fieldClass = "h-13 w-full rounded-2xl border border-[var(--color-border-subtle)] bg-white px-4 text-base font-semibold transition-colors focus:border-[var(--color-accent)] disabled:bg-neutral-50 disabled:text-[var(--color-text-muted)]";
+const fieldClass = "h-14 w-full rounded-2xl border border-[var(--color-border-subtle)] bg-white px-4 py-4 text-base font-semibold transition-colors focus:border-[var(--color-accent)] disabled:bg-neutral-50 disabled:text-[var(--color-text-muted)]";
 const salutations = ["Ông", "Bà", "Anh", "Chị"] as const;
 
 type Salutation = (typeof salutations)[number];
@@ -68,26 +67,20 @@ export default function MemberRegistrationForm({
     memberCreated,
 }: MemberRegistrationFormProps) {
     const isWaiting = mutation.kind === "REGISTER" && mutation.status === "WAITING_API";
-    const isSucceeded = mutation.kind === "REGISTER" && mutation.status === "SUCCEEDED";
-    const isLocked = isWaiting || isSucceeded;
+    const isLocked = isWaiting;
     const isProfileLocked = isLocked || memberCreated;
+    const hasVerifiedCard = cardReaderStatus === "SUCCEEDED" && Boolean(draft.memberCode.trim());
     const selectedSalutation = salutationFromName(draft.fullName);
+    let submitLabel = mutation.status === "FAILED" ? "Thử đăng ký lại" : "Đăng ký";
 
-    if (isSucceeded) {
-        return (
-            <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm">
-                <CheckCircle2 className="mx-auto size-14 text-emerald-600" />
-                <h2 className="mt-3 text-xl font-extrabold text-emerald-900">Đăng ký thành viên thành công</h2>
-                <p className="mt-2 text-sm text-emerald-700">
-                    {draft.memberCode
-                        ? `Joyworld đã xác nhận thành viên và thẻ ${draft.memberCode}; hồ sơ đã được lưu tại POS.`
-                        : "OpenAPI đã xác nhận và hồ sơ đã được lưu tại POS."}
-                </p>
-                <button type="button" onClick={onStartNew} className="mt-5 inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 font-bold text-white active:scale-[0.98]">
-                    <RotateCcw className="size-5" /> Đăng ký thành viên khác
-                </button>
-            </section>
-        );
+    if (isWaiting) {
+        submitLabel = memberCreated ? "Đang gắn thẻ" : "Đang đăng ký";
+    } else if (cardReaderStatus === "READING") {
+        submitLabel = "Đang đọc thẻ...";
+    } else if (!hasVerifiedCard) {
+        submitLabel = memberCreated ? "Đọc thẻ để tiếp tục" : "Đọc thẻ để đăng ký";
+    } else if (memberCreated) {
+        submitLabel = "Thử gắn thẻ lại";
     }
 
     return (
@@ -131,53 +124,55 @@ export default function MemberRegistrationForm({
                         </button>
                     </div>
                 </fieldset>
-                <label className="block text-sm font-bold">Họ và tên *<input value={draft.fullName} onChange={(event) => onChange({ fullName: event.target.value })} disabled={isProfileLocked} maxLength={120} autoComplete="name" className={`${fieldClass} mt-1.5`} placeholder="Nguyễn Văn A" /></label>
-                <label className="block text-sm font-bold">Số điện thoại *<input value={draft.phone} onChange={(event) => onChange({ phone: event.target.value })} disabled={isProfileLocked} inputMode="tel" autoComplete="tel" className={`${fieldClass} mt-1.5`} placeholder="0901 234 567" /></label>
-                <div className="rounded-2xl border border-[var(--color-border-subtle)] bg-neutral-50 p-3">
+                <label className="block text-sm font-bold">Họ và tên *<input value={draft.fullName} onChange={(event) => onChange({ fullName: event.target.value })} disabled={isProfileLocked} maxLength={120} autoComplete="name" className={`${fieldClass} mt-1.5`} /></label>
+                <label className="block text-sm font-bold">Số điện thoại *<input value={draft.phone} onChange={(event) => onChange({ phone: event.target.value })} disabled={isProfileLocked} inputMode="tel" autoComplete="tel" className={`${fieldClass} mt-1.5`} /></label>
+                <div className="">
                     <div className="flex items-center gap-2 text-sm font-bold">
                         <CreditCard className="size-4 text-[var(--color-accent)]" />
-                        Thẻ thành viên <span className="font-medium text-[var(--color-text-muted)]">(không bắt buộc)</span>
+                        Thẻ thành viên * <span className="font-medium text-red-600">(bắt buộc đọc thẻ)</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-col gap-2">
                         <input
                             value={draft.memberCode}
                             readOnly
                             disabled={isLocked || cardReaderStatus === "READING"}
                             maxLength={64}
-                            className={`${fieldClass} min-w-0 basis-full font-mono sm:flex-1 sm:basis-0`}
-                            placeholder="01PAYJOYW003467"
+                            className={`${fieldClass} flex-1 min-w-0 h-14 basis-full font-mono sm:flex-1 sm:basis-0`}
+                            placeholder="Vui lòng đọc thẻ"
                             aria-label="Mã thẻ thành viên"
                         />
-                        {cardReaderStatus === "READING" ? (
-                            <button
-                                type="button"
-                                onClick={onCancelCardRead}
-                                className="inline-flex min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-red-200 bg-white px-4 text-sm font-bold text-red-700"
-                            >
-                                <X className="size-4" /> Hủy
-                            </button>
-                        ) : (
-                            <>
-                                {draft.memberCode ? (
-                                    <button
-                                        type="button"
-                                        onClick={onClearCard}
-                                        disabled={isLocked}
-                                        className="inline-flex min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-red-200 bg-white px-4 text-sm font-bold text-red-700 disabled:opacity-60"
-                                    >
-                                        <X className="size-4" /> Xóa thẻ
-                                    </button>
-                                ) : null}
+                        <div className="flex">
+                            {cardReaderStatus === "READING" ? (
                                 <button
                                     type="button"
-                                    onClick={onReadCard}
-                                    disabled={isLocked}
-                                    className="inline-flex min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-orange-200 bg-white px-4 text-sm font-bold text-[var(--color-accent)] disabled:opacity-60"
+                                    onClick={onCancelCardRead}
+                                    className="inline-flex flex-1 justify-center min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-red-200 bg-white px-4 text-sm font-bold text-red-700"
                                 >
-                                    <ScanLine className="size-4" /> {draft.memberCode ? "Đọc thẻ khác" : "Đọc thẻ"}
+                                    <X className="size-4" /> Hủy
                                 </button>
-                            </>
-                        )}
+                            ) : (
+                                <>
+                                    {draft.memberCode ? (
+                                        <button
+                                            type="button"
+                                            onClick={onClearCard}
+                                            disabled={isLocked}
+                                            className="inline-flex flex-1 justify-center min-h-13 shrink-0 items-center gap-2 rounded-2xl border border-red-200 bg-white px-4 text-sm font-bold text-red-700 disabled:opacity-60"
+                                        >
+                                            <X className="size-4" /> Xóa
+                                        </button>
+                                    ) : null}
+                                    <button
+                                        type="button"
+                                        onClick={onReadCard}
+                                        disabled={isLocked}
+                                        className="inline-flex flex-1 min-h-13 shrink-0 items-center gap-2 rounded-2xl border bg-orange-400 text-white justify-center px-4 text-sm font-bold text-[var(--color-accent)] disabled:opacity-60"
+                                    >
+                                        <ScanLine className="size-4" /> {draft.memberCode ? "Đọc thẻ khác" : "Đọc thẻ"}
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
                     {cardReaderStatus === "READING" ? (
                         <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-[var(--color-accent)]">
@@ -188,10 +183,36 @@ export default function MemberRegistrationForm({
                     ) : cardReaderError ? (
                         <p className="mt-2 text-xs font-semibold text-red-700">{cardReaderError}</p>
                     ) : (
-                        <p className="mt-2 text-xs text-[var(--color-text-muted)]">Nhấn Đọc thẻ và giữ nguyên thẻ trên đầu đọc trong hai lần xác thực. Để trống nếu chưa cấp thẻ vật lý.</p>
+                        <p className="mt-2 text-xs text-[var(--color-text-muted)]">Nhấn Đọc thẻ và giữ nguyên thẻ trên đầu đọc trong hai lần xác thực.</p>
                     )}
                 </div>
-                <label className="block text-sm font-bold">Giới tính<select value={draft.gender} onChange={(event) => onChange({ gender: event.target.value as MemberRegistrationDraft["gender"] })} disabled={isProfileLocked} className={`${fieldClass} mt-1.5`}><option value="MALE">Nam</option><option value="FEMALE">Nữ</option></select></label>
+                <fieldset disabled={isProfileLocked}>
+                    <legend className="text-sm font-bold">Giới tính</legend>
+                    <div className="mt-1.5 grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            aria-pressed={draft.gender === "MALE"}
+                            onClick={() => onChange({ gender: "MALE" })}
+                            className={`min-h-11 rounded-xl border px-3 text-sm font-bold transition-colors ${draft.gender === "MALE"
+                                ? "border-[var(--color-accent)] bg-orange-50 text-[var(--color-accent)]"
+                                : "border-[var(--color-border-subtle)] bg-white text-[var(--color-text-secondary)]"
+                                }`}
+                        >
+                            Nam
+                        </button>
+                        <button
+                            type="button"
+                            aria-pressed={draft.gender === "FEMALE"}
+                            onClick={() => onChange({ gender: "FEMALE" })}
+                            className={`min-h-11 rounded-xl border px-3 text-sm font-bold transition-colors ${draft.gender === "FEMALE"
+                                ? "border-[var(--color-accent)] bg-orange-50 text-[var(--color-accent)]"
+                                : "border-[var(--color-border-subtle)] bg-white text-[var(--color-text-secondary)]"
+                                }`}
+                        >
+                            Nữ
+                        </button>
+                    </div>
+                </fieldset>
                 <fieldset>
                     <legend className="text-sm font-bold">Ngày sinh</legend>
                     <div className="mt-1.5 grid grid-cols-[0.75fr_0.75fr_1fr] gap-2">
@@ -221,7 +242,15 @@ export default function MemberRegistrationForm({
                     </div>
                 ) : null}
 
-                <button id="member-register-button" type="submit" disabled={isWaiting || (memberCreated && !draft.memberCode)} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--color-accent)] px-5 font-bold text-white shadow-[var(--shadow-glow)] active:scale-[0.98] disabled:opacity-60">{isWaiting ? <LoaderCircle className="size-5 animate-spin" /> : <UserPlus className="size-5" />}{isWaiting ? (memberCreated ? "Đang gắn thẻ" : "Đang đăng ký") : memberCreated ? (draft.memberCode ? "Thử gắn thẻ lại" : "Đọc thẻ để tiếp tục") : mutation.status === "FAILED" ? "Thử đăng ký lại" : "Đăng ký"}</button>
+                <button
+                    id="member-register-button"
+                    type="submit"
+                    disabled={isWaiting || !hasVerifiedCard}
+                    className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--color-accent)] px-5 font-bold text-white shadow-[var(--shadow-glow)] active:scale-[0.98] disabled:opacity-60"
+                >
+                    {isWaiting ? <LoaderCircle className="size-5 animate-spin" /> : <UserPlus className="size-5" />}
+                    {submitLabel}
+                </button>
             </form>
         </section>
     );
