@@ -41,7 +41,7 @@ export type CustomerDisplayPaymentStatus =
   | "CANCELLED"
   | "ERROR";
 
-/** Một dòng hàng chỉ chứa thông tin khách hàng cần nhìn thấy. */
+/** Một dòng hàng chỉ chứa thông tin khách hàng cần nhìn thấy, không kèm trạng thái hệ thống. */
 export interface CustomerDisplayItem {
   name: string;
   quantity: number;
@@ -76,6 +76,7 @@ export interface CustomerDisplayMemberSnapshot {
     integral: number;
     bonus: number;
     principalVnd: number;
+    turns: number;
   } | null;
 }
 
@@ -147,7 +148,7 @@ export interface CustomerDisplayMemberState extends CustomerDisplayBaseState {
  * Payload duy nhất được phép truyền sang cửa sổ khách.
  *
  * Không thêm UID, token, mã đơn nội bộ, mã PayOS nội bộ, thông tin nhân viên,
- * dữ liệu đồng bộ hoặc secret vào hợp đồng này.
+ * dữ liệu đồng bộ, thông báo vận hành hoặc secret vào hợp đồng này.
  */
 export type CustomerDisplayState =
   | CustomerDisplayIdleState

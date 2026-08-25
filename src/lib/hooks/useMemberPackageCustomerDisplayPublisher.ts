@@ -34,7 +34,7 @@ export function useMemberPackageCustomerDisplayPublisher({
   const paymentSession = payment.session;
   const paymentNextAction = payment.nextAction;
   const paymentRemainingSeconds = payment.remainingSeconds;
-  const paymentErrorMessage = payment.errorMessage;
+  const hasPaymentError = payment.errorMessage !== null;
   const paymentIsCartLocked = payment.isCartLocked;
   const paymentIsBusy = payment.isBusy;
   const packageMutationStatus = mutation.kind === "PACKAGE_TOP_UP" ? mutation.status : "IDLE";
@@ -42,14 +42,9 @@ export function useMemberPackageCustomerDisplayPublisher({
     if (!enabled || !selectedPackage) {
       return createIdleCustomerDisplayState("CONNECTED");
     }
-    const statusText = packageMutationStatus === "WAITING_API"
-      ? " · Đang chờ OpenAPI cộng điểm"
-      : packageMutationStatus === "SUCCEEDED"
-        ? " · Đã cộng điểm thành công"
-        : "";
     const items = [{
       goodsId: selectedPackage.goodsId,
-      goodsName: `${selectedPackage.name} · Nhận ${selectedPackage.totalPoints.toLocaleString("vi-VN")} điểm${statusText}`,
+      goodsName: `${selectedPackage.name} · Nhận ${selectedPackage.totalPoints.toLocaleString("vi-VN")} điểm`,
       price: selectedPackage.paymentAmountVnd,
       quantity: 1,
     }];
@@ -71,7 +66,7 @@ export function useMemberPackageCustomerDisplayPublisher({
             session: paymentSession,
             nextAction: paymentNextAction,
             remainingSeconds: paymentRemainingSeconds,
-            errorMessage: paymentErrorMessage,
+            hasError: hasPaymentError,
             isCartLocked: paymentIsCartLocked,
             isBusy: paymentIsBusy,
             fixedTransfer: null
@@ -88,7 +83,7 @@ export function useMemberPackageCustomerDisplayPublisher({
   }, [
     enabled,
     packageMutationStatus,
-    paymentErrorMessage,
+    hasPaymentError,
     paymentIsBusy,
     paymentIsCartLocked,
     paymentMethod,

@@ -84,12 +84,7 @@ export default function MemberRegistrationForm({
     }
 
     return (
-        <section className="rounded-3xl border border-[var(--color-border)] bg-white p-4 shadow-sm md:p-5">
-            <div className="mb-4 flex items-center gap-3">
-                <span className="flex size-11 items-center justify-center rounded-2xl bg-orange-50 text-[var(--color-accent)]"><UserPlus className="size-6" /></span>
-                <div><h2 className="text-lg font-extrabold">Đăng ký thành viên mới</h2><p className="text-xs text-[var(--color-text-muted)]">Các trường có dấu * là bắt buộc</p></div>
-            </div>
-
+        <section className="rounded-3xl border border-[var(--color-border)] bg-white p-4 md:p-5">
             <form onSubmit={(event) => { event.preventDefault(); onRegister(); }} className="space-y-3">
                 <fieldset disabled={isProfileLocked}>
                     <legend className="text-sm font-bold">Danh xưng</legend>

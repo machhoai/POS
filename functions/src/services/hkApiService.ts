@@ -14,7 +14,7 @@
 import { generateHkApiRequest } from "../utils/hk-signature";
 import * as functions from "firebase-functions";
 import {
-  MEMBER_ACCOUNT_ATTRIBUTES,
+  type MemberCompensationCategory,
   type HKAccountDto,
   type HKMemberCardDto,
   type HKMemberCompensationDataDto,
@@ -64,7 +64,7 @@ export type RemoteMemberCompensationBody = {
   uid: string;
   tradeNo: string;
   category: 1004;
-  storedCategory: typeof MEMBER_ACCOUNT_ATTRIBUTES.TURNS;
+  storedCategory: MemberCompensationCategory;
   storedValue: number;
   effectiveDays: 0;
   bizCode: string;
@@ -91,6 +91,7 @@ export function buildRemoteMemberRegistrationBody(
 export function buildRemoteMemberCompensationBody(params: {
   uid: string;
   operationId: string;
+  storedCategory: MemberCompensationCategory;
   amount: number;
   remark: string;
 }): RemoteMemberCompensationBody {
@@ -98,7 +99,7 @@ export function buildRemoteMemberCompensationBody(params: {
     uid: params.uid,
     tradeNo: params.operationId,
     category: 1004,
-    storedCategory: MEMBER_ACCOUNT_ATTRIBUTES.TURNS,
+    storedCategory: params.storedCategory,
     storedValue: params.amount,
     effectiveDays: 0,
     bizCode: params.operationId,
@@ -601,6 +602,7 @@ export async function updateRemoteMemberProfile(
 export async function compensateRemoteMemberBalance(params: {
   uid: string;
   operationId: string;
+  storedCategory: MemberCompensationCategory;
   amount: number;
   remark: string;
 }): Promise<HKApiResponse<HKMemberCompensationDataDto>> {

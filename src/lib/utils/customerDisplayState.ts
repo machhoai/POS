@@ -21,7 +21,8 @@ interface CustomerDisplayPaymentSource {
   fixedTransfer: FixedTransferDetails | null;
   nextAction: PayOSNextAction | null;
   remainingSeconds: number;
-  errorMessage: string | null;
+  /** Chỉ truyền tín hiệu lỗi; không đưa nội dung lỗi vận hành vào luồng màn hình khách. */
+  hasError: boolean;
   isCartLocked: boolean;
   isBusy: boolean;
 }
@@ -167,7 +168,7 @@ export function createCustomerDisplayState(
       input.payment.fixedTransfer !== null ||
       input.payment.isBusy ||
       input.payment.isCartLocked ||
-      input.payment.errorMessage !== null);
+      input.payment.hasError);
 
   if (hasTransferSession) {
     return {

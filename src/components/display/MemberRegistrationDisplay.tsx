@@ -1,4 +1,4 @@
-import { CalendarDays, CheckCircle2, Coins, Mail, Phone, UserRound, WalletCards } from "lucide-react";
+import { CalendarDays, CheckCircle2, Coins, Mail, Phone, Repeat2, UserRound, WalletCards } from "lucide-react";
 import type { CustomerDisplayMemberState } from "@/lib/types/customerDisplay";
 import type { CustomerDisplayLanguage } from "@/lib/types/customerDisplayControl";
 import { getCustomerDisplayCopy, getCustomerDisplayLocale } from "@/lib/utils/customerDisplayI18n";
@@ -22,9 +22,10 @@ export default function MemberRegistrationDisplay({ state, language }: MemberReg
         { icon: Mail, label: copy.email, value: state.member.email || copy.notEntered },
     ];
     const balanceItems = balances ? [
-        { label: copy.vndAccount, value: balances.principalVnd, icon: WalletCards, tone: "bg-blue-50 text-blue-700" },
-        { label: copy.bonusPoints, value: balances.bonus, icon: Coins, tone: "bg-amber-50 text-amber-700" },
-        { label: copy.integralPoints, value: balances.integral, icon: Coins, tone: "bg-violet-50 text-violet-700" },
+        { label: copy.vndAccount, value: balances.principalVnd, unit: copy.currencyUnit, icon: WalletCards, tone: "bg-blue-50 text-blue-700" },
+        { label: copy.bonusPoints, value: balances.bonus, unit: copy.points, icon: Coins, tone: "bg-amber-50 text-amber-700" },
+        { label: copy.integralPoints, value: balances.integral, unit: copy.points, icon: Coins, tone: "bg-violet-50 text-violet-700" },
+        { label: copy.turns, value: balances.turns ?? 0, unit: copy.turnUnit, icon: Repeat2, tone: "bg-orange-50 text-orange-700" },
     ] : [];
 
     return (
@@ -55,12 +56,12 @@ export default function MemberRegistrationDisplay({ state, language }: MemberReg
 
                 {balances ? (
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                        {balanceItems.map(({ icon: Icon, label, value, tone }) => (
+                        {balanceItems.map(({ icon: Icon, label, value, unit, tone }) => (
                             <div key={label} className={`flex min-h-0 py-2 items-center gap-3 rounded-2xl px-4 ${tone}`}>
                                 <Icon className="size-6 shrink-0" />
                                 <div className="min-w-0">
                                     <p className="text-xs font-bold opacity-75">{label}</p>
-                                    <p className="mt-1 text-xl font-black">{pointFormatter.format(value)} {copy.points}</p>
+                                    <p className="mt-1 text-xl font-black">{pointFormatter.format(value)} {unit}</p>
                                 </div>
                             </div>
                         ))}

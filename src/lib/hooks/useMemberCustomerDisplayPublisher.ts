@@ -58,6 +58,7 @@ function memberSnapshot(
           integral: member.balances.integral,
           bonus: member.balances.bonus,
           principalVnd: member.balances.principalVnd,
+          turns: member.balances.turns,
         }
       : null,
   };

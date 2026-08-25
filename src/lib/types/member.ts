@@ -80,6 +80,7 @@ export interface MemberPointPackage {
 
 export type MemberStoredValueCategory = 1 | 2 | 4 | 5 | 6 | 7;
 export type MemberStoredValueCategoryFilter = MemberStoredValueCategory | "ALL";
+export type MemberCompensationCategory = Extract<MemberStoredValueCategory, 4 | 6>;
 
 export interface MemberStoredValueRecord {
   storedCategory: MemberStoredValueCategory;
@@ -133,6 +134,7 @@ export interface MemberRegistrationDraft {
 }
 
 export interface MemberCompensationDraft {
+  storedCategory: MemberCompensationCategory;
   amount: number | null;
   reason: string;
 }
@@ -144,6 +146,7 @@ export interface MemberCompensationInput {
   uid: string;
   memberCode: string | null;
   memberName: string;
+  storedCategory: MemberCompensationCategory;
   amount: number;
   reason: string;
   actionTime: string;

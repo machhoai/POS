@@ -16,9 +16,9 @@ import type {
 const primaryCategories = [
   { value: 1, label: "Tiền", icon: IoGameControllerOutline },
   { value: 2, label: "Điểm thưởng", icon: IoGiftOutline },
-  { value: 4, label: "Lượt", icon: IoRepeatOutline },
+  { value: 6, label: "Lượt", icon: IoRepeatOutline },
 ] as const;
-const otherCategories: MemberStoredValueCategory[] = [5, 6, 7];
+const otherCategories: MemberStoredValueCategory[] = [4, 5, 7];
 const rangePresets = [7, 30, 90] as const;
 
 function toDateValue(date: Date): string {

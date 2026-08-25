@@ -70,6 +70,7 @@ const emptyRegistrationDraft: MemberRegistrationDraft = {
 };
 
 const emptyCompensationDraft: MemberCompensationDraft = {
+  storedCategory: 6,
   amount: null,
   reason: "",
 };

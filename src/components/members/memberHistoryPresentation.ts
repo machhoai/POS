@@ -36,11 +36,11 @@ export const memberHistoryCategories: Record<
     iconClassName: "bg-amber-100 text-amber-700",
   },
   4: {
-    label: "Lượt",
-    unit: "lượt",
-    icon: IoRepeatOutline,
-    badgeClassName: "bg-orange-50 text-orange-700",
-    iconClassName: "bg-orange-100 text-orange-700",
+    label: "Điểm",
+    unit: "điểm",
+    icon: IoTicketOutline,
+    badgeClassName: "bg-sky-50 text-sky-700",
+    iconClassName: "bg-sky-100 text-sky-700",
   },
   5: {
     label: "Điểm tích lũy",
@@ -50,11 +50,11 @@ export const memberHistoryCategories: Record<
     iconClassName: "bg-violet-100 text-violet-700",
   },
   6: {
-    label: "Điểm",
-    unit: "điểm",
-    icon: IoTicketOutline,
-    badgeClassName: "bg-sky-50 text-sky-700",
-    iconClassName: "bg-sky-100 text-sky-700",
+    label: "Lượt",
+    unit: "lượt",
+    icon: IoRepeatOutline,
+    badgeClassName: "bg-orange-50 text-orange-700",
+    iconClassName: "bg-orange-100 text-orange-700",
   },
   7: {
     label: "Vé xanh",

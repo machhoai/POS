@@ -3,6 +3,7 @@ import { functions } from "@/lib/firebase/client";
 import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 import { MemberServiceError, toMemberServiceError } from "@/lib/services/memberService";
 import type {
+  MemberCompensationCategory,
   MemberCompensationDraft,
   MemberCompensationInput,
   MemberCompensationResult,
@@ -10,14 +11,20 @@ import type {
 
 export function validateMemberCompensationDraft(
   draft: MemberCompensationDraft,
-): { amount: number; reason: string } {
+): { storedCategory: MemberCompensationCategory; amount: number; reason: string } {
+  if (draft.storedCategory !== 4 && draft.storedCategory !== 6) {
+    throw new MemberServiceError(
+      "Cột nạp bù phải là Lượt hoặc Điểm.",
+      "invalid-compensation-category",
+    );
+  }
   if (
     !Number.isInteger(draft.amount) ||
     Number(draft.amount) === 0 ||
     Math.abs(Number(draft.amount)) > 10_000_000
   ) {
     throw new MemberServiceError(
-      "Số điểm điều chỉnh phải là số nguyên khác 0, từ -10.000.000 đến 10.000.000.",
+      "Số lượng điều chỉnh phải là số nguyên khác 0, từ -10.000.000 đến 10.000.000.",
       "invalid-compensation-amount",
     );
   }
@@ -28,7 +35,11 @@ export function validateMemberCompensationDraft(
       "invalid-compensation-reason",
     );
   }
-  return { amount: Number(draft.amount), reason };
+  return {
+    storedCategory: draft.storedCategory,
+    amount: Number(draft.amount),
+    reason,
+  };
 }
 
 export async function compensateMemberBalance(

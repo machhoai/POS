@@ -1,20 +1,26 @@
 export type HKNumberish = number | string | null | undefined;
 
+/** HK balance columns: 104 = Điểm, 106 = Lượt. */
 export const MEMBER_BALANCE_CATEGORIES = {
   PRINCIPAL_VND: 101,
   BONUS: 102,
-  TURNS: 104,
+  TURNS: 106,
   INTEGRAL: 105,
-  POINTS: 106,
+  POINTS: 104,
 } as const;
 
+/** HK account attributes follow the same domain mapping: 4 = Điểm, 6 = Lượt. */
 export const MEMBER_ACCOUNT_ATTRIBUTES = {
   PRINCIPAL_VND: 1,
   BONUS: 2,
-  TURNS: 4,
+  TURNS: 6,
   INTEGRAL: 5,
-  POINTS: 6,
+  POINTS: 4,
 } as const;
+
+export type MemberCompensationCategory =
+  | typeof MEMBER_ACCOUNT_ATTRIBUTES.TURNS
+  | typeof MEMBER_ACCOUNT_ATTRIBUTES.POINTS;
 
 export type MemberGender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
 export type MemberBalanceBucket =
@@ -187,11 +193,8 @@ export interface MemberCompensationRecord {
   member_uid: string;
   member_code: string | null;
   member_name: string;
-  /** Legacy records used 1/6; HK's current playable balance is "Lượt" (4). */
-  stored_category:
-    | 1
-    | typeof MEMBER_ACCOUNT_ATTRIBUTES.TURNS
-    | typeof MEMBER_ACCOUNT_ATTRIBUTES.POINTS;
+  /** Legacy records used 1; current compensation targets are Lượt (6) and Điểm (4). */
+  stored_category: 1 | MemberCompensationCategory;
   amount: number;
   reason: string;
   accounting_category: 1004;

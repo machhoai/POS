@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import type {
-  MemberGender,
-  MemberStoredValueCategory,
+import {
+  MEMBER_ACCOUNT_ATTRIBUTES,
+  type MemberCompensationCategory,
+  type MemberGender,
+  type MemberStoredValueCategory,
 } from "../types/member";
 
 export type MemberLookupMode = "CARD" | "PHONE";
@@ -180,6 +182,7 @@ export interface MemberCompensationInput extends MemberScopeInput {
   uid: string;
   memberCode: string | null;
   memberName: string;
+  storedCategory: MemberCompensationCategory;
   amount: number;
   reason: string;
   actionTime: string;
@@ -372,13 +375,23 @@ export function validateMemberCompensationInput(
   if (reason.length < 5) {
     throw new MemberInputError("Lý do nạp bù phải có ít nhất 5 ký tự.");
   }
+  const storedCategory = Number(
+    input.storedCategory ?? MEMBER_ACCOUNT_ATTRIBUTES.TURNS,
+  );
+  if (
+    storedCategory !== MEMBER_ACCOUNT_ATTRIBUTES.TURNS &&
+    storedCategory !== MEMBER_ACCOUNT_ATTRIBUTES.POINTS
+  ) {
+    throw new MemberInputError("Cột nạp bù phải là Lượt hoặc Điểm.");
+  }
   return {
     ...scopeInput(input),
     operationId,
     uid: requiredString(input.uid, "UID thành viên", 128),
     memberCode: normalizeMemberCode(input.memberCode),
     memberName: requiredString(input.memberName, "Tên thành viên", 120),
-    amount: nonZeroInteger(input.amount, "Số điểm điều chỉnh", 10_000_000),
+    storedCategory: storedCategory as MemberCompensationCategory,
+    amount: nonZeroInteger(input.amount, "Số lượng điều chỉnh", 10_000_000),
     reason,
     actionTime: parsedActionTime.toISOString(),
   };

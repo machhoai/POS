@@ -4,7 +4,6 @@ import { db } from "../config/firebase";
 import { compensateRemoteMemberBalance } from "../services/hkApiService";
 import { getPosAuthSession } from "../services/posAuthService";
 import {
-  MEMBER_ACCOUNT_ATTRIBUTES,
   type MemberCompensationRecord,
   type MemberCompensationStatus,
 } from "../types/member";
@@ -59,6 +58,7 @@ function sameOperation(
   return record.warehouse_id === input.warehouseId &&
     record.shop_id === input.shopId &&
     record.member_uid === input.uid &&
+    record.stored_category === input.storedCategory &&
     record.amount === input.amount &&
     record.reason === input.reason &&
     record.created_by === userId &&
@@ -97,7 +97,7 @@ async function beginCompensation(params: {
         member_uid: params.input.uid,
         member_code: params.input.memberCode,
         member_name: params.input.memberName,
-        stored_category: MEMBER_ACCOUNT_ATTRIBUTES.TURNS,
+        stored_category: params.input.storedCategory,
         amount: params.input.amount,
         reason: params.input.reason,
         accounting_category: 1004,
@@ -221,6 +221,7 @@ async function finishCompensation(params: {
         status: next.status,
         member_uid: next.member_uid,
         member_code: next.member_code,
+        stored_category: next.stored_category,
         amount: next.amount,
         reason: next.reason,
         remote_total_value: next.remote_total_value,
@@ -273,10 +274,14 @@ export async function compensatePosMemberForUser(
 
   let response;
   try {
-    const remoteRemarkPrefix = input.amount < 0 ? "Điều chỉnh trừ điểm thẻ" : "Nạp bù thẻ";
+    const balanceLabel = input.storedCategory === 6 ? "lượt" : "điểm";
+    const remoteRemarkPrefix = input.amount < 0
+      ? `Điều chỉnh trừ ${balanceLabel} thẻ`
+      : `Nạp bù ${balanceLabel} thẻ`;
     response = await compensateRemoteMemberBalance({
       uid: input.uid,
       operationId: input.operationId,
+      storedCategory: input.storedCategory,
       amount: input.amount,
       remark: `${remoteRemarkPrefix}: ${input.reason}`,
     });

@@ -154,12 +154,14 @@ test("validates and normalizes a member compensation request", () => {
     uid: "member-01",
     memberCode: "CARD-01",
     memberName: "Nguyễn Văn A",
+    storedCategory: 6,
     amount: 50,
     reason: "Bù số dư do lỗi ghi thẻ",
     actionTime: "2026-08-10T10:30:20+07:00",
   });
 
   assert.equal(input.amount, 50);
+  assert.equal(input.storedCategory, 6);
   assert.equal(input.reason, "Bù số dư do lỗi ghi thẻ");
   assert.equal(input.actionTime, "2026-08-10T03:30:20.000Z");
 
@@ -178,17 +180,18 @@ test("rejects invalid compensation amounts, reasons, and operation ids", () => {
     uid: "member-01",
     memberCode: null,
     memberName: "Nguyễn Văn A",
+    storedCategory: 4,
     amount: 50,
     reason: "Bù lỗi thẻ",
     actionTime: "2026-08-10T03:30:20.000Z",
   };
   assert.throws(
     () => validateMemberCompensationInput({ ...base, amount: 0 }),
-    /Số điểm điều chỉnh không hợp lệ/,
+    /Số lượng điều chỉnh không hợp lệ/,
   );
   assert.throws(
     () => validateMemberCompensationInput({ ...base, amount: -10_000_001 }),
-    /Số điểm điều chỉnh không hợp lệ/,
+    /Số lượng điều chỉnh không hợp lệ/,
   );
   assert.throws(
     () => validateMemberCompensationInput({ ...base, reason: "lỗi" }),
@@ -198,19 +201,39 @@ test("rejects invalid compensation amounts, reasons, and operation ids", () => {
     () => validateMemberCompensationInput({ ...base, operationId: "retry-1" }),
     /Mã thao tác nạp bù không hợp lệ/,
   );
+  assert.throws(
+    () => validateMemberCompensationInput({ ...base, storedCategory: 5 }),
+    /Cột nạp bù phải là Lượt hoặc Điểm/,
+  );
+});
+
+test("defaults legacy member compensation requests to the turns column", () => {
+  const input = validateMemberCompensationInput({
+    ...scope,
+    operationId: "019fe98d-d856-7c63-9404-6c0587d0c4ac",
+    uid: "member-01",
+    memberCode: null,
+    memberName: "Nguyễn Văn A",
+    amount: 1,
+    reason: "Bù lỗi thẻ",
+    actionTime: "2026-08-10T03:30:20.000Z",
+  });
+
+  assert.equal(input.storedCategory, 6);
 });
 
 test("builds the documented member_addstored idempotent payload", () => {
   assert.deepEqual(buildRemoteMemberCompensationBody({
     uid: "member-01",
     operationId: "019fe98d-d856-7c63-9404-6c0587d0c4ac",
+    storedCategory: 6,
     amount: 50,
     remark: "Nạp bù thẻ: Bù số dư do lỗi ghi thẻ",
   }), {
     uid: "member-01",
     tradeNo: "019fe98d-d856-7c63-9404-6c0587d0c4ac",
     category: 1004,
-    storedCategory: 4,
+    storedCategory: 6,
     storedValue: 50,
     effectiveDays: 0,
     bizCode: "019fe98d-d856-7c63-9404-6c0587d0c4ac",
@@ -222,6 +245,7 @@ test("preserves a negative stored value for point deductions", () => {
   assert.equal(buildRemoteMemberCompensationBody({
     uid: "member-01",
     operationId: "019fe98d-d856-7c63-9404-6c0587d0c4ad",
+    storedCategory: 4,
     amount: -50,
     remark: "Điều chỉnh trừ điểm thẻ: Thu hồi điểm nạp thừa",
   }).storedValue, -50);
@@ -267,13 +291,13 @@ test("validates member stored-value history filters", () => {
   const turnsHistory = validateMemberStoredValueHistoryInput({
     ...scope,
     uid: "member-01",
-    storedCategory: 4,
+    storedCategory: 6,
     startTime: "2026-08-01 00:00:00",
     endTime: "2026-08-10 23:59:59",
     page: 1,
     limit: 20,
   });
-  assert.equal(turnsHistory.storedCategory, 4);
+  assert.equal(turnsHistory.storedCategory, 6);
 });
 
 test("rejects reversed history dates and invalid ticket categories", () => {

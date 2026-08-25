@@ -37,6 +37,12 @@ export function useMemberCompensationController({
   const [isConfirmOpen, setConfirmOpen] = useState(false);
   const operationIdRef = useRef<string | null>(null);
 
+  const changeDraft = useCallback((values: Parameters<typeof updateDraft>[0]) => {
+    operationIdRef.current = null;
+    updateDraft(values);
+    resetMutation();
+  }, [resetMutation, updateDraft]);
+
   const openConfirmation = useCallback(() => {
     try {
       const normalized = validateMemberCompensationDraft(draft);
@@ -70,6 +76,7 @@ export function useMemberCompensationController({
     const operationId = operationIdRef.current ?? crypto.randomUUID();
     operationIdRef.current = operationId;
     const isDeduction = normalized.amount < 0;
+    const balanceLabel = normalized.storedCategory === 6 ? "lượt" : "điểm";
     startMutation("COMPENSATION_TOP_UP");
     try {
       const result = await showPromise(compensateMemberBalance({
@@ -79,13 +86,14 @@ export function useMemberCompensationController({
         uid: member.uid,
         memberCode: member.memberCode,
         memberName: member.fullName,
+        storedCategory: normalized.storedCategory,
         amount: normalized.amount,
         reason: normalized.reason,
         actionTime: new Date().toISOString(),
       }), {
-        loading: isDeduction ? "Đang trừ điểm qua OpenAPI..." : "Đang nạp bù qua OpenAPI...",
-        success: isDeduction ? "Trừ điểm thành công" : "Nạp bù thành công",
-        error: isDeduction ? "Không thể trừ điểm" : "Không thể nạp bù",
+        loading: isDeduction ? `Đang trừ ${balanceLabel} qua OpenAPI...` : `Đang nạp bù ${balanceLabel} qua OpenAPI...`,
+        success: isDeduction ? `Trừ ${balanceLabel} thành công` : `Nạp bù ${balanceLabel} thành công`,
+        error: isDeduction ? `Không thể trừ ${balanceLabel}` : `Không thể nạp bù ${balanceLabel}`,
         successDescription: "Số dư và lịch sử thành viên đang được cập nhật.",
         errorDescription: "Yêu cầu được giữ nguyên mã để có thể thử lại an toàn.",
         onRetry: retryCompensation,
@@ -106,7 +114,7 @@ export function useMemberCompensationController({
     draft,
     mutation,
     isConfirmOpen,
-    updateDraft,
+    updateDraft: changeDraft,
     openConfirmation,
     closeConfirmation,
     submit,

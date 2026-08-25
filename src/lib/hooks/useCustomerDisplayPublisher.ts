@@ -32,7 +32,7 @@ export function useCustomerDisplayPublisher(
   const fixedTransfer = payOSPayment.fixedTransfer;
   const nextAction = payOSPayment.nextAction;
   const remainingSeconds = payOSPayment.remainingSeconds;
-  const errorMessage = payOSPayment.errorMessage;
+  const hasPaymentError = payOSPayment.errorMessage !== null;
   const isCartLocked = payOSPayment.isCartLocked;
   const isBusy = payOSPayment.isBusy;
 
@@ -48,7 +48,7 @@ export function useCustomerDisplayPublisher(
         fixedTransfer,
         nextAction,
         remainingSeconds,
-        errorMessage,
+        hasError: hasPaymentError,
         isCartLocked,
         isBusy,
       },
@@ -60,7 +60,7 @@ export function useCustomerDisplayPublisher(
       console.error("[Màn hình khách] Không thể gửi trạng thái:", error);
     });
   }, [
-    errorMessage,
+    hasPaymentError,
     fixedTransfer,
     isBusy,
     isCartLocked,
