@@ -20,6 +20,7 @@ export const POS_COLLECTIONS = {
   products: "jpos_products",
   orders: "pos_orders",
   paymentSettings: "pos_payment_settings",
+  luckyDrawSettings: "pos_lucky_draw_settings",
   devices: "pos_devices",
   members: "pos_members",
   memberCompensations: "pos_member_compensations",

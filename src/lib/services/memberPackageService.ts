@@ -4,6 +4,7 @@ import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 import { toMemberServiceError } from "@/lib/services/memberService";
 import type { MemberPointPackage } from "@/lib/types/member";
 import type { OrderStatus } from "@/lib/types/order";
+import type { OrderMemberSnapshot } from "@/lib/types/order";
 
 export interface MemberPackageScope {
   shopId: number;
@@ -14,6 +15,7 @@ export interface MemberPackageScope {
 export interface MemberPackageSaleInput extends MemberPackageScope {
   localOrderId: string;
   goodsId: string;
+  member: OrderMemberSnapshot;
 }
 
 export interface MemberPackageCatalogResult {

@@ -46,6 +46,8 @@ export interface OrderItem {
   ticketsPerUnit?: number;
   /** Stable codes for every physical ticket belonging to this line item. */
   ticketCodes?: string[];
+  /** Lucky-draw entries granted per sold member package, snapshotted at sale time. */
+  luckyDrawTicketsPerUnit?: number;
 }
 
 /** Sync metadata. */

@@ -26,8 +26,16 @@ test("validates a member package sale", () => {
     uid: "member-uid",
     localOrderId: "ORD-1770000000000-ABC123",
     goodsId: "silver-package",
+    member: {
+      uid: "member-uid",
+      memberCode: "MEM-001",
+      fullName: "Nguyễn Văn A",
+      phone: "0901234567",
+      levelName: "Bạc",
+    },
   });
   assert.equal(input.goodsId, "silver-package");
+  assert.equal(input.member.phone, "0901234567");
 });
 
 test("rejects malformed local package order IDs", () => {

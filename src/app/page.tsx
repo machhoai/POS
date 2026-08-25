@@ -33,6 +33,9 @@ import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSett
 import type { ReceiptLanguage } from "@/features/receipt/types/receipt";
 import { printTicketsSilently } from "@/features/ticket/components/TicketPrintButton";
 import { useTicketSettingsStore } from "@/features/ticket/store/useTicketSettingsStore";
+import { printLuckyDrawTicketsSilently } from "@/features/lucky-draw/components/LuckyDrawPrintButton";
+import { useLuckyDrawSettingsSync } from "@/features/lucky-draw/hooks/useLuckyDrawSettingsSync";
+import { useLuckyDrawSettingsStore } from "@/features/lucky-draw/store/useLuckyDrawSettingsStore";
 import { filterProducts } from "@/lib/utils/productSearch";
 import { findProductByBarcode } from "@/lib/utils/productBarcode";
 import { useBarcodeScanner } from "@/lib/hooks/useBarcodeScanner";
@@ -64,6 +67,7 @@ export default function CashierPage() {
     needsWarehouseSelection,
     selectWarehouse,
   } = useAuth();
+  useLuckyDrawSettingsSync(effectiveWarehouseId);
 
   // ── Product Store ──────────────────────────────────────────────────────
   const allProducts = useProductStore((s) => s.products);
@@ -113,6 +117,7 @@ export default function CashierPage() {
   const markReceiptPrinted = useCartStore((s) => s.markReceiptPrinted);
   const receiptSettings = useReceiptSettingsStore((state) => state.settings);
   const ticketSettings = useTicketSettingsStore((state) => state.settings);
+  const luckyDrawSettings = useLuckyDrawSettingsStore((state) => state.settings);
   const paymentMethods = JPOS_PAYMENT_METHODS;
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
   const [receiptLanguage, setReceiptLanguage] = useState<ReceiptLanguage>("vi");
@@ -254,6 +259,7 @@ export default function CashierPage() {
       if (ticketSettings.autoPrintAfterPayment) {
         await printTicketsSilently(order, ticketSettings);
       }
+      await printLuckyDrawTicketsSilently(order, luckyDrawSettings);
       markReceiptPrinted(localOrderId);
     } catch (error: unknown) {
       console.error("[In chứng từ] In tự động thất bại:", error);
@@ -266,7 +272,7 @@ export default function CashierPage() {
         ),
       );
     }
-  }, [markReceiptPrinted, receiptLanguage, receiptSettings, ticketSettings]);
+  }, [luckyDrawSettings, markReceiptPrinted, receiptLanguage, receiptSettings, ticketSettings]);
 
   const handlePayOSCompleted = useCallback((localOrderId: string, status: Parameters<typeof completePayOSCheckout>[1]) => {
     completePayOSCheckout(localOrderId, status);

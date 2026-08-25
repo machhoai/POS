@@ -25,6 +25,8 @@ import type {
   OrderMemberSnapshot,
   PosOrder,
 } from "../types/order";
+import { getLuckyDrawSettingsForWarehouse } from "../luckyDraw/luckyDrawSettingsFunctions";
+import { resolveLuckyDrawTicketCount } from "../luckyDraw/luckyDrawSettingsPolicy";
 
 interface OrderItemInput {
   goodsId: string;
@@ -80,6 +82,7 @@ const JPOS_PAYMENT_METHODS: Record<string, LocalPaymentMethod> = {
 
 const TICKET_PRODUCT_CATEGORY = 4;
 const MAX_TICKETS_PER_ORDER = 1_000;
+const MAX_LUCKY_DRAW_TICKETS_PER_ORDER = 200;
 
 function createTicketCode(): string {
   return `JT-${crypto.randomUUID().replace(/-/g, "").toUpperCase()}`;
@@ -221,7 +224,9 @@ async function assertWarehouseAccess(
 
 async function loadAuthoritativeItems(
   itemInputs: OrderItemInput[],
+  warehouseId: string,
 ): Promise<OrderItem[]> {
+  const luckyDrawSettings = await getLuckyDrawSettingsForWarehouse(warehouseId);
   const refs = itemInputs.map((item) =>
     db.collection(POS_COLLECTIONS.products).doc(item.goodsId),
   );
@@ -275,6 +280,11 @@ async function loadAuthoritativeItems(
         `Sản phẩm ${goodsName} tạo quá nhiều vé. Vui lòng giảm số lượng hoặc tách đơn.`,
       );
     }
+    const luckyDrawTicketsPerUnit = resolveLuckyDrawTicketCount(
+      luckyDrawSettings,
+      snapshot.id,
+      category,
+    );
 
     return {
       goodsId: snapshot.id,
@@ -285,6 +295,7 @@ async function loadAuthoritativeItems(
       taxRate,
       taxAmount: Math.round(unitTaxAmount * itemInputs[index].quantity),
       ticketsPerUnit,
+      luckyDrawTicketsPerUnit,
       ...(ticketCount > 0
         ? { ticketCodes: Array.from({ length: ticketCount }, createTicketCode) }
         : {}),
@@ -299,6 +310,17 @@ async function loadAuthoritativeItems(
     throw new HttpsError(
       "failed-precondition",
       `Đơn hàng vượt quá giới hạn ${MAX_TICKETS_PER_ORDER} vé. Vui lòng tách thành nhiều đơn.`,
+    );
+  }
+  const totalLuckyDrawTickets = items.reduce(
+    (total, item) => total +
+      (item.luckyDrawTicketsPerUnit ?? 0) * item.quantity,
+    0,
+  );
+  if (totalLuckyDrawTickets > MAX_LUCKY_DRAW_TICKETS_PER_ORDER) {
+    throw new HttpsError(
+      "failed-precondition",
+      `Đơn hàng vượt quá giới hạn ${MAX_LUCKY_DRAW_TICKETS_PER_ORDER} phiếu bốc thăm. Vui lòng tách thành nhiều đơn.`,
     );
   }
 
@@ -432,7 +454,7 @@ export async function stagePosOrderForPayOS(
   }
   const [operator, items] = await Promise.all([
     assertWarehouseAccess(userId, input.warehouseId),
-    loadAuthoritativeItems(input.items),
+    loadAuthoritativeItems(input.items, input.warehouseId),
   ]);
   const totalAmount = calculateTotal(items);
   if (!Number.isSafeInteger(totalAmount) || totalAmount <= 0) {
@@ -524,7 +546,7 @@ export async function preparePosOrderForUser(
 ) {
   const input = validateOrderInput(data);
   const operator = await assertWarehouseAccess(userId, input.warehouseId);
-  const items = await loadAuthoritativeItems(input.items);
+  const items = await loadAuthoritativeItems(input.items, input.warehouseId);
   const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
 
   try {
@@ -608,7 +630,7 @@ export async function checkoutPosOrderForUser(
   }
   const [operator, items] = await Promise.all([
     assertWarehouseAccess(userId, input.warehouseId),
-    loadAuthoritativeItems(input.items),
+    loadAuthoritativeItems(input.items, input.warehouseId),
   ]);
   const totalAmount = calculateTotal(items);
   const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);

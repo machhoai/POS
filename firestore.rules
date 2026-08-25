@@ -18,6 +18,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Lucky-draw campaign settings are warehouse-scoped and are only read or
+    // changed through authenticated callable Functions with POS RBAC checks.
+    match /pos_lucky_draw_settings/{warehouseId} {
+      allow read, write: if false;
+    }
+
     // JPULSE manages trusted devices and shared receipt configuration through
     // authenticated backend APIs. JPOS never accesses these documents directly.
     match /pos_devices/{deviceId} {

@@ -40,6 +40,8 @@ export interface OrderItem {
   ticketsPerUnit?: number;
   /** Mã duy nhất của từng vé vật lý, được backend tạo và lưu cùng đơn. */
   ticketCodes?: string[];
+  /** Số phiếu bốc thăm trên mỗi gói, được snapshot tại thời điểm tạo đơn. */
+  luckyDrawTicketsPerUnit?: number;
 }
 
 /** Metadata tracking the sync process with the remote HK API. */

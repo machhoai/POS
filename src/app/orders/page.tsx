@@ -17,6 +17,7 @@ import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { filterAndSortOrders } from "@/lib/utils/filterOrders";
 import { retryOrderSync } from "@/lib/services/orderService";
 import { showError, showPromise } from "@/lib/utils/toast";
+import { useLuckyDrawSettingsSync } from "@/features/lucky-draw/hooks/useLuckyDrawSettingsSync";
 
 const EMPTY_ORDERS: PosOrder[] = [];
 
@@ -30,6 +31,7 @@ export default function OrderHistoryPage() {
         isLoading: authLoading,
         logout,
     } = useAuth();
+    useLuckyDrawSettingsSync(effectiveWarehouseId);
     const [filters, setFilters] = useState<OrderFilterState>(DEFAULT_FILTERS);
     const [selectedOrder, setSelectedOrder] = useState<PosOrder | null>(null);
     const [isRetrying, setIsRetrying] = useState(false);

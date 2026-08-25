@@ -9,6 +9,8 @@ import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { getOrderCustomerDisplay } from "@/lib/utils/orderCustomer";
 import ReceiptPrintButton from "@/features/receipt/components/ReceiptPrintButton";
 import TicketPrintButton from "@/features/ticket/components/TicketPrintButton";
+import LuckyDrawPrintButton from "@/features/lucky-draw/components/LuckyDrawPrintButton";
+import { buildPrintableLuckyDrawTickets } from "@/features/lucky-draw/helpers/buildPrintableLuckyDrawTickets";
 
 interface OrderDetailModalProps {
     order: PosOrder;
@@ -42,6 +44,7 @@ export default function OrderDetailModal({
     const finalAmount = order.totalAmount - (order.voucherDiscount || 0);
     const isPaymentUnverified = order.paymentVerificationStatus === "UNVERIFIED";
     const customer = getOrderCustomerDisplay(order);
+    const luckyDrawTicketCount = buildPrintableLuckyDrawTickets(order).length;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -130,6 +133,7 @@ export default function OrderDetailModal({
                                         <p className="text-sm text-[var(--color-text-primary)] truncate">{item.goodsName}</p>
                                         <p className="text-xs text-[var(--color-text-muted)]">{formatCurrency(item.price)} × {item.quantity}</p>
                                         {(item.ticketCodes?.length ?? 0) > 0 && <p className="mt-0.5 text-xs font-bold text-emerald-600">{item.ticketCodes?.length} vé</p>}
+                                        {(item.luckyDrawTicketsPerUnit ?? 0) > 0 && <p className="mt-0.5 text-xs font-bold text-amber-600">{(item.luckyDrawTicketsPerUnit ?? 0) * item.quantity} phiếu bốc thăm</p>}
                                     </div>
                                     <span className="text-sm font-semibold text-[var(--color-accent)] ml-3">
                                         {formatCurrency(item.price * item.quantity)}
@@ -184,6 +188,12 @@ export default function OrderDetailModal({
                         <TicketPrintButton
                             order={order}
                             className="mt-2 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-[var(--color-accent)] bg-white px-4 text-sm font-bold text-[var(--color-accent)] active:scale-[0.98] disabled:opacity-50"
+                        />
+                    )}
+                    {luckyDrawTicketCount > 0 && (
+                        <LuckyDrawPrintButton
+                            order={order}
+                            className="mt-2 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-amber-500 bg-amber-50 px-4 text-sm font-bold text-amber-700 active:scale-[0.98] disabled:opacity-50"
                         />
                     )}
                     {order.status === "SYNC_FAILED" && (

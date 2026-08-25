@@ -7,7 +7,7 @@
         "build": "next build",
         "start": "next start",
         "lint": "eslint",
-        "test:print-layout": "node --experimental-default-type=module --test test/printerPageWidth.test.mjs",
+        "test:print-layout": "node --experimental-default-type=module --test test/printerPageWidth.test.mjs test/luckyDrawBarcode.test.mjs",
         "tauri": "tauri",
         "tauri:dev": "tauri dev",
         "tauri:build": "tauri build",

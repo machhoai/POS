@@ -17,6 +17,9 @@ import {
     printReceiptSilently,
 } from "@/features/receipt/components/ReceiptPrintButton";
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
+import { printLuckyDrawTicketsSilently } from "@/features/lucky-draw/components/LuckyDrawPrintButton";
+import { useLuckyDrawSettingsSync } from "@/features/lucky-draw/hooks/useLuckyDrawSettingsSync";
+import { useLuckyDrawSettingsStore } from "@/features/lucky-draw/store/useLuckyDrawSettingsStore";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
 import { useBarcodeScanner } from "@/lib/hooks/useBarcodeScanner";
@@ -79,6 +82,7 @@ export default function MembersPage() {
     useCustomerDisplayWindow();
     const router = useRouter();
     const auth = useAuth();
+    useLuckyDrawSettingsSync(auth.effectiveWarehouseId);
     const [operation, setOperation] = useState<MemberOperation>("LOOKUP");
     const [fetchedAt, setFetchedAt] = useState<string | null>(null);
     const [registrationCardReaderStatus, setRegistrationCardReaderStatus] = useState<CardReaderStatus>("IDLE");
@@ -111,6 +115,7 @@ export default function MembersPage() {
     const setCheckoutContext = useCartStore((state) => state.setCheckoutContext);
     const hydrateCheckoutJournal = useCartStore((state) => state.hydrateCheckoutJournal);
     const receiptSettings = useReceiptSettingsStore((state) => state.settings);
+    const luckyDrawSettings = useLuckyDrawSettingsStore((state) => state.settings);
 
     const setMode = useMemberStore((state) => state.setLookupMode);
     const setQuery = useMemberStore((state) => state.setLookupQuery);
@@ -178,6 +183,7 @@ export default function MembersPage() {
 
         try {
             await printReceiptSilently(order, receiptSettings);
+            await printLuckyDrawTicketsSilently(order, luckyDrawSettings);
         } catch (error: unknown) {
             console.error("[Biên lai thành viên] In tự động thất bại:", error);
             showError(
@@ -188,7 +194,7 @@ export default function MembersPage() {
                 ),
             );
         }
-    }, [receiptSettings]);
+    }, [luckyDrawSettings, receiptSettings]);
 
     const memberPackageSale = useMemberPackageSaleController({
         shopId,

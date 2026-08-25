@@ -1,4 +1,5 @@
 import { MemberInputError } from "./memberPolicy";
+import type { OrderMemberSnapshot } from "../types/order";
 
 const ORDER_ID_PATTERN = /^ORD-\d{10,13}-[A-Z0-9]{6}$/;
 
@@ -11,6 +12,7 @@ export interface MemberPackageCatalogInput {
 export interface MemberPackageSaleInput extends MemberPackageCatalogInput {
   localOrderId: string;
   goodsId: string;
+  member: OrderMemberSnapshot;
 }
 
 function record(data: unknown): Record<string, unknown> {
@@ -54,10 +56,35 @@ export function validateMemberPackageSaleInput(
   if (!ORDER_ID_PATTERN.test(localOrderId)) {
     throw new MemberInputError("Mã đơn hàng không hợp lệ.");
   }
+  const candidate = record(input.member);
+  const memberCode = candidate.memberCode;
+  if (
+    typeof candidate.uid !== "string" ||
+    candidate.uid.trim() !== catalog.uid ||
+    (memberCode !== null &&
+      (typeof memberCode !== "string" || memberCode.trim().length > 128)) ||
+    typeof candidate.fullName !== "string" ||
+    !candidate.fullName.trim() ||
+    candidate.fullName.trim().length > 120 ||
+    typeof candidate.phone !== "string" ||
+    !candidate.phone.trim() ||
+    candidate.phone.trim().length > 32 ||
+    typeof candidate.levelName !== "string" ||
+    candidate.levelName.trim().length > 120
+  ) {
+    throw new MemberInputError("Thông tin khách hàng mua gói không hợp lệ.");
+  }
   return {
     ...catalog,
     localOrderId,
     goodsId: requiredString(input.goodsId, "Mã gói thành viên", 128),
+    member: {
+      uid: candidate.uid.trim(),
+      memberCode: typeof memberCode === "string" ? memberCode.trim() || null : null,
+      fullName: candidate.fullName.trim(),
+      phone: candidate.phone.trim(),
+      levelName: candidate.levelName.trim(),
+    },
   };
 }
 

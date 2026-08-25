@@ -45,6 +45,10 @@ import {
   confirmMemberCardIssueForUser,
   getMemberCardIssueInfoForUser,
 } from "../services/joyworldMemberCardService";
+import {
+  getLuckyDrawSettingsForUser,
+  saveLuckyDrawSettingsForUser,
+} from "../luckyDraw/luckyDrawSettingsFunctions";
 const CALLABLE_OPTIONS = {
   region: "asia-southeast1",
   cors: true,
@@ -305,6 +309,35 @@ export const getPosAuthSession = onCall(
         throw new HttpsError(
           "internal",
           "Không thể tải danh sách sản phẩm POS.",
+        );
+      }
+    }
+
+    if (
+      action === "getLuckyDrawSettings" ||
+      action === "saveLuckyDrawSettings"
+    ) {
+      try {
+        if (action === "getLuckyDrawSettings") {
+          return await getLuckyDrawSettingsForUser(
+            request.auth.uid,
+            request.data?.payload,
+          );
+        }
+        return await saveLuckyDrawSettingsForUser(
+          request.auth.uid,
+          request.data?.payload,
+        );
+      } catch (error: unknown) {
+        if (error instanceof HttpsError) throw error;
+        logger.error("[getPosAuthSession] Lucky-draw settings failed", {
+          uid: request.auth.uid,
+          action,
+          error,
+        });
+        throw new HttpsError(
+          "internal",
+          "Không thể xử lý cấu hình phiếu bốc thăm.",
         );
       }
     }

@@ -230,6 +230,13 @@ export function useMemberPackageSaleController({
         uid: member.uid,
         localOrderId,
         goodsId: selectedPackage.goodsId,
+        member: {
+          uid: member.uid,
+          memberCode: member.memberCode,
+          fullName: member.fullName,
+          phone: member.phone,
+          levelName: member.levelName,
+        },
       }), {
         loading: "Đang chờ OpenAPI tạo và thanh toán đơn...",
         success: "Bán gói thành công",
@@ -267,6 +274,13 @@ export function useMemberPackageSaleController({
         uid: member.uid,
         localOrderId,
         goodsId: selectedPackage.goodsId,
+        member: {
+          uid: member.uid,
+          memberCode: member.memberCode,
+          fullName: member.fullName,
+          phone: member.phone,
+          levelName: member.levelName,
+        },
       }), {
         loading: "Đang xác minh giá gói với OpenAPI...",
         success: "Đơn gói đã sẵn sàng",

@@ -22,6 +22,8 @@ import {
   validateMemberPackageSaleInput,
   type MemberPackageSaleInput,
 } from "./packagePolicy";
+import { getLuckyDrawSettingsForWarehouse } from "../luckyDraw/luckyDrawSettingsFunctions";
+import { resolveLuckyDrawTicketCount } from "../luckyDraw/luckyDrawSettingsPolicy";
 
 interface OperatorInfo {
   employeeId: string;
@@ -51,6 +53,7 @@ function createPackageDraft(
   input: MemberPackageSaleInput,
   selectedPackage: MemberPointPackage,
   operator: OperatorInfo,
+  luckyDrawTicketsPerUnit: number,
 ): PosOrder {
   const now = new Date().toISOString();
   return {
@@ -64,6 +67,7 @@ function createPackageDraft(
     operatorName: operator.name,
     orderKind: "MEMBER_PACKAGE",
     uid: input.uid,
+    member: input.member,
     status: "DRAFT",
     paymentMethod: "CASH",
     paymentMethodId: "CASH",
@@ -74,6 +78,7 @@ function createPackageDraft(
       goodsName: selectedPackage.name,
       price: selectedPackage.paymentAmountVnd,
       quantity: 1,
+      luckyDrawTicketsPerUnit,
     }],
     sync: { retryCount: 0, lastError: null, syncedAt: null },
     createdAt: now,
@@ -112,9 +117,10 @@ export async function prepareMemberPackageOrderForUser(
   data: unknown,
 ) {
   const input = validateMemberPackageSaleInput(data);
-  const [operator, selectedPackage] = await Promise.all([
+  const [operator, selectedPackage, luckyDrawSettings] = await Promise.all([
     assertWarehouseAccess(userId, input.warehouseId),
     loadRemoteMemberPackage(input.uid, input.goodsId),
+    getLuckyDrawSettingsForWarehouse(input.warehouseId),
   ]);
   if (
     !Number.isSafeInteger(selectedPackage.paymentAmountVnd) ||
@@ -127,6 +133,11 @@ export async function prepareMemberPackageOrderForUser(
   }
 
   const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
+  const luckyDrawTicketsPerUnit = resolveLuckyDrawTicketCount(
+    luckyDrawSettings,
+    selectedPackage.goodsId,
+    selectedPackage.category,
+  );
   const order = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(docRef);
     if (snapshot.exists) {
@@ -138,9 +149,26 @@ export async function prepareMemberPackageOrderForUser(
         );
       }
       assertSamePackageOrder(existing, input);
+      if (!existing.member || existing.items[0].luckyDrawTicketsPerUnit === undefined) {
+        const updatedAt = new Date().toISOString();
+        const items = existing.items.map((item, index) => index === 0
+          ? { ...item, luckyDrawTicketsPerUnit }
+          : item);
+        transaction.update(docRef, {
+          member: input.member,
+          items,
+          updatedAt,
+        });
+        return { ...existing, member: input.member, items, updatedAt };
+      }
       return existing;
     }
-    const draft = createPackageDraft(input, selectedPackage, operator);
+    const draft = createPackageDraft(
+      input,
+      selectedPackage,
+      operator,
+      luckyDrawTicketsPerUnit,
+    );
     transaction.create(docRef, draft);
     return draft;
   });
