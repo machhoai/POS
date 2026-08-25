@@ -58,10 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Bắt buộc đọc và xác thực thẻ vật lý trước khi đăng ký thành viên.
-            - Tự chọn tra cứu theo mã thẻ và kích hoạt đầu đọc khi mở trang Thành viên.
-            - Tự xóa trắng biểu mẫu sau khi đăng ký thành công, đồng thời giữ đúng thành viên cho bước thanh toán.
-            - Bổ sung quản lý lịch sử đơn hàng, bộ lọc, thử đồng bộ lại và số liệu tổng quan.
+            - Hiển thị đúng cột Điểm và Lượt trên hồ sơ, lịch sử và thao tác nạp bù thành viên.
+            - Bổ sung số Lượt trên màn hình khách hàng và không hiển thị thông báo vận hành nội bộ.
+            - Làm nhẹ font chữ trên bill kết ca để in nhiệt rõ ràng hơn.
+            - Chuẩn hóa thông báo lỗi thanh toán dành cho khách hàng.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
