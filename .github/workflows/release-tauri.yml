@@ -58,10 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Hiển thị đúng cột Điểm và Lượt trên hồ sơ, lịch sử và thao tác nạp bù thành viên.
-            - Bổ sung số Lượt trên màn hình khách hàng và không hiển thị thông báo vận hành nội bộ.
-            - Làm nhẹ font chữ trên bill kết ca để in nhiệt rõ ràng hơn.
-            - Chuẩn hóa thông báo lỗi thanh toán dành cho khách hàng.
+            - Tự động in phiếu bốc thăm kèm bill khi khách hàng mua gói điểm thành viên được áp dụng.
+            - Cấu hình số phiếu theo từng gói và đồng bộ chương trình bật/tắt từ JPULSE.
+            - Phiếu hiển thị khách hàng, đơn hàng, ngày mua, sản phẩm và barcode Code 39.
+            - Tối ưu mẫu phiếu in nhiệt với chiều cao cố định 90 mm.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
