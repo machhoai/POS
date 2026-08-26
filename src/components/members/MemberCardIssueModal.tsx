@@ -87,7 +87,7 @@ const MemberCardIssueModal: React.FC<MemberCardIssueModalProps> = ({
         shopId,
         warehouseId,
       }, (phase) => {
-        setStep(phase);
+        setStep(phase === "WAITING_FOR_NEW_CARD" ? "READING" : phase);
       });
       setCard(preparedCard);
       setStep("READY");

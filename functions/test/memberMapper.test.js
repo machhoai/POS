@@ -142,7 +142,6 @@ test("maps total points as package amount plus configured give amounts", () => {
     listItem: {
       goodsId: "silver-50",
       goodsName: "GSM: Silver +50",
-      category: 1,
       remark: "",
     },
     detail: {
@@ -164,6 +163,7 @@ test("maps total points as package amount plus configured give amounts", () => {
   });
 
   assert.equal(result.paymentAmountVnd, 1210000);
+  assert.equal(result.category, 1);
   assert.equal(result.principalPoints, 1210);
   assert.equal(result.bonusBucketPoints, 435);
   assert.equal(result.totalPoints, 1645);

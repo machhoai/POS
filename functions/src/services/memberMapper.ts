@@ -274,6 +274,7 @@ export function mapMemberPointPackage(input: {
   );
   return {
     goodsId,
+    category: toFiniteNumber(input.listItem.category ?? input.detail.category) ?? 1,
     name: toOptionalString(input.listItem.goodsName ?? input.detail.setMealName),
     description: toOptionalString(input.listItem.remark),
     badge: toOptionalString(input.listItem.badge),

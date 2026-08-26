@@ -1,6 +1,9 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
-import { readMemberCard } from "@/lib/services/cardReaderService";
+import {
+  readMemberCard,
+  type CardReadResult,
+} from "@/lib/services/cardReaderService";
 import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 
 interface MemberCardIssueScope {
@@ -43,7 +46,15 @@ export interface PreparedMemberCard {
   dynamicSerialNo: string | null;
 }
 
-export type MemberCardPreparationPhase = "READING" | "VERIFYING";
+export type MemberCardPreparationPhase =
+  | "WAITING_FOR_NEW_CARD"
+  | "READING"
+  | "VERIFYING";
+
+export interface ExcludedMemberCard {
+  memberCode: string;
+  cardUuid: string;
+}
 
 export interface ConfirmMemberCardIssueResult {
   message: string;
@@ -133,9 +144,18 @@ function samePhysicalCard(
 export async function prepareMemberCardForIssue(
   input: MemberCardPreparationInput,
   onPhase?: (phase: MemberCardPreparationPhase) => void,
+  excludedCard?: ExcludedMemberCard,
 ): Promise<PreparedMemberCard> {
-  onPhase?.("READING");
-  const firstRead = await readMemberCard(20_000);
+  let firstRead: CardReadResult | undefined;
+  do {
+    onPhase?.(firstRead ? "WAITING_FOR_NEW_CARD" : "READING");
+    if (firstRead) await new Promise((resolve) => window.setTimeout(resolve, 600));
+    firstRead = await readMemberCard(20_000);
+  } while (
+    excludedCard &&
+    firstRead.memberCode === excludedCard.memberCode &&
+    firstRead.cardUuid === excludedCard.cardUuid
+  );
   if (!firstRead.memberCode || !firstRead.cardUuid) {
     throw new Error("Đầu đọc không trả đủ mã thẻ và UUID của thẻ Joyworld.");
   }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IoDesktop, IoDocument, IoHome, IoPeople, IoSettings, IoTime } from "react-icons/io5";
+import { IoAlbums, IoDesktop, IoDocument, IoHome, IoPeople, IoSettings, IoTime } from "react-icons/io5";
 import { useUpdater } from "@/features/updater/components/UpdateProvider";
 
 interface SidebarProps {
@@ -30,6 +30,11 @@ const NAV_ITEMS = [
         href: "/members",
         label: "Thành viên",
         icon: <IoPeople />
+    },
+    {
+        href: "/members/batch",
+        label: "Tạo thẻ hàng loạt",
+        icon: <IoAlbums />
     },
     {
         href: "/display-control",
@@ -107,7 +112,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
 
                 <nav className="flex flex-col items-center gap-2 w-full" aria-label="Điều hướng chính">
                     {NAV_ITEMS.map((item) => {
-                        const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                        const isActive = item.href === "/"
+                            ? pathname === "/"
+                            : item.href === "/members"
+                                ? pathname === "/members"
+                                : pathname.startsWith(item.href);
 
                         return (
                             <Link
