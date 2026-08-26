@@ -58,10 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Tự động in phiếu bốc thăm kèm bill khi khách hàng mua gói điểm thành viên được áp dụng.
-            - Cấu hình số phiếu theo từng gói và đồng bộ chương trình bật/tắt từ JPULSE.
-            - Phiếu hiển thị khách hàng, đơn hàng, ngày mua, sản phẩm và barcode Code 39.
-            - Tối ưu mẫu phiếu in nhiệt với chiều cao cố định 90 mm.
+            - Thêm màn hình tạo hàng loạt thẻ thành viên từ tệp Excel.
+            - Hỗ trợ nạp điểm theo từng dòng và hướng dẫn đặt thẻ lần lượt trên đầu đọc.
+            - Có thể tạm dừng để bán hàng rồi tiếp tục đúng vị trí đang xử lý.
+            - Bảo vệ thao tác tạm dừng: yêu cầu đọc lại thẻ nếu quy trình đọc hoặc tạo thẻ chưa hoàn tất.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
