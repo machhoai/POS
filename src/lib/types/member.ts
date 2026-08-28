@@ -80,7 +80,10 @@ export interface MemberPointPackage {
 
 export type MemberStoredValueCategory = 1 | 2 | 4 | 5 | 6 | 7;
 export type MemberStoredValueCategoryFilter = MemberStoredValueCategory | "ALL";
-export type MemberCompensationCategory = Extract<MemberStoredValueCategory, 4 | 6>;
+/** Các cột được endpoint điều chỉnh số dư sử dụng, gồm cả nạp điểm hàng loạt. */
+export type MemberCompensationCategory = Extract<MemberStoredValueCategory, 1 | 4 | 6>;
+/** Nạp bù thủ công tại POS chỉ cho phép điều chỉnh Tiền hoặc Lượt. */
+export type MemberManualCompensationCategory = Extract<MemberStoredValueCategory, 1 | 6>;
 
 export interface MemberStoredValueRecord {
   storedCategory: MemberStoredValueCategory;
@@ -134,7 +137,7 @@ export interface MemberRegistrationDraft {
 }
 
 export interface MemberCompensationDraft {
-  storedCategory: MemberCompensationCategory;
+  storedCategory: MemberManualCompensationCategory;
   amount: number | null;
   reason: string;
 }

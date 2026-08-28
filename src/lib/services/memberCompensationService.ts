@@ -3,18 +3,18 @@ import { functions } from "@/lib/firebase/client";
 import { withDeviceAuth } from "@/lib/services/deviceEnrollmentService";
 import { MemberServiceError, toMemberServiceError } from "@/lib/services/memberService";
 import type {
-  MemberCompensationCategory,
   MemberCompensationDraft,
   MemberCompensationInput,
   MemberCompensationResult,
+  MemberManualCompensationCategory,
 } from "@/lib/types/member";
 
 export function validateMemberCompensationDraft(
   draft: MemberCompensationDraft,
-): { storedCategory: MemberCompensationCategory; amount: number; reason: string } {
-  if (draft.storedCategory !== 4 && draft.storedCategory !== 6) {
+): { storedCategory: MemberManualCompensationCategory; amount: number; reason: string } {
+  if (draft.storedCategory !== 1 && draft.storedCategory !== 6) {
     throw new MemberServiceError(
-      "Cột nạp bù phải là Lượt hoặc Điểm.",
+      "Cột nạp bù phải là Tiền hoặc Lượt.",
       "invalid-compensation-category",
     );
   }

@@ -379,10 +379,11 @@ export function validateMemberCompensationInput(
     input.storedCategory ?? MEMBER_ACCOUNT_ATTRIBUTES.TURNS,
   );
   if (
+    storedCategory !== MEMBER_ACCOUNT_ATTRIBUTES.PRINCIPAL_VND &&
     storedCategory !== MEMBER_ACCOUNT_ATTRIBUTES.TURNS &&
     storedCategory !== MEMBER_ACCOUNT_ATTRIBUTES.POINTS
   ) {
-    throw new MemberInputError("Cột nạp bù phải là Lượt hoặc Điểm.");
+    throw new MemberInputError("Cột điều chỉnh phải là Tiền, Lượt hoặc Điểm.");
   }
   return {
     ...scopeInput(input),

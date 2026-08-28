@@ -58,10 +58,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Thêm màn hình tạo hàng loạt thẻ thành viên từ tệp Excel.
-            - Hỗ trợ nạp điểm theo từng dòng và hướng dẫn đặt thẻ lần lượt trên đầu đọc.
-            - Có thể tạm dừng để bán hàng rồi tiếp tục đúng vị trí đang xử lý.
-            - Bảo vệ thao tác tạm dừng: yêu cầu đọc lại thẻ nếu quy trình đọc hoặc tạo thẻ chưa hoàn tất.
+            - Chức năng nạp bù thủ công chỉ còn hai cột Tiền và Lượt.
+            - Loại bỏ lựa chọn nạp bù Điểm khỏi giao diện.
+            - Hiển thị và chọn nhanh số tiền theo định dạng VND.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

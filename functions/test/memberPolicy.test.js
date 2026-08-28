@@ -154,14 +154,14 @@ test("validates and normalizes a member compensation request", () => {
     uid: "member-01",
     memberCode: "CARD-01",
     memberName: "Nguyễn Văn A",
-    storedCategory: 6,
+    storedCategory: 1,
     amount: 50,
     reason: "Bù số dư do lỗi ghi thẻ",
     actionTime: "2026-08-10T10:30:20+07:00",
   });
 
   assert.equal(input.amount, 50);
-  assert.equal(input.storedCategory, 6);
+  assert.equal(input.storedCategory, 1);
   assert.equal(input.reason, "Bù số dư do lỗi ghi thẻ");
   assert.equal(input.actionTime, "2026-08-10T03:30:20.000Z");
 
@@ -180,7 +180,7 @@ test("rejects invalid compensation amounts, reasons, and operation ids", () => {
     uid: "member-01",
     memberCode: null,
     memberName: "Nguyễn Văn A",
-    storedCategory: 4,
+    storedCategory: 1,
     amount: 50,
     reason: "Bù lỗi thẻ",
     actionTime: "2026-08-10T03:30:20.000Z",
@@ -203,7 +203,7 @@ test("rejects invalid compensation amounts, reasons, and operation ids", () => {
   );
   assert.throws(
     () => validateMemberCompensationInput({ ...base, storedCategory: 5 }),
-    /Cột nạp bù phải là Lượt hoặc Điểm/,
+    /Cột điều chỉnh phải là Tiền, Lượt hoặc Điểm/,
   );
 });
 
@@ -239,6 +239,16 @@ test("builds the documented member_addstored idempotent payload", () => {
     bizCode: "019fe98d-d856-7c63-9404-6c0587d0c4ac",
     remark: "Nạp bù thẻ: Bù số dư do lỗi ghi thẻ",
   });
+});
+
+test("builds a compensation payload for the money column", () => {
+  assert.equal(buildRemoteMemberCompensationBody({
+    uid: "member-01",
+    operationId: "019fe98d-d856-7c63-9404-6c0587d0c4ae",
+    storedCategory: 1,
+    amount: 100_000,
+    remark: "Nạp bù tiền thẻ: Bù giao dịch gián đoạn",
+  }).storedCategory, 1);
 });
 
 test("preserves a negative stored value for point deductions", () => {

@@ -9,7 +9,7 @@ export const MEMBER_BALANCE_CATEGORIES = {
   POINTS: 104,
 } as const;
 
-/** HK account attributes follow the same domain mapping: 4 = Điểm, 6 = Lượt. */
+/** HK account attributes: 1 = Tiền, 4 = Điểm, 6 = Lượt. */
 export const MEMBER_ACCOUNT_ATTRIBUTES = {
   PRINCIPAL_VND: 1,
   BONUS: 2,
@@ -19,6 +19,7 @@ export const MEMBER_ACCOUNT_ATTRIBUTES = {
 } as const;
 
 export type MemberCompensationCategory =
+  | typeof MEMBER_ACCOUNT_ATTRIBUTES.PRINCIPAL_VND
   | typeof MEMBER_ACCOUNT_ATTRIBUTES.TURNS
   | typeof MEMBER_ACCOUNT_ATTRIBUTES.POINTS;
 
@@ -193,8 +194,8 @@ export interface MemberCompensationRecord {
   member_uid: string;
   member_code: string | null;
   member_name: string;
-  /** Legacy records used 1; current compensation targets are Lượt (6) and Điểm (4). */
-  stored_category: 1 | MemberCompensationCategory;
+  /** Nạp bù thủ công dùng Tiền (1)/Lượt (6); nạp điểm (4) dành cho luồng hàng loạt. */
+  stored_category: MemberCompensationCategory;
   amount: number;
   reason: string;
   accounting_category: 1004;

@@ -22,9 +22,11 @@ export default function MemberCompensationConfirmModal({
   onConfirm,
 }: MemberCompensationConfirmModalProps) {
   const isDeduction = (draft.amount ?? 0) < 0;
-  const signedAmount = `${isDeduction ? "-" : "+"}${formatPoints(draft.amount)}`;
-  const categoryLabel = draft.storedCategory === 6 ? "Lượt" : "Điểm";
-  const categoryUnit = draft.storedCategory === 6 ? "lượt" : "điểm";
+  const isMoney = draft.storedCategory === 1;
+  const signedAmount = `${isDeduction ? "-" : "+"}${formatPoints(draft.amount)}${isMoney ? " ₫" : ""}`;
+  const categoryLabel = isMoney ? "Tiền" : "Lượt";
+  const categoryUnit = isMoney ? "tiền" : "lượt";
+  const amountSuffix = isMoney ? "" : ` ${categoryUnit}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 sm:items-center sm:p-5">
@@ -35,7 +37,7 @@ export default function MemberCompensationConfirmModal({
           <div><dt className="text-slate-500">Mã thẻ / điện thoại</dt><dd className="font-extrabold">{member.memberCode || member.phone}</dd></div>
           <div><dt className="text-slate-500">Điểm bán</dt><dd className="font-extrabold">{warehouseName}</dd></div>
           <div><dt className="text-slate-500">Cột số dư</dt><dd className="font-extrabold">{categoryLabel}</dd></div>
-          <div><dt className="text-slate-500">{isDeduction ? "Số lượng sẽ trừ" : "Số lượng nạp bù"}</dt><dd className={`text-xl font-black ${isDeduction ? "text-red-700" : "text-amber-700"}`}>{signedAmount} {categoryUnit}</dd></div>
+          <div><dt className="text-slate-500">{isDeduction ? "Giá trị sẽ trừ" : "Giá trị nạp bù"}</dt><dd className={`text-xl font-black ${isDeduction ? "text-red-700" : "text-amber-700"}`}>{signedAmount}{amountSuffix}</dd></div>
           <div className="sm:col-span-2"><dt className="text-slate-500">Lý do</dt><dd className="mt-1 whitespace-pre-wrap font-semibold">{draft.reason}</dd></div>
         </dl>
         <p className="mt-4 text-sm font-semibold text-red-700">Sau khi OpenAPI xác nhận, thao tác không thể hoàn tác tại POS.</p>

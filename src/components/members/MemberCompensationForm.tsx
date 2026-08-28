@@ -1,4 +1,4 @@
-import { AlertTriangle, LoaderCircle, Repeat2, Ticket, WalletCards } from "lucide-react";
+import { AlertTriangle, Banknote, LoaderCircle, Repeat2, WalletCards } from "lucide-react";
 import type { MemberCompensationDraft, MemberMutationState } from "@/lib/types/member";
 
 interface MemberCompensationFormProps {
@@ -13,16 +13,18 @@ const COMPENSATION_REASON_PRESETS = [
   "Thẻ không ghi nhận đúng số dư",
   "Khôi phục số dư sau khi cấp đổi thẻ",
   "Bù giao dịch bị gián đoạn giữa chừng",
-  "Thu hồi điểm đã nạp thừa",
+  "Thu hồi số dư đã nạp thừa",
   "Điều chỉnh sai lệch sau khi đối soát",
 ] as const;
 
 const COMPENSATION_CATEGORIES = [
+  { value: 1, label: "Tiền", description: "Điều chỉnh số dư VND", icon: Banknote },
   { value: 6, label: "Lượt", description: "Điều chỉnh số lượt chơi", icon: Repeat2 },
-  { value: 4, label: "Điểm", description: "Điều chỉnh cột điểm", icon: Ticket },
 ] as const;
 
-const QUICK_AMOUNTS = [-5, -1, 1, 5, 12] as const;
+const TURN_QUICK_AMOUNTS = [-5, -1, 1, 5, 12] as const;
+const MONEY_QUICK_AMOUNTS = [-100_000, -50_000, 50_000, 100_000, 200_000] as const;
+const amountFormatter = new Intl.NumberFormat("vi-VN");
 
 export default function MemberCompensationForm({
   draft,
@@ -37,7 +39,9 @@ export default function MemberCompensationForm({
   const selectedPreset = COMPENSATION_REASON_PRESETS.find(
     (reason) => reason === draft.reason,
   ) ?? "";
-  const categoryUnit = draft.storedCategory === 6 ? "lượt" : "điểm";
+  const isMoney = draft.storedCategory === 1;
+  const categoryUnit = isMoney ? "tiền" : "lượt";
+  const quickAmounts = isMoney ? MONEY_QUICK_AMOUNTS : TURN_QUICK_AMOUNTS;
 
   return (
     <section className="rounded-3xl border border-amber-200 bg-white p-4 shadow-sm md:p-5">
@@ -59,12 +63,12 @@ export default function MemberCompensationForm({
           </div>
         </fieldset>
         <div>
-          <label htmlFor="member-compensation-amount" className="block text-sm font-bold">Số lượng điều chỉnh *</label>
-          <input id="member-compensation-amount" type="number" inputMode="numeric" min={-10_000_000} max={10_000_000} step={1} value={draft.amount ?? ""} onChange={(event) => onChange({ amount: event.target.value === "" ? null : Number(event.target.value) })} disabled={busy} className="mt-1.5 h-13 w-full rounded-2xl border border-[var(--color-border-subtle)] px-4 text-lg font-extrabold focus:border-[var(--color-accent)] disabled:bg-neutral-50" placeholder="Số dương để cộng, số âm để trừ" />
+          <label htmlFor="member-compensation-amount" className="block text-sm font-bold">{isMoney ? "Số tiền" : "Số lượt"} điều chỉnh *</label>
+          <input id="member-compensation-amount" type="number" inputMode="numeric" min={-10_000_000} max={10_000_000} step={1} value={draft.amount ?? ""} onChange={(event) => onChange({ amount: event.target.value === "" ? null : Number(event.target.value) })} disabled={busy} className="mt-1.5 h-13 w-full rounded-2xl border border-[var(--color-border-subtle)] px-4 text-lg font-extrabold focus:border-[var(--color-accent)] disabled:bg-neutral-50" placeholder={isMoney ? "Nhập số tiền VND; số âm để trừ" : "Số dương để cộng, số âm để trừ"} />
           <div className="mt-2 grid grid-cols-5 gap-2" aria-label="Chọn nhanh số lượng điều chỉnh">
-            {QUICK_AMOUNTS.map((amount) => {
+            {quickAmounts.map((amount) => {
               const selected = draft.amount === amount;
-              return <button key={amount} type="button" aria-pressed={selected} onClick={() => onChange({ amount })} disabled={busy} className={`min-h-11 rounded-xl border text-sm font-extrabold transition-colors disabled:opacity-50 ${selected ? "border-amber-600 bg-amber-600 text-white shadow-sm" : amount < 0 ? "border-red-200 bg-red-50 text-red-700 hover:border-red-400" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-400"}`}>{amount > 0 ? `+${amount}` : amount}</button>;
+              return <button key={amount} type="button" aria-pressed={selected} onClick={() => onChange({ amount })} disabled={busy} className={`min-h-11 rounded-xl border text-sm font-extrabold transition-colors disabled:opacity-50 ${selected ? "border-amber-600 bg-amber-600 text-white shadow-sm" : amount < 0 ? "border-red-200 bg-red-50 text-red-700 hover:border-red-400" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-400"}`}>{amount > 0 ? "+" : ""}{amountFormatter.format(amount)}</button>;
             })}
           </div>
         </div>
@@ -77,7 +81,7 @@ export default function MemberCompensationForm({
         <label className="block text-sm font-bold">Lý do điều chỉnh *
           <textarea value={draft.reason} onChange={(event) => onChange({ reason: event.target.value })} disabled={busy} minLength={5} maxLength={500} rows={4} className="mt-1.5 w-full resize-none rounded-2xl border border-[var(--color-border-subtle)] px-4 py-3 text-sm font-semibold focus:border-[var(--color-accent)] disabled:bg-neutral-50" placeholder="Mô tả lỗi thẻ, chứng từ hoặc lý do đã xác minh..." />
         </label>
-        <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 size-5 shrink-0" /><p>Thao tác này làm thay đổi trực tiếp cột {draft.storedCategory === 6 ? "Lượt" : "Điểm"} của khách và được ghi vĩnh viễn vào nhật ký kiểm toán.</p></div>
+        <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 size-5 shrink-0" /><p>Thao tác này làm thay đổi trực tiếp cột {isMoney ? "Tiền" : "Lượt"} của khách và được ghi vĩnh viễn vào nhật ký kiểm toán.</p></div>
         {failed ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{mutation.failureReason}</p> : null}
         <button type="submit" disabled={busy} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-amber-600 px-5 font-extrabold text-white shadow-sm active:scale-[0.98] disabled:opacity-50">{busy ? <LoaderCircle className="size-5 animate-spin" /> : <WalletCards className="size-5" />}{busy ? "Đang xử lý" : draft.amount && draft.amount < 0 ? `Kiểm tra trừ ${categoryUnit}` : `Kiểm tra cộng ${categoryUnit}`}</button>
       </form>

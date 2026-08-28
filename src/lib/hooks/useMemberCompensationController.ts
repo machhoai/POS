@@ -76,7 +76,7 @@ export function useMemberCompensationController({
     const operationId = operationIdRef.current ?? crypto.randomUUID();
     operationIdRef.current = operationId;
     const isDeduction = normalized.amount < 0;
-    const balanceLabel = normalized.storedCategory === 6 ? "lượt" : "điểm";
+    const balanceLabel = normalized.storedCategory === 1 ? "tiền" : "lượt";
     startMutation("COMPENSATION_TOP_UP");
     try {
       const result = await showPromise(compensateMemberBalance({

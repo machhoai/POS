@@ -274,7 +274,9 @@ export async function compensatePosMemberForUser(
 
   let response;
   try {
-    const balanceLabel = input.storedCategory === 6 ? "lượt" : "điểm";
+    const balanceLabel = input.storedCategory === 1
+      ? "tiền"
+      : input.storedCategory === 6 ? "lượt" : "điểm";
     const remoteRemarkPrefix = input.amount < 0
       ? `Điều chỉnh trừ ${balanceLabel} thẻ`
       : `Nạp bù ${balanceLabel} thẻ`;
