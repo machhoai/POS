@@ -58,9 +58,10 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Chức năng nạp bù thủ công chỉ còn hai cột Tiền và Lượt.
-            - Loại bỏ lựa chọn nạp bù Điểm khỏi giao diện.
-            - Hiển thị và chọn nhanh số tiền theo định dạng VND.
+            - Sửa lỗi QR cố định không hiển thị khi nạp gói cho thành viên đang tra cứu.
+            - Dùng chung giao diện thanh toán cho bán hàng, đăng ký thành viên và nạp gói thành viên.
+            - Hiển thị QR cố định trên màn hình khách và giữ đúng quy trình xác nhận thủ công.
+            - Bỏ ngày mua khỏi mẫu in vé quay thưởng để nội dung gọn hơn.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
