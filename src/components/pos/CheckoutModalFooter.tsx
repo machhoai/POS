@@ -1,4 +1,5 @@
 interface CheckoutModalFooterProps {
+  confirmButtonId?: string;
   isCashPayment: boolean;
   hasPaymentSession: boolean;
   hasSufficientCash: boolean;
@@ -9,6 +10,7 @@ interface CheckoutModalFooterProps {
 }
 
 export default function CheckoutModalFooter({
+  confirmButtonId,
   isCashPayment,
   hasPaymentSession,
   hasSufficientCash,
@@ -24,6 +26,7 @@ export default function CheckoutModalFooter({
       </button>
       {!hasPaymentSession && (
         <button
+          id={confirmButtonId}
           type="button"
           onClick={onConfirm}
           disabled={isBusy || !hasSufficientCash}

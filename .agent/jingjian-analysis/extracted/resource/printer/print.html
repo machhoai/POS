@@ -1,0 +1,33 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+  <style>
+    @page {
+      margin: 0px 15px 0px 0px;
+    }
+
+    @media print {
+      body {
+        font-size: 10px;
+      }
+    }
+  </style>
+</head>
+
+<body id='print'>
+</body>
+<script>
+  // 引入ipcRenderer对象
+  const { ipcRenderer } = require('electron')
+  ipcRenderer.on('webview-print-render', (event, data) => {
+    console.log('......................................................')
+    document.getElementById('print').innerHTML = data.html
+    ipcRenderer.send('webview-print-do', data)
+  })
+</script>
+
+</html>

@@ -59,7 +59,7 @@ const LuckyDrawTicketDocument: React.FC<LuckyDrawTicketDocumentProps> = ({
                     <div style={rowStyle}><strong>Khách hàng</strong><span style={{ overflowWrap: "anywhere" }}>{ticket.customerName}</span></div>
                     <div style={rowStyle}><strong>Số điện thoại</strong><span>{ticket.customerPhone}</span></div>
                     <div style={rowStyle}><strong>Mã đơn hàng</strong><span style={{ overflowWrap: "anywhere", fontWeight: 700 }}>{ticket.orderId}</span></div>
-                    <div style={rowStyle}><strong>Ngày mua</strong><span>{formatDateTime(ticket.purchasedAt)}</span></div>
+                    {/* <div style={rowStyle}><strong>Ngày mua</strong><span>{formatDateTime(ticket.purchasedAt)}</span></div> */}
                     <div style={rowStyle}><strong>Sản phẩm</strong><span style={{ overflowWrap: "anywhere" }}>{ticket.goodsName}</span></div>
                 </div>
 

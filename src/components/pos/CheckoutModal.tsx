@@ -18,20 +18,24 @@ import type { PaymentMethod } from "@/lib/types/order";
 import type { PayOSCheckoutController, PaymentMethodOption } from "@/lib/types/payment";
 
 interface CheckoutModalProps {
+  title?: string;
+  subtitle?: string;
+  confirmButtonId?: string;
   paymentMethod: PaymentMethod;
   paymentMethods: PaymentMethodOption[];
-  receiptLanguage: ReceiptLanguage;
+  receiptLanguage?: ReceiptLanguage;
   payOSPayment: PayOSCheckoutController;
   totalAmount: number;
   finalAmount: number;
   itemCount: number;
-  appliedVoucher: AppliedVoucher | null;
-  isValidatingVoucher: boolean;
+  appliedVoucher?: AppliedVoucher | null;
+  isValidatingVoucher?: boolean;
   isCheckingOut: boolean;
   onSetPaymentMethod: (method: PaymentMethod) => void;
-  onSetReceiptLanguage: (language: ReceiptLanguage) => void;
-  onApplyVoucher: (code: string) => void;
-  onRemoveVoucher: () => void;
+  onSetReceiptLanguage?: (language: ReceiptLanguage) => void;
+  onApplyVoucher?: (code: string) => void;
+  onRemoveVoucher?: () => void;
+  onStartTransfer?: () => void | Promise<void>;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
 }
@@ -41,14 +45,12 @@ export default function CheckoutModal(props: CheckoutModalProps) {
   const [banknotes, setBanknotes] = useState<BanknoteCounts>(createEmptyBanknoteCounts);
   const selectedMethod = props.paymentMethods.find((item) => item.id === props.paymentMethod);
   const isCashPayment = selectedMethod?.kind === "cash" || props.paymentMethod === "CASH";
-  const hasPaymentSession = !isCashPayment && (
-    Boolean(props.payOSPayment.session) || props.payOSPayment.isCartLocked
-  );
+  const hasPaymentSession = !isCashPayment && props.payOSPayment.hasActiveTransfer;
   const cashReceived = useMemo(() => calculateCashReceived(banknotes), [banknotes]);
   const missingCash = Math.max(0, props.finalAmount - cashReceived);
   const cashChange = Math.max(0, cashReceived - props.finalAmount);
   const hasSufficientCash = !isCashPayment || missingCash === 0;
-  const isBusy = props.isCheckingOut || props.isValidatingVoucher || props.payOSPayment.isBusy;
+  const isBusy = props.isCheckingOut || Boolean(props.isValidatingVoucher) || props.payOSPayment.isBusy;
 
   const changeBanknote = useCallback((value: VndDenomination, delta: number) => {
     setBanknotes((current) => ({
@@ -60,7 +62,7 @@ export default function CheckoutModal(props: CheckoutModalProps) {
   const confirmPayment = useCallback(() => {
     if (!hasSufficientCash || isBusy) return;
     if (isCashPayment) void props.onConfirm();
-    else void props.payOSPayment.createPayment();
+    else void (props.onStartTransfer ?? props.payOSPayment.createPayment)();
   }, [hasSufficientCash, isBusy, isCashPayment, props]);
 
   useEffect(() => {
@@ -82,8 +84,13 @@ export default function CheckoutModal(props: CheckoutModalProps) {
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" tabIndex={-1} className="flex h-[95dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/70 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.28)] outline-none sm:max-w-[80%] sm:rounded-3xl">
         <header className="shrink-0 py-2 text-center">
           <h2 id="checkout-modal-title" className="text-xl font-extrabold tracking-[-0.02em] text-[var(--color-text-primary)]">
-            {hasPaymentSession ? "Thanh toán chuyển khoản" : "Thanh toán đơn hàng"}
+            {props.title ?? (hasPaymentSession ? "Thanh toán chuyển khoản" : "Thanh toán đơn hàng")}
           </h2>
+          {props.subtitle ? (
+            <p className="mt-1 text-sm font-medium text-[var(--color-text-muted)]">
+              {props.subtitle}
+            </p>
+          ) : null}
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-2 sm:px-6">
@@ -91,24 +98,33 @@ export default function CheckoutModal(props: CheckoutModalProps) {
             <PayOSQrPanel payment={props.payOSPayment} />
           ) : (
             <>
-              <ReceiptLanguageSelector
-                value={props.receiptLanguage}
-                disabled={isBusy}
-                onChange={props.onSetReceiptLanguage}
-              />
+              {props.receiptLanguage && props.onSetReceiptLanguage ? (
+                <ReceiptLanguageSelector
+                  value={props.receiptLanguage}
+                  disabled={isBusy}
+                  onChange={props.onSetReceiptLanguage}
+                />
+              ) : null}
               <CheckoutPaymentMethods paymentMethod={props.paymentMethod} methods={props.paymentMethods} onChange={props.onSetPaymentMethod} />
               {isCashPayment && (
                 <CashPaymentPanel counts={banknotes} missingAmount={missingCash} changeAmount={cashChange} onIncrement={(value) => changeBanknote(value, 1)} onDecrement={(value) => changeBanknote(value, -1)} />
               )}
               <div className="mt-auto flex flex-col gap-3">
-                <VoucherInput appliedVoucher={props.appliedVoucher} onApplyVoucher={props.onApplyVoucher} onRemoveVoucher={props.onRemoveVoucher} isValidating={props.isValidatingVoucher} />
-                <CheckoutSummary itemCount={props.itemCount} totalAmount={props.totalAmount} finalAmount={props.finalAmount} appliedVoucher={props.appliedVoucher} cashPayment={isCashPayment ? { receivedAmount: cashReceived, missingAmount: missingCash, changeAmount: cashChange } : undefined} />
+                {props.onApplyVoucher && props.onRemoveVoucher ? (
+                  <VoucherInput
+                    appliedVoucher={props.appliedVoucher ?? null}
+                    onApplyVoucher={props.onApplyVoucher}
+                    onRemoveVoucher={props.onRemoveVoucher}
+                    isValidating={props.isValidatingVoucher}
+                  />
+                ) : null}
+                <CheckoutSummary itemCount={props.itemCount} totalAmount={props.totalAmount} finalAmount={props.finalAmount} appliedVoucher={props.appliedVoucher ?? null} cashPayment={isCashPayment ? { receivedAmount: cashReceived, missingAmount: missingCash, changeAmount: cashChange } : undefined} />
               </div>
             </>
           )}
         </div>
 
-        <CheckoutModalFooter isCashPayment={isCashPayment} hasPaymentSession={hasPaymentSession} hasSufficientCash={hasSufficientCash} missingCash={missingCash} isBusy={isBusy} onClose={props.onClose} onConfirm={confirmPayment} />
+        <CheckoutModalFooter confirmButtonId={props.confirmButtonId} isCashPayment={isCashPayment} hasPaymentSession={hasPaymentSession} hasSufficientCash={hasSufficientCash} missingCash={missingCash} isBusy={isBusy} onClose={props.onClose} onConfirm={confirmPayment} />
       </div>
     </div>
   );

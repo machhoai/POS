@@ -8,9 +8,9 @@ import MemberLookupPanel from "@/components/members/MemberLookupPanel";
 import MemberDetailsPanel from "@/components/members/MemberDetailsPanel";
 import MemberCompensationConfirmModal from "@/components/members/MemberCompensationConfirmModal";
 import MemberCompensationPanel from "@/components/members/MemberCompensationPanel";
-import MemberPackageCheckoutModal from "@/components/members/MemberPackageCheckoutModal";
 import MemberProductCatalog from "@/components/members/MemberProductCatalog";
 import MemberRegistrationForm from "@/components/members/MemberRegistrationForm";
+import CheckoutModal from "@/components/pos/CheckoutModal";
 import StoreSelector from "@/components/pos/StoreSelector";
 import {
     describeReceiptPrintError,
@@ -28,6 +28,7 @@ import { useMemberActivityController } from "@/lib/hooks/useMemberActivityContro
 import { useMemberCompensationController } from "@/lib/hooks/useMemberCompensationController";
 import { useMemberPackageCustomerDisplayPublisher } from "@/lib/hooks/useMemberPackageCustomerDisplayPublisher";
 import { useMemberPackageSaleController } from "@/lib/hooks/useMemberPackageSaleController";
+import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { fetchOrderForReceipt } from "@/lib/services/orderService";
 import {
     lookupMember,
@@ -58,6 +59,7 @@ import type {
 } from "@/lib/types/member";
 import type { Product } from "@/lib/types/product";
 import { findProductByBarcode } from "@/lib/utils/productBarcode";
+import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { showError, showPromise, showSuccess, showWarning } from "@/lib/utils/toast";
 
 type MemberOperation = "LOOKUP" | "REGISTER" | "COMPENSATION";
@@ -820,18 +822,24 @@ export default function MembersPage() {
                 />
             ) : null}
             {operation === "LOOKUP" && member && memberPackageSale.isCheckoutOpen && memberPackageSale.selectedPackage ? (
-                <MemberPackageCheckoutModal
-                    selectedPackage={memberPackageSale.selectedPackage}
+                <CheckoutModal
+                    title="Thanh toán gói thành viên"
+                    subtitle={`${memberPackageSale.selectedPackage.name} · ${formatCurrency(memberPackageSale.selectedPackage.paymentAmountVnd)}`}
+                    confirmButtonId={memberPackageSale.paymentMethod === "QR_CODE" ? "member-package-start-qr" : undefined}
                     paymentMethod={memberPackageSale.paymentMethod}
-                    mutationBusy={
+                    paymentMethods={JPOS_PAYMENT_METHODS}
+                    payOSPayment={memberPackageSale.payOSPayment}
+                    totalAmount={memberPackageSale.selectedPackage.paymentAmountVnd}
+                    finalAmount={memberPackageSale.selectedPackage.paymentAmountVnd}
+                    itemCount={1}
+                    isCheckingOut={
                         memberPackageSale.mutation.kind === "PACKAGE_TOP_UP" &&
                         ["WAITING_PAYMENT", "WAITING_API"].includes(memberPackageSale.mutation.status)
                     }
-                    payOSPayment={memberPackageSale.payOSPayment}
-                    onPaymentMethodChange={memberPackageSale.setPaymentMethod}
+                    onSetPaymentMethod={memberPackageSale.setPaymentMethod}
                     onClose={memberPackageSale.closeCheckout}
-                    onCashConfirm={() => void memberPackageSale.sellForCash()}
-                    onQrConfirm={() => void memberPackageSale.startQrPayment()}
+                    onConfirm={memberPackageSale.sellForCash}
+                    onStartTransfer={memberPackageSale.startQrPayment}
                 />
             ) : null}
         </div>

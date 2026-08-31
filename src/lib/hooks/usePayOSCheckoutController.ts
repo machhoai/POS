@@ -17,6 +17,7 @@ import {
   showSuccess,
   showWarning,
 } from "@/lib/utils/toast";
+import { hasActiveTransfer } from "@/lib/utils/paymentState";
 
 interface PayOSCheckoutInput {
   shopId: number;
@@ -312,6 +313,11 @@ export function usePayOSCheckoutController({
     canConfirmManually:
       fixedTransfer?.status === "AWAITING_MANUAL_CONFIRMATION" ||
       (Boolean(session) && nextAction !== "COMPLETED"),
+    hasActiveTransfer: hasActiveTransfer({
+      hasSession: Boolean(session),
+      fixedTransferStatus: fixedTransfer?.status ?? null,
+      isCartLocked,
+    }),
     isCartLocked,
     isBusy: isCreating || isChecking,
     createPayment,

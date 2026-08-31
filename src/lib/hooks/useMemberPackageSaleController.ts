@@ -215,9 +215,9 @@ export function useMemberPackageSaleController({
   }, [resetMutation, selectedPackage]);
 
   const closeCheckout = useCallback(() => {
-    if (payOSPayment.session || payOSPayment.isBusy) return;
+    if (payOSPayment.hasActiveTransfer || payOSPayment.isBusy) return;
     setCheckoutOpen(false);
-  }, [payOSPayment.isBusy, payOSPayment.session]);
+  }, [payOSPayment.hasActiveTransfer, payOSPayment.isBusy]);
 
   const sellForCash = useCallback(async () => {
     if (!member || !selectedPackage || !warehouseId || !localOrderId) return;

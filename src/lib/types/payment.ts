@@ -63,6 +63,7 @@ export interface PayOSCheckoutController {
   remainingSeconds: number;
   errorMessage: string | null;
   canConfirmManually: boolean;
+  hasActiveTransfer: boolean;
   isCartLocked: boolean;
   isBusy: boolean;
   createPayment: () => Promise<void>;

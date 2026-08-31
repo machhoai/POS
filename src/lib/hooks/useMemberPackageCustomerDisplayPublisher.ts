@@ -32,6 +32,7 @@ export function useMemberPackageCustomerDisplayPublisher({
   payment,
 }: MemberPackageDisplayInput): void {
   const paymentSession = payment.session;
+  const paymentFixedTransfer = payment.fixedTransfer;
   const paymentNextAction = payment.nextAction;
   const paymentRemainingSeconds = payment.remainingSeconds;
   const hasPaymentError = payment.errorMessage !== null;
@@ -69,7 +70,7 @@ export function useMemberPackageCustomerDisplayPublisher({
             hasError: hasPaymentError,
             isCartLocked: paymentIsCartLocked,
             isBusy: paymentIsBusy,
-            fixedTransfer: null
+            fixedTransfer: paymentFixedTransfer,
         },
         lastOrder: order,
       });
@@ -90,6 +91,7 @@ export function useMemberPackageCustomerDisplayPublisher({
     paymentNextAction,
     paymentRemainingSeconds,
     paymentSession,
+    paymentFixedTransfer,
     selectedPackage,
   ]);
   const latestStateRef = useRef(displayState);
