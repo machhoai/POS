@@ -27,6 +27,7 @@ export interface StoredProduct {
   category: number;
   subCategory: string;
   typeId?: string;
+  groupKey?: string;
   foreColor?: string;
   backColor?: string;
   principalPoints?: number;

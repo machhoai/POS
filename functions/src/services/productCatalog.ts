@@ -5,6 +5,7 @@ import type { JoyworldGiftCatalogItem } from "./joyworldCatalogService";
 import type { SyncProduct } from "../types/product";
 import { SOUVENIR_CATEGORY_ID } from "../types/product";
 import { resolveProductAvailability } from "./productAvailability";
+import { buildProductGroupKey } from "./productGrouping";
 
 function toFiniteNumber(value: number | string | undefined): number | null {
   if (value === undefined || value === null || value === "") {
@@ -81,6 +82,7 @@ export function mapGroupedGoods(
       isSellable: true,
     });
 
+    const productTypeId = visualColors?.typeId || typeId;
     return [{
       goodsId,
       goodsName:
@@ -91,8 +93,9 @@ export function mapGroupedGoods(
         toFiniteNumber(item.AfterTaxPrice ?? item.afterTaxPrice) ?? price,
       category,
       subCategory,
-      typeId: visualColors?.typeId || typeId,
+      typeId: productTypeId,
       typeName: normalizedTypeName,
+      groupKey: buildProductGroupKey({ category, typeId: productTypeId, typeName: normalizedTypeName }),
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
       ...(visualColors?.principalPoints !== undefined
@@ -161,6 +164,10 @@ export function mapSellableSouvenirs(
       category: SOUVENIR_CATEGORY_ID,
       subCategory: typeName,
       typeName,
+      groupKey: buildProductGroupKey({
+        category: SOUVENIR_CATEGORY_ID,
+        typeName,
+      }),
       amount,
       giftNo,
       ...(foreColor ? { foreColor } : {}),

@@ -17,6 +17,7 @@ export function resolveSettingsAccessGroup(pathname: string): SettingsAccessGrou
     || pathname.startsWith("/settings/ticket")
     || pathname.startsWith("/settings/lucky-draw")
     || pathname.startsWith("/settings/payment")
+    || pathname.startsWith("/settings/products")
   ) {
     return "general";
   }

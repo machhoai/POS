@@ -21,6 +21,7 @@ export const POS_COLLECTIONS = {
   orders: "pos_orders",
   paymentSettings: "pos_payment_settings",
   luckyDrawSettings: "pos_lucky_draw_settings",
+  productVisibilitySettings: "pos_product_visibility_settings",
   devices: "pos_devices",
   members: "pos_members",
   memberCompensations: "pos_member_compensations",

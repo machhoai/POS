@@ -51,6 +51,8 @@ export interface Product {
     typeId: string;
     /** Type name (tên nhóm phụ) */
     typeName: string;
+    /** Stable subgroup identifier persisted with the catalog. */
+    groupKey?: string;
     /** Màu chữ (hex) từ HK API — dùng cho card */
     foreColor: string;
     /** Màu nền (hex) từ HK API — dùng cho card */

@@ -13,6 +13,16 @@ import {
   getProducts,
   type StoredProduct,
 } from "@/lib/services/productService";
+import { buildProductGroupKey } from "@/lib/utils/productGrouping";
+
+export interface ProductVisibilitySettings {
+  version: number;
+  disabledGroupKeys: string[];
+  disabledProductIds: string[];
+}
+
+export const getProductGroupKey = (product: Product): string =>
+  product.groupKey || buildProductGroupKey(product);
 
 /** Một entry danh mục đã derive từ danh sách sản phẩm. */
 export interface CategoryEntry {
@@ -32,6 +42,7 @@ interface ProductState {
   isLoading: boolean;
   lastSyncAt: string | null;
   error: string | null;
+  visibilitySettings: ProductVisibilitySettings;
 
   // ── Actions ────────────────────────────────────────────────────────────────
   /** Tải sản phẩm (hiện dùng mock data) */
@@ -42,6 +53,7 @@ interface ProductState {
   setSearchQuery: (query: string) => void;
   /** Xóa bộ lọc */
   clearFilters: () => void;
+  applyVisibilitySettings: (settings: ProductVisibilitySettings) => void;
 }
 
 /**
@@ -73,6 +85,7 @@ function toProduct(source: StoredProduct): Product {
     subCategory: source.subCategory || "",
     typeId: source.typeId || "",
     typeName: source.typeName || source.subCategory || "",
+    groupKey: source.groupKey || buildProductGroupKey(source),
     foreColor: source.foreColor || "#FFFFFF",
     backColor: source.backColor || "#F97316",
     principalPoints: Number.isFinite(Number(source.principalPoints))
@@ -110,6 +123,11 @@ export const useProductStore = create<ProductState>((set) => ({
   isLoading: false,
   lastSyncAt: null,
   error: null,
+  visibilitySettings: {
+    version: 0,
+    disabledGroupKeys: [],
+    disabledProductIds: [],
+  },
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -130,7 +148,6 @@ export const useProductStore = create<ProductState>((set) => ({
             (product.category !== 10 || product.afterTaxPrice > 0)
         );
 
-      const categories = deriveCategories(products);
       const lastSyncAt =
         products
           .map((product) => product.lastSyncAt)
@@ -138,7 +155,13 @@ export const useProductStore = create<ProductState>((set) => ({
           .sort()
           .at(-1) || result.fetchedAt;
 
-      set((state) => ({
+      set((state) => {
+        const hiddenGroups = new Set(state.visibilitySettings.disabledGroupKeys);
+        const hiddenProducts = new Set(state.visibilitySettings.disabledProductIds);
+        const categories = deriveCategories(products.filter(
+          (product) => !hiddenGroups.has(getProductGroupKey(product)) && !hiddenProducts.has(product.goodsId),
+        ));
+        return {
         products,
         availableCategories: categories,
         selectedCategory:
@@ -149,7 +172,8 @@ export const useProductStore = create<ProductState>((set) => ({
         isLoading: false,
         lastSyncAt,
         error: null,
-      }));
+        };
+      });
     } catch (error) {
       console.error("[Product Store] Lỗi khi tải sản phẩm:", error);
       set({
@@ -165,6 +189,23 @@ export const useProductStore = create<ProductState>((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
 
   clearFilters: () => set({ selectedCategory: null, searchQuery: "" }),
+
+  applyVisibilitySettings: (visibilitySettings) => set((state) => {
+    const hiddenGroups = new Set(visibilitySettings.disabledGroupKeys);
+    const hiddenProducts = new Set(visibilitySettings.disabledProductIds);
+    const visibleProducts = state.products.filter(
+      (product) => !hiddenGroups.has(getProductGroupKey(product)) && !hiddenProducts.has(product.goodsId),
+    );
+    const categories = deriveCategories(visibleProducts);
+    return {
+      visibilitySettings,
+      availableCategories: categories,
+      selectedCategory:
+        state.selectedCategory !== null && categories.some(({ id }) => id === state.selectedCategory)
+          ? state.selectedCategory
+          : categories[0]?.id ?? null,
+    };
+  }),
 }));
 
 // =============================================================================
@@ -175,9 +216,18 @@ export const useProductStore = create<ProductState>((set) => ({
  * Select sản phẩm đã lọc theo danh mục và tìm kiếm.
  */
 export const selectFilteredProducts = (state: ProductState): Product[] => {
+  const visibleProducts = selectVisibleProducts(state);
   return filterProducts(
-    state.products,
+    visibleProducts,
     state.selectedCategory,
     state.searchQuery,
+  );
+};
+
+export const selectVisibleProducts = (state: ProductState): Product[] => {
+  const hiddenGroups = new Set(state.visibilitySettings.disabledGroupKeys);
+  const hiddenProducts = new Set(state.visibilitySettings.disabledProductIds);
+  return state.products.filter(
+    (product) => !hiddenGroups.has(getProductGroupKey(product)) && !hiddenProducts.has(product.goodsId),
   );
 };

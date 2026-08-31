@@ -21,6 +21,7 @@ import {
   mapGroupedGoods,
   mapSellableSouvenirs,
 } from "./productCatalog";
+import { buildProductGroupKey } from "./productGrouping";
 import {
   isConfirmedRemoteDeletion,
   isProductAvailable,
@@ -315,6 +316,7 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
         : {}),
       ...(data.giftNo ? { giftNo: String(data.giftNo) } : {}),
       ...(data.typeName ? { typeName: String(data.typeName) } : {}),
+      groupKey: data.groupKey || buildProductGroupKey(data),
       isEnabled: data.isEnabled !== false,
       isOpenSales: data.isOpenSales !== false,
       isCategoryEnabled: data.isCategoryEnabled !== false,

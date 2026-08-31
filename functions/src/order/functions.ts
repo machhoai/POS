@@ -9,6 +9,7 @@ import * as logger from "firebase-functions/logger";
 import type { DocumentReference } from "firebase-admin/firestore";
 import { db } from "../config/firebase";
 import { POS_COLLECTIONS } from "../config/collections";
+import { isProductAvailableForWarehouse } from "../services/productVisibilityPolicy";
 import {
   confirmRemotePayment,
   createRemoteOrder,
@@ -226,7 +227,11 @@ async function loadAuthoritativeItems(
   itemInputs: OrderItemInput[],
   warehouseId: string,
 ): Promise<OrderItem[]> {
-  const luckyDrawSettings = await getLuckyDrawSettingsForWarehouse(warehouseId);
+  const [luckyDrawSettings, visibilitySnapshot] = await Promise.all([
+    getLuckyDrawSettingsForWarehouse(warehouseId),
+    db.collection(POS_COLLECTIONS.productVisibilitySettings).doc(warehouseId).get(),
+  ]);
+  const visibility = visibilitySnapshot.data();
   const refs = itemInputs.map((item) =>
     db.collection(POS_COLLECTIONS.products).doc(item.goodsId),
   );
@@ -241,6 +246,12 @@ async function loadAuthoritativeItems(
     }
 
     const product = snapshot.data();
+    if (!isProductAvailableForWarehouse(snapshot.id, product || {}, visibility)) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Sản phẩm ${product?.goodsName || snapshot.id} hiện đã ngừng bán tại cửa hàng này.`,
+      );
+    }
     const basePrice = Number(product?.price);
     const storedAfterTaxPrice = Number(product?.afterTaxPrice);
     const price = Number.isFinite(storedAfterTaxPrice) && storedAfterTaxPrice > 0

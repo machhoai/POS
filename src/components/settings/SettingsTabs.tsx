@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, Gift, Megaphone, Printer, ReceiptText, Settings2, TicketCheck, type LucideIcon } from "lucide-react";
+import { CreditCard, Gift, Megaphone, PackageSearch, Printer, ReceiptText, Settings2, TicketCheck, type LucideIcon } from "lucide-react";
 import { useSettingsAccess, type SettingsAccessGroup } from "@/features/settings/hooks/useSettingsAccess";
 import { useUpdater } from "@/features/updater/components/UpdateProvider";
 
@@ -44,6 +44,12 @@ const SETTINGS_TABS: readonly SettingsTab[] = [
     href: "/settings/payment",
     label: "Thanh toán",
     icon: CreditCard,
+    accessGroup: "general",
+  },
+  {
+    href: "/settings/products",
+    label: "Sản phẩm",
+    icon: PackageSearch,
     accessGroup: "general",
   },
   {

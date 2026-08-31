@@ -49,7 +49,8 @@ import {
 } from "@/lib/services/cardReaderService";
 import { useMemberStore } from "@/lib/stores/useMemberStore";
 import { useCartStore } from "@/lib/stores/useCartStore";
-import { useProductStore } from "@/lib/stores/useProductStore";
+import { selectVisibleProducts, useProductStore } from "@/lib/stores/useProductStore";
+import { useProductVisibilitySync } from "@/lib/hooks/useProductVisibilitySync";
 import type {
     CardReaderStatus,
     MemberCardLookupKind,
@@ -85,6 +86,7 @@ export default function MembersPage() {
     const router = useRouter();
     const auth = useAuth();
     useLuckyDrawSettingsSync(auth.effectiveWarehouseId);
+    useProductVisibilitySync(auth.effectiveWarehouseId);
     const [operation, setOperation] = useState<MemberOperation>("LOOKUP");
     const [fetchedAt, setFetchedAt] = useState<string | null>(null);
     const [registrationCardReaderStatus, setRegistrationCardReaderStatus] = useState<CardReaderStatus>("IDLE");
@@ -104,7 +106,7 @@ export default function MembersPage() {
     const member = useMemberStore((state) => state.currentMember);
     const draft = useMemberStore((state) => state.registrationDraft);
     const mutation = useMemberStore((state) => state.mutation);
-    const products = useProductStore((state) => state.products);
+    const products = useProductStore(selectVisibleProducts);
     const productsLoading = useProductStore((state) => state.isLoading);
     const productsError = useProductStore((state) => state.error);
     const fetchProducts = useProductStore((state) => state.fetchProducts);

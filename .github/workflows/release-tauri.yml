@@ -58,10 +58,11 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Sửa lỗi QR cố định không hiển thị khi nạp gói cho thành viên đang tra cứu.
-            - Dùng chung giao diện thanh toán cho bán hàng, đăng ký thành viên và nạp gói thành viên.
-            - Hiển thị QR cố định trên màn hình khách và giữ đúng quy trình xác nhận thủ công.
-            - Bỏ ngày mua khỏi mẫu in vé quay thưởng để nội dung gọn hơn.
+            - Thêm Cài đặt Sản phẩm theo từng cửa hàng.
+            - Cho phép bật hoặc tắt từng sản phẩm và toàn bộ nhóm phụ.
+            - Đồng bộ thay đổi tức thời giữa JPULSE và mọi máy JPOS bằng Firestore snapshot.
+            - Tự động hủy thanh toán QR an toàn và xóa sản phẩm vừa ngừng bán khỏi giỏ.
+            - Kiểm tra lại trạng thái sản phẩm phía máy chủ trước khi tạo hoặc thanh toán đơn.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

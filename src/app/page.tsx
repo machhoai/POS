@@ -11,7 +11,7 @@ import { useEffect, useCallback, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/useCartStore";
-import { useProductStore } from "@/lib/stores/useProductStore";
+import { selectVisibleProducts, useProductStore } from "@/lib/stores/useProductStore";
 import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { syncProducts } from "@/lib/services/productService";
 import { fetchOrderForReceipt } from "@/lib/services/orderService";
@@ -52,6 +52,7 @@ import CheckoutRecoveryNotice from "@/components/resilience/CheckoutRecoveryNoti
 import CheckoutSafetyBoundary from "@/components/resilience/CheckoutSafetyBoundary";
 import MinimalCheckoutFallback from "@/components/resilience/MinimalCheckoutFallback";
 import type { Product } from "@/lib/types/product";
+import { useProductVisibilitySync } from "@/lib/hooks/useProductVisibilitySync";
 
 export default function CashierPage() {
   useCustomerDisplayWindow();
@@ -68,9 +69,10 @@ export default function CashierPage() {
     selectWarehouse,
   } = useAuth();
   useLuckyDrawSettingsSync(effectiveWarehouseId);
+  useProductVisibilitySync(effectiveWarehouseId);
 
   // ── Product Store ──────────────────────────────────────────────────────
-  const allProducts = useProductStore((s) => s.products);
+  const allProducts = useProductStore(selectVisibleProducts);
   const selectedCategory = useProductStore((s) => s.selectedCategory);
   const searchQuery = useProductStore((s) => s.searchQuery);
 

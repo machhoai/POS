@@ -46,6 +46,8 @@ export interface SyncProduct {
   subCategory: string;
   /** HK package classification identifier, when available. */
   typeId?: string;
+  /** Stable key for the product subgroup used by per-store visibility. */
+  groupKey: string;
   /** Text color used by HK for the product card. */
   foreColor?: string;
   /** Background color used by HK for the product card. */

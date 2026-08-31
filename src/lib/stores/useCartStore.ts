@@ -64,6 +64,7 @@ export interface CartState {
   setMemberUid: (uid: string | null) => void;
   setMember: (member: OrderMemberSnapshot | null) => void;
   removeItem: (goodsId: string) => void;
+  removeUnavailableItems: (goodsIds: string[]) => void;
   updateQuantity: (goodsId: string, quantity: number) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
   clearCart: () => void;
@@ -231,6 +232,24 @@ export const useCartStore = create<CartState>((set, get) => ({
       ? {}
       : { items: state.items.filter((i) => i.goodsId !== goodsId) });
     const current = get();
+    if (current.items.length === 0) void clearCheckoutJournal();
+    else saveCartCheckpoint(current, "CART_READY");
+  },
+
+  removeUnavailableItems: (goodsIds) => {
+    const blocked = new Set(goodsIds);
+    set((state) => state.isPaymentLocked
+      ? {}
+      : {
+          items: state.items.filter((item) => !blocked.has(item.goodsId)),
+          draftOrderId: null,
+          currentOrderId: null,
+          currentHkOrderNumber: null,
+          currentOrderStatus: null,
+          checkoutCheckpoint: null,
+        });
+    const current = get();
+    if (current.isPaymentLocked) return;
     if (current.items.length === 0) void clearCheckoutJournal();
     else saveCartCheckpoint(current, "CART_READY");
   },
