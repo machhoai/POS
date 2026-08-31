@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 import { MonitorCheck, SearchX, UsersRound } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import MemberLookupPanel from "@/components/members/MemberLookupPanel";
@@ -106,7 +107,7 @@ export default function MembersPage() {
     const member = useMemberStore((state) => state.currentMember);
     const draft = useMemberStore((state) => state.registrationDraft);
     const mutation = useMemberStore((state) => state.mutation);
-    const products = useProductStore(selectVisibleProducts);
+    const products = useProductStore(useShallow(selectVisibleProducts));
     const productsLoading = useProductStore((state) => state.isLoading);
     const productsError = useProductStore((state) => state.error);
     const fetchProducts = useProductStore((state) => state.fetchProducts);

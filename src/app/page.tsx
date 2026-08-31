@@ -9,6 +9,7 @@
 
 import { useEffect, useCallback, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/useCartStore";
 import { selectVisibleProducts, useProductStore } from "@/lib/stores/useProductStore";
@@ -72,7 +73,7 @@ export default function CashierPage() {
   useProductVisibilitySync(effectiveWarehouseId);
 
   // ── Product Store ──────────────────────────────────────────────────────
-  const allProducts = useProductStore(selectVisibleProducts);
+  const allProducts = useProductStore(useShallow(selectVisibleProducts));
   const selectedCategory = useProductStore((s) => s.selectedCategory);
   const searchQuery = useProductStore((s) => s.searchQuery);
 

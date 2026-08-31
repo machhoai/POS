@@ -58,6 +58,7 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
+            - Khắc phục lỗi vòng lặp render khi tải danh sách sản phẩm khả dụng trên màn hình Thu ngân và Hội viên.
             - Thêm Cài đặt Sản phẩm theo từng cửa hàng.
             - Cho phép bật hoặc tắt từng sản phẩm và toàn bộ nhóm phụ.
             - Đồng bộ thay đổi tức thời giữa JPULSE và mọi máy JPOS bằng Firestore snapshot.
