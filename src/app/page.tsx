@@ -44,6 +44,7 @@ import { usePayOSCheckoutController } from "@/lib/hooks/usePayOSCheckoutControll
 import { useCustomerDisplayWindow } from "@/lib/hooks/useCustomerDisplayWindow";
 import { useCustomerDisplayPublisher } from "@/lib/hooks/useCustomerDisplayPublisher";
 import { recordPendingFailure } from "@/lib/services/checkoutJournalService";
+import { logCheckoutTelemetry } from "@/lib/services/checkoutTelemetryService";
 import TopNav from "@/components/pos/TopNav";
 import Sidebar from "@/components/layout/Sidebar";
 import ProductGrid from "@/components/pos/ProductGrid";
@@ -248,6 +249,12 @@ export default function CashierPage() {
     let order: Awaited<ReturnType<typeof fetchOrderForReceipt>>;
     try {
       order = await fetchOrderForReceipt(localOrderId);
+      logCheckoutTelemetry("order_loaded", {
+        localOrderId,
+        orderKind: order.orderKind,
+        warehouseId: order.warehouseId,
+        details: { status: order.status },
+      });
     } catch (error: unknown) {
       console.error("[Biên lai] Không thể tải đơn để in tự động:", error);
       showError(
@@ -289,6 +296,7 @@ export default function CashierPage() {
     member: cartMember,
     draftOrderId,
     items: cartItems,
+    orderKind: "STANDARD",
     onCompleted: handlePayOSCompleted,
   });
   useCustomerDisplayPublisher(payOSPayment);
@@ -423,6 +431,12 @@ export default function CashierPage() {
 
     const runCheckout = async () => {
       const result = await checkout(shopId, effectiveWarehouseId);
+      logCheckoutTelemetry("payment_detected", {
+        localOrderId: result.localOrderId,
+        orderKind: "STANDARD",
+        warehouseId: effectiveWarehouseId,
+        details: { paymentMethod: "CASH" },
+      });
       await handleAutoPrint(result.localOrderId);
       return result;
     };

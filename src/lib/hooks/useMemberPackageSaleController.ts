@@ -9,6 +9,7 @@ import {
   sellMemberPackageForCash,
 } from "@/lib/services/memberPackageService";
 import { generateLocalOrderId } from "@/lib/services/orderService";
+import { logCheckoutTelemetry } from "@/lib/services/checkoutTelemetryService";
 import {
   selectSelectedMemberPackage,
   useMemberStore,
@@ -166,10 +167,19 @@ export function useMemberPackageSaleController({
     }
   }, [completeMutation, onSaleCompleted, refreshMember]);
 
-  const finishRemoteSale = useCallback(async (orderId: string) => {
+  const finishRemoteSale = useCallback(async (
+    orderId: string,
+    sourcePaymentMethod: PaymentMethod = "QR_CODE",
+  ) => {
     setPaymentCollected(true);
     setCheckoutOpen(false);
     markWaitingApi();
+    logCheckoutTelemetry("openapi_finalize_started", {
+      localOrderId: orderId,
+      orderKind: "MEMBER_PACKAGE",
+      warehouseId,
+      details: { paymentMethod: sourcePaymentMethod },
+    });
     try {
       const result = await showPromise(finalizeMemberPackageSale(orderId), {
         loading: "OpenAPI đang nạp gói vào thẻ...",
@@ -179,13 +189,28 @@ export function useMemberPackageSaleController({
         errorDescription: "Tiền đã được ghi nhận. Không tạo đơn mới; hãy thử lại đơn hiện tại.",
         onRetry: () => clickButton("member-package-retry-remote"),
       });
+      logCheckoutTelemetry("openapi_finalize_completed", {
+        localOrderId: orderId,
+        orderKind: "MEMBER_PACKAGE",
+        warehouseId,
+        details: { paymentMethod: sourcePaymentMethod },
+      });
       await completeSuccessfulSale(orderId, result.remoteOrderNumber);
     } catch (error: unknown) {
       const serviceError = toMemberServiceError(error);
+      logCheckoutTelemetry("openapi_finalize_failed", {
+        localOrderId: orderId,
+        orderKind: "MEMBER_PACKAGE",
+        warehouseId,
+        details: {
+          code: serviceError.code,
+          paymentMethod: sourcePaymentMethod,
+        },
+      });
       console.error("[Thành viên] Hoàn tất gói thất bại:", serviceError);
       failMutation(serviceError.message, serviceError.code);
     }
-  }, [completeSuccessfulSale, failMutation, markWaitingApi]);
+  }, [completeSuccessfulSale, failMutation, markWaitingApi, warehouseId]);
 
   const orderItems = useMemo(() => selectedPackage ? [{
     goodsId: selectedPackage.goodsId,
@@ -201,6 +226,7 @@ export function useMemberPackageSaleController({
     items: orderItems,
     manageCartLock: false,
     requireRemoteCompletion: true,
+    orderKind: "MEMBER_PACKAGE",
     onCompleted: (orderId) => finishRemoteSale(orderId),
     onCancelled: resetMutation,
   });
@@ -223,6 +249,18 @@ export function useMemberPackageSaleController({
     if (!member || !selectedPackage || !warehouseId || !localOrderId) return;
     setPaymentCollected(true);
     startMutation("PACKAGE_TOP_UP", "WAITING_API");
+    logCheckoutTelemetry("payment_detected", {
+      localOrderId,
+      orderKind: "MEMBER_PACKAGE",
+      warehouseId,
+      details: { paymentMethod: "CASH" },
+    });
+    logCheckoutTelemetry("openapi_finalize_started", {
+      localOrderId,
+      orderKind: "MEMBER_PACKAGE",
+      warehouseId,
+      details: { paymentMethod: "CASH" },
+    });
     try {
       const result = await showPromise(sellMemberPackageForCash({
         shopId,
@@ -245,10 +283,22 @@ export function useMemberPackageSaleController({
         errorDescription: "Đã ghi nhận tiền mặt. Hãy thử lại đúng đơn hiện tại.",
         onRetry: () => clickButton("member-package-retry-remote"),
       });
+      logCheckoutTelemetry("openapi_finalize_completed", {
+        localOrderId,
+        orderKind: "MEMBER_PACKAGE",
+        warehouseId,
+        details: { paymentMethod: "CASH" },
+      });
       setCheckoutOpen(false);
       await completeSuccessfulSale(localOrderId, result.remoteOrderNumber);
     } catch (error: unknown) {
       const serviceError = toMemberServiceError(error);
+      logCheckoutTelemetry("openapi_finalize_failed", {
+        localOrderId,
+        orderKind: "MEMBER_PACKAGE",
+        warehouseId,
+        details: { code: serviceError.code },
+      });
       console.error("[Thành viên] Bán gói tiền mặt thất bại:", serviceError);
       failMutation(serviceError.message, serviceError.code);
       setCheckoutOpen(false);
@@ -267,6 +317,11 @@ export function useMemberPackageSaleController({
   const startQrPayment = useCallback(async () => {
     if (!member || !selectedPackage || !warehouseId || !localOrderId) return;
     startMutation("PACKAGE_TOP_UP", "WAITING_PAYMENT");
+    logCheckoutTelemetry("openapi_prepare_started", {
+      localOrderId,
+      orderKind: "MEMBER_PACKAGE",
+      warehouseId,
+    });
     try {
       await showPromise(prepareMemberPackageOrder({
         shopId,
@@ -289,9 +344,20 @@ export function useMemberPackageSaleController({
         errorDescription: "Chưa tạo mã chuyển khoản. Vui lòng thử lại.",
         onRetry: () => clickButton("member-package-start-qr"),
       });
+      logCheckoutTelemetry("openapi_prepare_completed", {
+        localOrderId,
+        orderKind: "MEMBER_PACKAGE",
+        warehouseId,
+      });
       await createPayOSPayment();
     } catch (error: unknown) {
       const serviceError = toMemberServiceError(error);
+      logCheckoutTelemetry("openapi_prepare_failed", {
+        localOrderId,
+        orderKind: "MEMBER_PACKAGE",
+        warehouseId,
+        details: { code: serviceError.code },
+      });
       console.error("[Thành viên] Chuẩn bị QR thất bại:", serviceError);
       failMutation(serviceError.message, serviceError.code);
     }
@@ -307,8 +373,10 @@ export function useMemberPackageSaleController({
   ]);
 
   const retryRemoteSale = useCallback(() => {
-    if (localOrderId && paymentCollected) void finishRemoteSale(localOrderId);
-  }, [finishRemoteSale, localOrderId, paymentCollected]);
+    if (localOrderId && paymentCollected) {
+      void finishRemoteSale(localOrderId, paymentMethod);
+    }
+  }, [finishRemoteSale, localOrderId, paymentCollected, paymentMethod]);
 
   return {
     packages,

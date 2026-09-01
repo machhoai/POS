@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { mapRemoteReceiptSettings } from "@/features/receipt/helpers/remoteReceiptSettings";
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
 import { mapRemoteTicketSettings } from "@/features/ticket/helpers/remoteTicketSettings";
 import { useTicketSettingsStore } from "@/features/ticket/store/useTicketSettingsStore";
 import { applyCustomerDisplayAdvertisingView } from "@/lib/services/customerDisplayAdvertisingSyncService";
+import {
+  listenCustomerDisplayAdvertisingReady,
+  publishCustomerDisplayAdvertising,
+} from "@/lib/services/customerDisplayAdvertisingBridge";
 import {
   DeviceSessionError,
   isDeviceEnrollmentRuntime,
@@ -20,6 +24,7 @@ import type {
   PosDeviceSessionResult,
 } from "@/lib/types/deviceEnrollment";
 import {
+  createRemoteSettingsWatchCredential,
   getRemoteSettingsRetryDelayMs,
   REMOTE_SETTINGS_SUCCESS_RECONNECT_DELAY_MS,
 } from "@/lib/utils/remoteSettingsPolling";
@@ -27,10 +32,11 @@ import {
 interface RemoteSettingsSyncInput {
   credential: PosDeviceCredential | null;
   blocked: boolean;
+  enabled: boolean;
   onRevoked: (message: string) => void;
 }
 
-export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: RemoteSettingsSyncInput) {
+export function useRemoteDeviceSettingsSync({ credential, blocked, enabled, onRevoked }: RemoteSettingsSyncInput) {
   const applyReceipt = useReceiptSettingsStore((state) => state.applyRemoteSettings);
   const clearReceipt = useReceiptSettingsStore((state) => state.clearRemoteSettings);
   const receiptVersion = useReceiptSettingsStore((state) => state.remoteVersion);
@@ -40,8 +46,30 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
   const advertisingVersion = useCustomerDisplayAdvertisingStore(
     (state) => state.view?.settings?.version ?? 0,
   );
+  const deviceId = credential?.device_id ?? null;
+  const deviceCredential = credential?.device_credential ?? null;
+  const warehouseId = credential?.warehouse_id ?? null;
+  const watchCredential = useMemo<PosDeviceCredential | null>(() => {
+    if (warehouseId === null) return null;
+    return createRemoteSettingsWatchCredential({
+      device_id: deviceId ?? "",
+      device_credential: deviceCredential ?? "",
+      warehouse_id: warehouseId,
+    });
+  }, [deviceCredential, deviceId, warehouseId]);
+
+  const applyAdvertisingSettings = useCallback(async (
+    view: NonNullable<PosDeviceSessionResult["customer_display_settings"]>,
+  ) => {
+    await applyCustomerDisplayAdvertisingView(view);
+    await publishCustomerDisplayAdvertising({
+      ...view,
+      media: view.media.map((item) => ({ ...item, download_url: "" })),
+    });
+  }, []);
 
   const applySessionSettings = useCallback(async (session: PosDeviceSessionResult) => {
+    if (!enabled) return;
     if (session.receipt_settings) {
       applyReceipt(
         session.receipt_settings.warehouse_id,
@@ -58,12 +86,30 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
     } else clearTicket(session.device.warehouse_id);
     if (session.payment_settings) cachePaymentSettings(session.payment_settings);
     if (session.customer_display_settings) {
-      await applyCustomerDisplayAdvertisingView(session.customer_display_settings);
+      await applyAdvertisingSettings(session.customer_display_settings);
     }
-  }, [applyReceipt, applyTicket, clearReceipt, clearTicket]);
+  }, [applyAdvertisingSettings, applyReceipt, applyTicket, clearReceipt, clearTicket, enabled]);
 
   useEffect(() => {
-    if (!credential || blocked || !isDeviceEnrollmentRuntime()) return;
+    if (!enabled) return;
+    let disposed = false;
+    let stopListening: (() => void) | null = null;
+    const initialize = async () => {
+      stopListening = await listenCustomerDisplayAdvertisingReady(() => {
+        const currentView = useCustomerDisplayAdvertisingStore.getState().view;
+        if (currentView) void publishCustomerDisplayAdvertising(currentView);
+      });
+      if (disposed) stopListening();
+    };
+    void initialize();
+    return () => {
+      disposed = true;
+      stopListening?.();
+    };
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled || !watchCredential || blocked || !isDeviceEnrollmentRuntime()) return;
     let cancelled = false;
     let controller: AbortController | null = null;
     let failureCount = 0;
@@ -72,7 +118,7 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
         controller = new AbortController();
         try {
           const result = await watchRemoteReceiptSettings(
-            credential,
+            watchCredential,
             receiptVersion,
             controller.signal,
           );
@@ -83,7 +129,7 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
               result.receipt_settings.version,
               mapRemoteReceiptSettings(result.receipt_settings),
             );
-          } else if (result.changed) clearReceipt(credential.warehouse_id);
+          } else if (result.changed) clearReceipt(watchCredential.warehouse_id);
           failureCount = 0;
           await new Promise((resolve) =>
             window.setTimeout(resolve, REMOTE_SETTINGS_SUCCESS_RECONNECT_DELAY_MS),
@@ -108,10 +154,10 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
     };
     void watch();
     return () => { cancelled = true; controller?.abort(); };
-  }, [applyReceipt, blocked, clearReceipt, credential, onRevoked, receiptVersion]);
+  }, [applyReceipt, blocked, clearReceipt, enabled, onRevoked, receiptVersion, watchCredential]);
 
   useEffect(() => {
-    if (!credential || blocked || !isDeviceEnrollmentRuntime()) return;
+    if (!enabled || !watchCredential || blocked || !isDeviceEnrollmentRuntime()) return;
     let cancelled = false;
     let controller: AbortController | null = null;
     let failureCount = 0;
@@ -120,7 +166,7 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
         controller = new AbortController();
         try {
           const result = await watchRemoteTicketSettings(
-            credential,
+            watchCredential,
             ticketVersion,
             controller.signal,
           );
@@ -131,7 +177,7 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
               result.ticket_settings.version,
               mapRemoteTicketSettings(result.ticket_settings),
             );
-          } else if (result.changed) clearTicket(credential.warehouse_id);
+          } else if (result.changed) clearTicket(watchCredential.warehouse_id);
           failureCount = 0;
           await new Promise((resolve) =>
             window.setTimeout(resolve, REMOTE_SETTINGS_SUCCESS_RECONNECT_DELAY_MS),
@@ -156,10 +202,10 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
     };
     void watch();
     return () => { cancelled = true; controller?.abort(); };
-  }, [applyTicket, blocked, clearTicket, credential, onRevoked, ticketVersion]);
+  }, [applyTicket, blocked, clearTicket, enabled, onRevoked, ticketVersion, watchCredential]);
 
   useEffect(() => {
-    if (!credential || blocked || !isDeviceEnrollmentRuntime()) return;
+    if (!enabled || !watchCredential || blocked || !isDeviceEnrollmentRuntime()) return;
     let cancelled = false;
     let controller: AbortController | null = null;
     let failureCount = 0;
@@ -168,13 +214,13 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
         controller = new AbortController();
         try {
           const result = await watchRemoteCustomerDisplaySettings(
-            credential,
+            watchCredential,
             advertisingVersion,
             controller.signal,
           );
           if (cancelled) return;
           if (result.changed && result.customer_display_settings) {
-            await applyCustomerDisplayAdvertisingView(result.customer_display_settings);
+            await applyAdvertisingSettings(result.customer_display_settings);
           }
           failureCount = 0;
           await new Promise((resolve) =>
@@ -200,7 +246,7 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, onRevoked }: 
     };
     void watch();
     return () => { cancelled = true; controller?.abort(); };
-  }, [advertisingVersion, blocked, credential, onRevoked]);
+  }, [advertisingVersion, applyAdvertisingSettings, blocked, enabled, onRevoked, watchCredential]);
 
   return { applySessionSettings };
 }

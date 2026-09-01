@@ -13,6 +13,7 @@ import { buildInvoiceRequestUrl } from "@/features/receipt/helpers/invoiceReques
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
 import type { ReceiptLanguage, ReceiptSettings } from "@/features/receipt/types/receipt";
 import { fetchOrderForReceipt } from "@/lib/services/orderService";
+import { logCheckoutTelemetry } from "@/lib/services/checkoutTelemetryService";
 import type { PosOrder } from "@/lib/types/order";
 import { showError } from "@/lib/utils/toast";
 
@@ -259,15 +260,40 @@ export async function printReceiptSilently(
       paperSize: settings.paperSize,
       pageHeightMm,
     });
-    const dispatch = await printCurrentDocumentSilently({
-      pageWidthMm,
-      pageHeightMm,
-    });
-    console.info("[Biên lai] Máy in đã nhận lệnh", {
+    logCheckoutTelemetry("receipt_dispatched", {
       localOrderId: order.localOrderId,
-      printerName: dispatch.effectivePrinterName,
-      usedFallback: dispatch.usedFallback,
+      orderKind: order.orderKind,
+      warehouseId: order.warehouseId,
+      details: { paperSize: settings.paperSize, pageHeightMm },
     });
+    try {
+      const dispatch = await printCurrentDocumentSilently({
+        pageWidthMm,
+        pageHeightMm,
+      });
+      logCheckoutTelemetry("receipt_completed", {
+        localOrderId: order.localOrderId,
+        orderKind: order.orderKind,
+        warehouseId: order.warehouseId,
+        details: {
+          printerName: dispatch.effectivePrinterName,
+          usedFallback: dispatch.usedFallback,
+        },
+      });
+      console.info("[Biên lai] Máy in đã nhận lệnh", {
+        localOrderId: order.localOrderId,
+        printerName: dispatch.effectivePrinterName,
+        usedFallback: dispatch.usedFallback,
+      });
+    } catch (error: unknown) {
+      logCheckoutTelemetry("receipt_failed", {
+        localOrderId: order.localOrderId,
+        orderKind: order.orderKind,
+        warehouseId: order.warehouseId,
+        details: { errorType: error instanceof Error ? error.name : "UNKNOWN" },
+      });
+      throw error;
+    }
   } finally {
     root.unmount();
     printStyle.remove();

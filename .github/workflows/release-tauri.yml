@@ -58,12 +58,11 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Khắc phục lỗi vòng lặp render khi tải danh sách sản phẩm khả dụng trên màn hình Thu ngân và Hội viên.
-            - Thêm Cài đặt Sản phẩm theo từng cửa hàng.
-            - Cho phép bật hoặc tắt từng sản phẩm và toàn bộ nhóm phụ.
-            - Đồng bộ thay đổi tức thời giữa JPULSE và mọi máy JPOS bằng Firestore snapshot.
-            - Tự động hủy thanh toán QR an toàn và xóa sản phẩm vừa ngừng bán khỏi giỏ.
-            - Kiểm tra lại trạng thái sản phẩm phía máy chủ trước khi tạo hoặc thanh toán đơn.
+            - Chỉ cửa sổ POS chính theo dõi cấu hình thiết bị từ JPULSE, giảm request nền trùng lặp.
+            - Màn hình khách nhận cấu hình quảng cáo qua bridge nội bộ của JPOS.
+            - Giữ watcher ổn định khi phiên đăng nhập được làm mới nếu cửa hàng và thông tin xác thực không đổi.
+            - Bổ sung mốc thời gian chẩn đoán cho thanh toán, OpenAPI, in bill và in phiếu bốc thăm.
+            - Giữ nguyên xác nhận OpenAPI cho luồng nạp thẻ thành viên và từng phiếu bốc thăm là một print job riêng.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

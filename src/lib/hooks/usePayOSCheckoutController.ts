@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { usePayOSPaymentTimer } from "@/lib/hooks/usePayOSPaymentTimer";
+import { logCheckoutTelemetry } from "@/lib/services/checkoutTelemetryService";
 import { generateLocalOrderId } from "@/lib/services/orderService";
 import { useCartStore } from "@/lib/stores/useCartStore";
 import { usePayOSPaymentStore } from "@/lib/stores/usePayOSPaymentStore";
 import type {
+  OrderKind,
   OrderItem,
   OrderMemberSnapshot,
   OrderStatus,
@@ -33,6 +35,7 @@ interface PayOSCheckoutInput {
   onCancelled?: () => void;
   manageCartLock?: boolean;
   requireRemoteCompletion?: boolean;
+  orderKind?: OrderKind;
 }
 
 export function usePayOSCheckoutController({
@@ -46,6 +49,7 @@ export function usePayOSCheckoutController({
   onCancelled,
   manageCartLock = true,
   requireRemoteCompletion = false,
+  orderKind = "STANDARD",
 }: PayOSCheckoutInput): PayOSCheckoutController {
   const session = usePayOSPaymentStore((state) => state.session);
   const fixedTransfer = usePayOSPaymentStore((state) => state.fixedTransfer);
@@ -112,6 +116,17 @@ export function usePayOSCheckoutController({
       completedOrderRef.current === localOrderId
     ) return;
     completedOrderRef.current = localOrderId;
+    logCheckoutTelemetry("payment_detected", {
+      localOrderId,
+      orderKind,
+      warehouseId,
+      details: {
+        paymentMethod: manualConfirmation || fixedTransfer?.status === "MANUALLY_CONFIRMED"
+          ? "MANUAL_TRANSFER"
+          : "PAYOS",
+        orderStatus: orderStatus ?? "LOCAL_PAID",
+      },
+    });
     onCompleted(localOrderId, orderStatus ?? "LOCAL_PAID");
     if (
       manualConfirmation ||
@@ -142,6 +157,8 @@ export function usePayOSCheckoutController({
     orderStatus,
     resetPayment,
     requireRemoteCompletion,
+    orderKind,
+    warehouseId,
   ]);
 
   const createPayment = useCallback(async () => {

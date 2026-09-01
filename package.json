@@ -1,12 +1,13 @@
 {
     "name": "pos-system",
-    "version": "0.1.48",
+    "version": "0.1.49",
     "private": true,
     "scripts": {
         "dev": "next dev --port 3000",
         "build": "next build",
         "start": "next start",
         "lint": "eslint",
+        "test": "node --experimental-default-type=module --test test/*.test.mjs",
         "test:print-layout": "node --experimental-default-type=module --test test/printerPageWidth.test.mjs test/luckyDrawBarcode.test.mjs",
         "tauri": "tauri",
         "tauri:dev": "tauri dev",

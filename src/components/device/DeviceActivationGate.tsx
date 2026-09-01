@@ -1,6 +1,7 @@
 "use client";
 
 import { MonitorCheck, ShieldCheck } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRemoteDeviceSettingsSync } from "@/lib/hooks/useRemoteDeviceSettingsSync";
 import {
@@ -13,8 +14,12 @@ import {
   openDeviceSession,
   persistVerifiedDeviceSession,
 } from "@/lib/services/deviceEnrollmentService";
+import { setCheckoutTelemetryDeviceContext } from "@/lib/services/checkoutTelemetryService";
 import type { PosDeviceCredential } from "@/lib/types/deviceEnrollment";
+import { isRemoteSettingsOwnerPathname } from "@/lib/utils/remoteSettingsPolling";
 export default function DeviceActivationGate({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const ownsRemoteSettings = isRemoteSettingsOwnerPathname(pathname);
   const [credential, setCredential] = useState<PosDeviceCredential | null>(null);
   const [checking, setChecking] = useState(true);
   const [pairingCode, setPairingCode] = useState("");
@@ -34,6 +39,7 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
   const { applySessionSettings } = useRemoteDeviceSettingsSync({
     credential,
     blocked,
+    enabled: ownsRemoteSettings,
     onRevoked: handleRevoked,
   });
 
@@ -45,6 +51,10 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
           deviceCredential,
           session,
         );
+        setCheckoutTelemetryDeviceContext({
+          deviceId: updatedCredential.device_id,
+          warehouseId: updatedCredential.warehouse_id,
+        });
         setCredential(updatedCredential);
         setBlocked(false);
         setBlockReason(null);
@@ -90,6 +100,12 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
     }
     void loadDeviceCredential()
       .then(async (stored) => {
+        if (stored) {
+          setCheckoutTelemetryDeviceContext({
+            deviceId: stored.device_id,
+            warehouseId: stored.warehouse_id,
+          });
+        }
         setCredential(stored);
         if (stored) await syncDevice(stored);
       })

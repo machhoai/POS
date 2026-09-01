@@ -18,6 +18,7 @@ import {
 import { usePrinterSettingsStore } from "@/features/printer/store/usePrinterSettingsStore";
 import { RECEIPT_PAPER_PROFILES } from "@/features/receipt/config/receiptConfig";
 import type { PosOrder } from "@/lib/types/order";
+import { logCheckoutTelemetry } from "@/lib/services/checkoutTelemetryService";
 import { showError } from "@/lib/utils/toast";
 
 type LuckyDrawPrintMode = "silent" | "dialog";
@@ -148,13 +149,46 @@ export async function printLuckyDrawTicketsSilently(
           *, *::before, *::after { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
         }`;
       document.head.appendChild(printStyle);
-      const dispatch = await printCurrentDocumentSilently({ pageWidthMm, pageHeightMm: LUCKY_DRAW_TICKET_HEIGHT_MM });
-      console.info("[Bốc thăm] Máy in đã nhận phiếu", {
+      logCheckoutTelemetry("raffle_dispatched", {
         localOrderId: order.localOrderId,
-        sequence: ticket.sequence,
-        total: ticket.totalForOrder,
-        printerName: dispatch.effectivePrinterName,
+        orderKind: order.orderKind ?? "MEMBER_PACKAGE",
+        warehouseId: order.warehouseId,
+        details: {
+          sequence: ticket.sequence,
+          total: ticket.totalForOrder,
+        },
       });
+      try {
+        const dispatch = await printCurrentDocumentSilently({ pageWidthMm, pageHeightMm: LUCKY_DRAW_TICKET_HEIGHT_MM });
+        logCheckoutTelemetry("raffle_completed", {
+          localOrderId: order.localOrderId,
+          orderKind: order.orderKind ?? "MEMBER_PACKAGE",
+          warehouseId: order.warehouseId,
+          details: {
+            sequence: ticket.sequence,
+            total: ticket.totalForOrder,
+            printerName: dispatch.effectivePrinterName,
+          },
+        });
+        console.info("[Bốc thăm] Máy in đã nhận phiếu", {
+          localOrderId: order.localOrderId,
+          sequence: ticket.sequence,
+          total: ticket.totalForOrder,
+          printerName: dispatch.effectivePrinterName,
+        });
+      } catch (error: unknown) {
+        logCheckoutTelemetry("raffle_failed", {
+          localOrderId: order.localOrderId,
+          orderKind: order.orderKind ?? "MEMBER_PACKAGE",
+          warehouseId: order.warehouseId,
+          details: {
+            sequence: ticket.sequence,
+            total: ticket.totalForOrder,
+            errorType: error instanceof Error ? error.name : "UNKNOWN",
+          },
+        });
+        throw error;
+      }
     } finally {
       root.unmount();
       printStyle.remove();

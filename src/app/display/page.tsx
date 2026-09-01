@@ -8,11 +8,13 @@ import CustomerPaymentQr from "@/components/display/CustomerPaymentQr";
 import MemberRegistrationDisplay from "@/components/display/MemberRegistrationDisplay";
 import PaymentSuccessView from "@/components/display/PaymentSuccessView";
 import { useCustomerDisplayAdvertisingSlides } from "@/lib/hooks/useCustomerDisplayAdvertisingSlides";
+import { useCustomerDisplayAdvertisingBridge } from "@/lib/hooks/useCustomerDisplayAdvertisingBridge";
 import { useCustomerPaymentCountdown } from "@/lib/hooks/useCustomerPaymentCountdown";
 import { useCustomerDisplayState } from "@/lib/hooks/useCustomerDisplayState";
 import { useCustomerDisplayControl } from "@/lib/hooks/useCustomerDisplayControl";
 
 export default function CustomerDisplayPage() {
+    useCustomerDisplayAdvertisingBridge();
     const state = useCustomerDisplayState();
     const control = useCustomerDisplayControl();
     const advertisingSlides = useCustomerDisplayAdvertisingSlides();

@@ -1,8 +1,35 @@
 export const REMOTE_SETTINGS_SUCCESS_RECONNECT_DELAY_MS = 1_000;
 
+interface RemoteSettingsCredentialInput {
+  device_id: string;
+  device_credential: string;
+  warehouse_id: string;
+}
+
 const RETRY_BASE_DELAY_MS = 3_000;
 const RETRY_MAX_DELAY_MS = 60_000;
 const RETRY_JITTER_RATIO = 0.2;
+
+export function isRemoteSettingsOwnerPathname(pathname: string): boolean {
+  return pathname !== "/display" && !pathname.startsWith("/display/");
+}
+
+export function createRemoteSettingsWatchCredential(
+  credential: RemoteSettingsCredentialInput | null,
+): RemoteSettingsCredentialInput | null {
+  if (
+    !credential?.device_id ||
+    !credential.device_credential ||
+    credential.warehouse_id === undefined
+  ) {
+    return null;
+  }
+  return {
+    device_id: credential.device_id,
+    device_credential: credential.device_credential,
+    warehouse_id: credential.warehouse_id,
+  };
+}
 
 export function parseRetryAfterMs(value: string | null, nowMs = Date.now()): number | null {
   if (!value) return null;

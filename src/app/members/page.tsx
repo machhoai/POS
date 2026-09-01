@@ -31,6 +31,7 @@ import { useMemberPackageCustomerDisplayPublisher } from "@/lib/hooks/useMemberP
 import { useMemberPackageSaleController } from "@/lib/hooks/useMemberPackageSaleController";
 import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { fetchOrderForReceipt } from "@/lib/services/orderService";
+import { logCheckoutTelemetry } from "@/lib/services/checkoutTelemetryService";
 import {
     lookupMember,
     registerMember,
@@ -177,6 +178,12 @@ export default function MembersPage() {
         let order: Awaited<ReturnType<typeof fetchOrderForReceipt>>;
         try {
             order = await fetchOrderForReceipt(localOrderId);
+            logCheckoutTelemetry("order_loaded", {
+                localOrderId,
+                orderKind: order.orderKind ?? "MEMBER_PACKAGE",
+                warehouseId: order.warehouseId,
+                details: { status: order.status },
+            });
         } catch (error: unknown) {
             console.error("[Biên lai thành viên] Không thể tải đơn để in tự động:", error);
             showError(
