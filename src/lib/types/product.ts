@@ -63,6 +63,8 @@ export interface Product {
     bonusPoints?: number;
     /** Thuế suất (%) */
     taxRate: number;
+    /** Kiểu thuế HK: 1 = phần trăm, 2 = số tiền cố định. */
+    taxRateType?: number;
     /** Đang mở bán */
     isOpenSales: boolean;
     /** Đang kích hoạt */

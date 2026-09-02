@@ -73,6 +73,16 @@ function toProduct(source: StoredProduct): Product {
   const afterTaxPrice = Number.isFinite(storedAfterTaxPrice)
     ? storedAfterTaxPrice
     : price;
+  const storedTaxRate = Number(source.taxRate);
+  const taxRate = Number.isFinite(storedTaxRate) && storedTaxRate >= 0
+    ? storedTaxRate
+    : price > 0
+      ? Number((((afterTaxPrice - price) / price) * 100).toFixed(4))
+      : 0;
+  const storedTaxRateType = Number(source.taxRateType);
+  const taxRateType = [1, 2].includes(storedTaxRateType)
+    ? storedTaxRateType
+    : 1;
 
   return {
     goodsId: String(source.goodsId),
@@ -94,7 +104,8 @@ function toProduct(source: StoredProduct): Product {
     bonusPoints: Number.isFinite(Number(source.bonusPoints))
       ? Math.max(0, Number(source.bonusPoints))
       : 0,
-    taxRate: 0,
+    taxRate,
+    taxRateType,
     isOpenSales: source.isOpenSales !== false,
     isEnabled: source.isEnabled !== false &&
       source.isCategoryEnabled !== false &&

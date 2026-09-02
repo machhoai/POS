@@ -44,6 +44,9 @@ interface ProductVisualMetadata {
   typeId?: string;
   isEnabled?: boolean;
   isOpenSales?: boolean;
+  taxRate?: number;
+  taxRateType?: number;
+  afterTaxPrice?: number;
 }
 
 interface ProductManagementCatalog {
@@ -70,6 +73,20 @@ function toNonNegativeNumber(...values: unknown[]): number {
     if (Number.isFinite(parsed) && parsed >= 0) return parsed;
   }
   return 0;
+}
+
+function toOptionalNonNegativeNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return undefined;
+}
+
+function toTaxRateType(...values: unknown[]): number | undefined {
+  const parsed = toOptionalNonNegativeNumber(...values);
+  return parsed !== undefined && [1, 2].includes(parsed) ? parsed : undefined;
 }
 
 export interface ProductSyncResult {
@@ -127,12 +144,26 @@ function mapProductVisualMetadata(items: HKProductVisualItem[]) {
       ? rawTicketsPerUnit
       : undefined;
     const typeId = (item.TypeId || item.typeId || "").trim();
+    const taxRate = toOptionalNonNegativeNumber(
+      item.TaxRate,
+      item.taxRate,
+      item.SetmealTypeTaxRate,
+      item.setmealTypeTaxRate,
+    );
+    const taxRateType = toTaxRateType(item.TaxRateType, item.taxRateType);
+    const afterTaxPrice = toOptionalNonNegativeNumber(
+      item.AfterTaxPrice,
+      item.afterTaxPrice,
+    );
 
     metadataByGoodsId.set(goodsId, {
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
       ...(ticketsPerUnit !== undefined ? { ticketsPerUnit } : {}),
       ...(typeId ? { typeId } : {}),
+      ...(taxRate !== undefined ? { taxRate } : {}),
+      ...(taxRateType !== undefined ? { taxRateType } : {}),
+      ...(afterTaxPrice !== undefined ? { afterTaxPrice } : {}),
       ...(typeof (item.IsEnabled ?? item.isEnabled) === "boolean"
         ? { isEnabled: item.IsEnabled ?? item.isEnabled }
         : {}),
@@ -153,6 +184,9 @@ function mapMemberPointPackageManagementMetadata(
     ForeColor: item.foreColor ?? undefined,
     BackColor: item.backColor ?? undefined,
     TypeId: item.typeId,
+    TaxRate: item.taxRate ?? item.setmealTypeTaxRate,
+    TaxRateType: item.taxRateType,
+    AfterTaxPrice: item.afterTaxPrice,
     IsEnabled: item.isEnabled,
     IsOpenSales: item.isOpenSales,
   })));
@@ -189,12 +223,21 @@ async function loadProductDetailMetadata(
         ? total + giveAmount
         : total;
     }, 0);
+    const taxRate = toOptionalNonNegativeNumber(
+      detail?.taxRate,
+      detail?.setmealTypeTaxRate,
+    );
+    const taxRateType = toTaxRateType(detail?.taxRateType);
+    const afterTaxPrice = toOptionalNonNegativeNumber(detail?.afterTaxPrice);
     metadataByGoodsId.set(result.value.goodsId, {
       ...metadataByGoodsId.get(result.value.goodsId),
       ...(foreColor ? { foreColor } : {}),
       ...(backColor ? { backColor } : {}),
       principalPoints,
       bonusPoints,
+      ...(taxRate !== undefined ? { taxRate } : {}),
+      ...(taxRateType !== undefined ? { taxRateType } : {}),
+      ...(afterTaxPrice !== undefined ? { afterTaxPrice } : {}),
       ...(detail?.typeId ? { typeId: detail.typeId } : {}),
       ...(typeof detail?.isEnabled === "boolean"
         ? { isEnabled: detail.isEnabled }
@@ -279,6 +322,16 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       ? storedAfterTaxPrice
       : price;
     const category = Number(data.category);
+    const storedTaxRate = Number(data.taxRate);
+    const taxRate = Number.isFinite(storedTaxRate) && storedTaxRate >= 0
+      ? storedTaxRate
+      : price > 0
+        ? Number((((afterTaxPrice - price) / price) * 100).toFixed(4))
+        : 0;
+    const storedTaxRateType = Number(data.taxRateType);
+    const taxRateType = [1, 2].includes(storedTaxRateType)
+      ? storedTaxRateType
+      : 1;
 
     if (
       !data.goodsName ||
@@ -297,6 +350,8 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       description: data.description ? String(data.description) : "",
       price,
       afterTaxPrice,
+      taxRate,
+      taxRateType,
       category,
       subCategory: data.subCategory ? String(data.subCategory) : "",
       ...(data.typeId ? { typeId: String(data.typeId) } : {}),

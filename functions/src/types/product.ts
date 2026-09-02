@@ -40,6 +40,10 @@ export interface SyncProduct {
   price: number;
   /** Authoritative consumer price after tax. */
   afterTaxPrice: number;
+  /** Authoritative tax value from the product or its HK classification. */
+  taxRate: number;
+  /** HK tax mode: 1 = percentage, 2 = fixed amount. */
+  taxRateType: number;
   /** Numeric POS category ID (1, 2, 4, 6, or 10 for souvenirs). */
   category: number;
   /** Sub-category name from HK API (if available) */

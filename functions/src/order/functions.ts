@@ -10,6 +10,7 @@ import type { DocumentReference } from "firebase-admin/firestore";
 import { db } from "../config/firebase";
 import { POS_COLLECTIONS } from "../config/collections";
 import { isProductAvailableForWarehouse } from "../services/productVisibilityPolicy";
+import { resolveOrderItemTaxPricing } from "../services/productTax";
 import {
   confirmRemotePayment,
   createRemoteOrder,
@@ -270,13 +271,14 @@ async function loadAuthoritativeItems(
       );
     }
 
-    const unitPriceBeforeTax = Number.isFinite(basePrice) && basePrice >= 0
-      ? basePrice
-      : price;
-    const unitTaxAmount = Math.max(0, price - unitPriceBeforeTax);
-    const taxRate = unitPriceBeforeTax > 0
-      ? Number(((unitTaxAmount / unitPriceBeforeTax) * 100).toFixed(2))
-      : 0;
+    const storedTaxRate = Number(product?.taxRate);
+    const storedTaxRateType = Number(product?.taxRateType);
+    const taxPricing = resolveOrderItemTaxPricing({
+      basePrice,
+      sellingPrice: price,
+      taxRate: storedTaxRate,
+      taxRateType: storedTaxRateType,
+    });
     const category = Number(product?.category);
     const rawTicketsPerUnit = Number(product?.ticketsPerUnit);
     const ticketsPerUnit = category === TICKET_PRODUCT_CATEGORY &&
@@ -302,9 +304,9 @@ async function loadAuthoritativeItems(
       goodsName,
       price,
       quantity: itemInputs[index].quantity,
-      unitPriceBeforeTax,
-      taxRate,
-      taxAmount: Math.round(unitTaxAmount * itemInputs[index].quantity),
+      unitPriceBeforeTax: taxPricing.unitPriceBeforeTax,
+      taxRate: taxPricing.taxRate,
+      taxAmount: taxPricing.unitTaxAmount * itemInputs[index].quantity,
       ticketsPerUnit,
       luckyDrawTicketsPerUnit,
       ...(ticketCount > 0

@@ -66,6 +66,8 @@ export interface MemberPointPackage {
   originalAmountVnd: number;
   discountAmountVnd: number;
   priceBeforeTaxVnd: number;
+  taxRate: number;
+  taxRateType: number;
   principalPoints: number;
   bonusBucketPoints: number;
   totalPoints: number;

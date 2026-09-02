@@ -58,11 +58,12 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Chỉ cửa sổ POS chính theo dõi cấu hình thiết bị từ JPULSE, giảm request nền trùng lặp.
-            - Màn hình khách nhận cấu hình quảng cáo qua bridge nội bộ của JPOS.
-            - Giữ watcher ổn định khi phiên đăng nhập được làm mới nếu cửa hàng và thông tin xác thực không đổi.
-            - Bổ sung mốc thời gian chẩn đoán cho thanh toán, OpenAPI, in bill và in phiếu bốc thăm.
-            - Giữ nguyên xác nhận OpenAPI cho luồng nạp thẻ thành viên và từng phiếu bốc thăm là một print job riêng.
+            - Đồng bộ thuế suất trực tiếp từ dữ liệu của từng sản phẩm và lưu vào dữ liệu POS.
+            - Chốt giá trước thuế, thuế suất và tiền thuế chính xác khi tạo đơn hàng mới.
+            - Bill hiển thị đơn giá, thành tiền từng dòng và tạm tính theo giá trước thuế.
+            - Tách riêng tiền thuế theo từng mặt hàng và tổng tiền thuế của toàn đơn.
+            - Tự hiệu chỉnh khi in các đơn cũ có thuế suất nhưng tiền thuế bị lưu bằng 0.
+            - Không in dòng thuế khi thuế suất hoặc tiền thuế thực tế bằng 0.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

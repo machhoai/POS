@@ -20,7 +20,12 @@ test("maps package products with the HK classification name", () => {
     "Vé một lượt",
     "2026-07-31T00:00:00.000Z",
     new Map([
-      ["TICKET-01", { foreColor: "#743535", backColor: "#465288" }],
+      ["TICKET-01", {
+        foreColor: "#743535",
+        backColor: "#465288",
+        taxRate: 10,
+        taxRateType: 1,
+      }],
     ]),
   );
 
@@ -30,7 +35,9 @@ test("maps package products with the HK classification name", () => {
       goodsName: "Vé một lượt 100K",
       description: "",
       price: 100000,
-      afterTaxPrice: 100000,
+      afterTaxPrice: 110000,
+      taxRate: 10,
+      taxRateType: 1,
       category: 4,
       subCategory: "1",
       typeId: "",
@@ -62,7 +69,7 @@ test("maps the authoritative ticket quantity from the management catalog", () =>
     "Combo",
     "2026-08-11T00:00:00.000Z",
     new Map([
-      ["COMBO-07", { ticketsPerUnit: 7 }],
+      ["COMBO-07", { ticketsPerUnit: 7, taxRate: 8, taxRateType: 1 }],
     ]),
   );
 
@@ -77,7 +84,12 @@ test("keeps synchronized package principal and bonus values with its metadata", 
     1,
     "Member package",
     "2026-08-11T00:00:00.000Z",
-    new Map([["POINT-01", { principalPoints: 1210, bonusPoints: 435 }]]),
+    new Map([["POINT-01", {
+      principalPoints: 1210,
+      bonusPoints: 435,
+      taxRate: 10,
+      taxRateType: 1,
+    }]]),
   );
 
   assert.equal(products[0].principalPoints, 1210);
@@ -125,6 +137,8 @@ test("maps only enabled souvenirs with a positive after-tax price", () => {
       goodsName: "B.Duck badge",
       price: 69000,
       afterTaxPrice: 75900,
+      taxRate: 10,
+      taxRateType: 1,
       category: 10,
       subCategory: "Souvenirs",
       typeName: "Souvenirs",
@@ -149,7 +163,13 @@ test("marks a remotely disabled ticket as hidden while retaining its record", ()
     "2026-08-20T00:00:00.000Z",
     new Map([[
       "TICKET-OFF",
-      { isEnabled: false, isOpenSales: true, typeId: "TYPE-01" },
+      {
+        isEnabled: false,
+        isOpenSales: true,
+        typeId: "TYPE-01",
+        taxRate: 0,
+        taxRateType: 1,
+      },
     ]]),
     "TYPE-01",
     true,
@@ -183,4 +203,32 @@ test("uses the catalog goodsId and preserves before/after-tax prices", () => {
   assert.equal(products[0].amount, 7);
   assert.equal(products[0].price, 120000);
   assert.equal(products[0].afterTaxPrice, 132000);
+  assert.equal(products[0].taxRate, 10);
+  assert.equal(products[0].taxRateType, 1);
+});
+
+test("rejects a grouped product when OpenAPI tax metadata is missing", () => {
+  assert.throws(
+    () => mapGroupedGoods(
+      [{ goodsId: "NO-TAX", goodsName: "Missing tax", price: 100000 }],
+      4,
+      "Tickets",
+      "2026-09-02T00:00:00.000Z",
+    ),
+    /thiếu cấu hình thuế hợp lệ/,
+  );
+});
+
+test("derives a fixed tax amount from product prices when taxRate is omitted", () => {
+  const products = mapGroupedGoods(
+    [{ goodsId: "FIXED-TAX", goodsName: "Fixed tax", price: 100000 }],
+    4,
+    "Tickets",
+    "2026-09-02T00:00:00.000Z",
+    new Map([["FIXED-TAX", { afterTaxPrice: 105000, taxRateType: 2 }]]),
+  );
+
+  assert.equal(products[0].taxRate, 5000);
+  assert.equal(products[0].taxRateType, 2);
+  assert.equal(products[0].afterTaxPrice, 105000);
 });

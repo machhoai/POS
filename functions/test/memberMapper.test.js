@@ -163,6 +163,8 @@ test("maps total points as package amount plus configured give amounts", () => {
   });
 
   assert.equal(result.paymentAmountVnd, 1210000);
+  assert.equal(result.taxRate, 10);
+  assert.equal(result.taxRateType, 1);
   assert.equal(result.category, 1);
   assert.equal(result.principalPoints, 1210);
   assert.equal(result.bonusBucketPoints, 435);

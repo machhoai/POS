@@ -24,6 +24,8 @@ export interface StoredProduct {
   description?: string;
   price: number;
   afterTaxPrice?: number;
+  taxRate?: number;
+  taxRateType?: number;
   category: number;
   subCategory: string;
   typeId?: string;

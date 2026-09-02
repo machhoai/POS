@@ -21,6 +21,54 @@ function toOptionalString(...values: Array<string | undefined>): string | undefi
   return value?.trim();
 }
 
+function resolveProductTax(input: {
+  goodsId: string;
+  price: number;
+  afterTaxPrice?: number | null;
+  taxRate?: number | null;
+  taxRateType?: number | null;
+}): { afterTaxPrice: number; taxRate: number; taxRateType: number } {
+  const explicitAfterTaxPrice = input.afterTaxPrice ?? null;
+  const resolvedTaxRateType = input.taxRateType ?? 1;
+  const resolvedTaxRate = input.taxRate ?? (
+    explicitAfterTaxPrice !== null && input.price > 0
+      ? resolvedTaxRateType === 2
+        ? explicitAfterTaxPrice - input.price
+        : ((explicitAfterTaxPrice - input.price) / input.price) * 100
+      : null
+  );
+
+  if (
+    resolvedTaxRate === null ||
+    !Number.isFinite(resolvedTaxRate) ||
+    resolvedTaxRate < 0 ||
+    !Number.isFinite(resolvedTaxRateType) ||
+    ![1, 2].includes(resolvedTaxRateType)
+  ) {
+    throw new Error(
+      `Sản phẩm ${input.goodsId} thiếu cấu hình thuế hợp lệ từ OpenAPI.`,
+    );
+  }
+
+  const calculatedAfterTaxPrice = resolvedTaxRateType === 2
+    ? input.price + resolvedTaxRate
+    : input.price * (1 + resolvedTaxRate / 100);
+  const afterTaxPrice = explicitAfterTaxPrice ??
+    Number(calculatedAfterTaxPrice.toFixed(2));
+
+  if (!Number.isFinite(afterTaxPrice) || afterTaxPrice < input.price) {
+    throw new Error(
+      `Sản phẩm ${input.goodsId} có giá sau thuế không hợp lệ từ OpenAPI.`,
+    );
+  }
+
+  return {
+    afterTaxPrice,
+    taxRate: Number(resolvedTaxRate.toFixed(4)),
+    taxRateType: resolvedTaxRateType,
+  };
+}
+
 /**
  * Convert package/ticket records queried through a concrete `TypeId` into
  * products carrying the classification name used by the POS group filter.
@@ -41,6 +89,9 @@ export function mapGroupedGoods(
       isEnabled?: boolean;
       isOpenSales?: boolean;
       typeId?: string;
+      taxRate?: number;
+      taxRateType?: number;
+      afterTaxPrice?: number;
     }
   > = new Map(),
   typeId = "",
@@ -62,6 +113,21 @@ export function mapGroupedGoods(
 
     const price = toFiniteNumber(item.Price ?? item.price) ?? 0;
     const visualColors = visualColorsByGoodsId.get(goodsId);
+    const tax = resolveProductTax({
+      goodsId,
+      price,
+      afterTaxPrice: visualColors?.afterTaxPrice ??
+        toFiniteNumber(item.AfterTaxPrice ?? item.afterTaxPrice),
+      taxRate: visualColors?.taxRate ??
+        toFiniteNumber(
+          item.TaxRate ??
+          item.taxRate ??
+          item.SetmealTypeTaxRate ??
+          item.setmealTypeTaxRate,
+        ),
+      taxRateType: visualColors?.taxRateType ??
+        toFiniteNumber(item.TaxRateType ?? item.taxRateType),
+    });
     const foreColor = toOptionalString(
       item.ForeColor,
       item.foreColor,
@@ -89,8 +155,9 @@ export function mapGroupedGoods(
         (item.GoodsName || item.goodsName || "").trim() || "Không rõ tên",
       description: item.Remark || item.remark || "",
       price,
-      afterTaxPrice:
-        toFiniteNumber(item.AfterTaxPrice ?? item.afterTaxPrice) ?? price,
+      afterTaxPrice: tax.afterTaxPrice,
+      taxRate: tax.taxRate,
+      taxRateType: tax.taxRateType,
       category,
       subCategory,
       typeId: productTypeId,
@@ -156,11 +223,21 @@ export function mapSellableSouvenirs(
       continue;
     }
 
+    const tax = resolveProductTax({
+      goodsId,
+      price,
+      afterTaxPrice,
+      taxRate: toFiniteNumber(item.taxRate ?? item.setmealTypeTaxRate),
+      taxRateType: toFiniteNumber(item.taxRateType),
+    });
+
     productsById.set(goodsId, {
       goodsId,
       goodsName,
       price,
-      afterTaxPrice,
+      afterTaxPrice: tax.afterTaxPrice,
+      taxRate: tax.taxRate,
+      taxRateType: tax.taxRateType,
       category: SOUVENIR_CATEGORY_ID,
       subCategory: typeName,
       typeName,

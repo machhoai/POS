@@ -315,13 +315,15 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                                 <div style={{ fontWeight: fontWeights.itemName }}>{item.goodsName}</div>
                                 <div style={{ ...rowStyle, marginTop: "0.5mm", fontWeight: fontWeights.itemDetails }}>
                                     <span style={labelStyle}>
-                                        {item.quantity} × {formatMoney(item.price, language)}
+                                        {item.quantity} × {formatMoney(line.unitPriceBeforeTax, language)}
                                     </span>
                                     <span style={valueStyle}>
-                                        {formatMoney(line.lineTotal, language)}
+                                        {formatMoney(line.lineSubtotal, language)}
                                     </span>
                                 </div>
-                                {settings.showItemTax && (
+                                {settings.showItemTax &&
+                                    line.taxRate > 0 &&
+                                    line.taxAmount > 0 && (
                                     <div style={{ ...rowStyle, marginTop: "0.5mm", fontSize: "0.92em", fontWeight: fontWeights.itemTax }}>
                                         <span style={labelStyle}>{copy.tax} {formatTaxRate(line.taxRate, language)}%</span>
                                         <span style={valueStyle}>{formatMoney(line.taxAmount, language)}</span>
@@ -348,10 +350,12 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                         <span style={valueStyle}>-{formatMoney(totals.discount, language)}</span>
                     </div>
                 )}
-                <div style={{ ...rowStyle, fontWeight: fontWeights.taxTotal }}>
-                    <span style={labelStyle}>{copy.taxTotal}</span>
-                    <span style={valueStyle}>{formatMoney(totals.taxTotal, language)}</span>
-                </div>
+                {totals.taxTotal > 0 && (
+                    <div style={{ ...rowStyle, fontWeight: fontWeights.taxTotal }}>
+                        <span style={labelStyle}>{copy.taxTotal}</span>
+                        <span style={valueStyle}>{formatMoney(totals.taxTotal, language)}</span>
+                    </div>
+                )}
                 <div
                     style={{
                         ...rowStyle,

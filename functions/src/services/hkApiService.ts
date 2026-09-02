@@ -425,6 +425,8 @@ async function sendToHKApi<TData = Record<string, unknown>>(
             category: 1,
             price: 100,
             afterTaxPrice: 100,
+            taxRate: 0,
+            taxRateType: 1,
             giveConfigs: [{
               shopAcctId: "mock-bonus-account",
               giveAmount: 120,
@@ -686,6 +688,12 @@ export interface HKGoodsItem {
   price?: number | string;
   AfterTaxPrice?: number | string;
   afterTaxPrice?: number | string;
+  TaxRate?: number | string;
+  taxRate?: number | string;
+  SetmealTypeTaxRate?: number | string;
+  setmealTypeTaxRate?: number | string;
+  TaxRateType?: number | string;
+  taxRateType?: number | string;
   Remark?: string;
   remark?: string;
   SubCategory?: string | number;
@@ -712,6 +720,14 @@ export interface HKProductVisualItem {
   amount?: number | string;
   TypeId?: string;
   typeId?: string;
+  TaxRate?: number | string;
+  taxRate?: number | string;
+  SetmealTypeTaxRate?: number | string;
+  setmealTypeTaxRate?: number | string;
+  TaxRateType?: number | string;
+  taxRateType?: number | string;
+  AfterTaxPrice?: number | string;
+  afterTaxPrice?: number | string;
   IsEnabled?: boolean;
   isEnabled?: boolean;
   IsOpenSales?: boolean;

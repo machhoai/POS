@@ -34,6 +34,9 @@ export interface JoyworldGiftCatalogItem {
   backColor?: string | null;
   price?: number | string;
   afterTaxPrice?: number | string;
+  taxRate?: number | string;
+  setmealTypeTaxRate?: number | string;
+  taxRateType?: number | string;
   stockAmount?: number | string;
   isEnabled?: boolean;
   isOpenSales?: boolean;
@@ -49,6 +52,9 @@ export interface JoyworldMemberPointPackageItem {
   backColor?: string | null;
   price?: number | string;
   afterTaxPrice?: number | string;
+  taxRate?: number | string;
+  setmealTypeTaxRate?: number | string;
+  taxRateType?: number | string;
   isEnabled?: boolean;
   isOpenSales?: boolean;
 }

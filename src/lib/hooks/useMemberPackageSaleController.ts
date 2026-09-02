@@ -53,6 +53,8 @@ function toCachedMemberPackage(product: Product) {
       : paymentAmountVnd,
     discountAmountVnd: 0,
     priceBeforeTaxVnd: product.price,
+    taxRate: product.taxRate,
+    taxRateType: product.taxRateType ?? 1,
     principalPoints,
     bonusBucketPoints: bonusPoints,
     totalPoints: principalPoints + bonusPoints,

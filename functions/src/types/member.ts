@@ -123,6 +123,9 @@ export interface HKMemberPackageDetailDto {
   typeName?: string | null;
   price?: HKNumberish;
   afterTaxPrice?: HKNumberish;
+  taxRate?: HKNumberish;
+  setmealTypeTaxRate?: HKNumberish;
+  taxRateType?: HKNumberish;
   amount?: HKNumberish;
   Amount?: HKNumberish;
   givecoin1?: HKNumberish;
@@ -266,6 +269,8 @@ export interface MemberPointPackage {
   originalAmountVnd: number;
   discountAmountVnd: number;
   priceBeforeTaxVnd: number;
+  taxRate: number;
+  taxRateType: number;
   principalPoints: number;
   bonusBucketPoints: number;
   totalPoints: number;

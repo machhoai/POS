@@ -56,6 +56,17 @@ function createPackageDraft(
   luckyDrawTicketsPerUnit: number,
 ): PosOrder {
   const now = new Date().toISOString();
+  const unitTaxAmount = selectedPackage.taxRateType === 2
+    ? Math.min(selectedPackage.paymentAmountVnd, selectedPackage.taxRate)
+    : selectedPackage.taxRate > 0
+      ? selectedPackage.paymentAmountVnd -
+        selectedPackage.paymentAmountVnd / (1 + selectedPackage.taxRate / 100)
+      : 0;
+  const effectiveTaxRate = selectedPackage.taxRateType === 2 &&
+    selectedPackage.paymentAmountVnd > unitTaxAmount
+    ? (unitTaxAmount /
+      (selectedPackage.paymentAmountVnd - unitTaxAmount)) * 100
+    : selectedPackage.taxRate;
   return {
     localOrderId: input.localOrderId,
     hkOrderNumber: null,
@@ -78,6 +89,11 @@ function createPackageDraft(
       goodsName: selectedPackage.name,
       price: selectedPackage.paymentAmountVnd,
       quantity: 1,
+      unitPriceBeforeTax: Math.round(
+        selectedPackage.paymentAmountVnd - unitTaxAmount,
+      ),
+      taxRate: Number(effectiveTaxRate.toFixed(4)),
+      taxAmount: Math.round(unitTaxAmount),
       luckyDrawTicketsPerUnit,
     }],
     sync: { retryCount: 0, lastError: null, syncedAt: null },

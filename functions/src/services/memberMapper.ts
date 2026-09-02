@@ -272,6 +272,22 @@ export function mapMemberPointPackage(input: {
     input.precalculation.totalMoney,
     "order_precalculate.data.totalMoney",
   );
+  const priceBeforeTaxVnd = toFiniteNumber(input.detail.price) ?? 0;
+  const afterTaxPriceVnd = toFiniteNumber(input.detail.afterTaxPrice) ??
+    paymentAmountVnd;
+  const taxRateType = toFiniteNumber(input.detail.taxRateType) ?? 1;
+  const explicitTaxRate = toFiniteNumber(
+    input.detail.taxRate ?? input.detail.setmealTypeTaxRate,
+  );
+  const taxRate = explicitTaxRate ?? (
+    priceBeforeTaxVnd > 0
+      ? ((afterTaxPriceVnd - priceBeforeTaxVnd) / priceBeforeTaxVnd) * 100
+      : 0
+  );
+
+  if (taxRate < 0 || ![1, 2].includes(taxRateType)) {
+    throw new MemberMappingError("Gói thành viên có cấu hình thuế không hợp lệ.");
+  }
   return {
     goodsId,
     category: toFiniteNumber(input.listItem.category ?? input.detail.category) ?? 1,
@@ -283,7 +299,9 @@ export function mapMemberPointPackage(input: {
       toFiniteNumber(input.precalculation.totalOriginalMoney) ??
       toRequiredNumber(input.precalculation.totalMoney, "totalMoney"),
     discountAmountVnd: toFiniteNumber(input.precalculation.totalDiscountMoney) ?? 0,
-    priceBeforeTaxVnd: toFiniteNumber(input.detail.price) ?? 0,
+    priceBeforeTaxVnd,
+    taxRate: Number(taxRate.toFixed(4)),
+    taxRateType,
     principalPoints,
     bonusBucketPoints,
     totalPoints,
