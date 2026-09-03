@@ -7,6 +7,11 @@ export function cachePaymentSettings(settings: FixedTransferSettings): void {
   window.localStorage.setItem(CACHE_KEY, JSON.stringify(settings));
 }
 
+export function clearCachedPaymentSettings(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(CACHE_KEY);
+}
+
 export function loadCachedPaymentSettings(
   deviceId: string,
   warehouseId: string,

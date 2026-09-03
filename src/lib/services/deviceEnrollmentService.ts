@@ -3,7 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   PosDeviceActivationResult,
   PosDeviceCredential,
-  PosDeviceSessionResult,
+  PosDeviceConfigSyncResult,
+  PosDeviceConfigVersions,
+  PosDeviceHeartbeatResult,
   PosReceiptSettingsWatchResult,
   PosTicketSettingsWatchResult,
   PosCustomerDisplaySettingsWatchResult,
@@ -177,11 +179,11 @@ const createDeviceSessionResponseError = (
 
 export async function openDeviceSession(
   credential: PosDeviceCredential,
-): Promise<PosDeviceSessionResult> {
+): Promise<PosDeviceHeartbeatResult> {
   const appVersion = await getRuntimeAppVersion();
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/pos/devices/session`, {
+    response = await fetch(`${API_BASE_URL}/api/pos/devices/heartbeat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -196,7 +198,7 @@ export async function openDeviceSession(
       false,
     );
   }
-  const envelope = (await response.json()) as ApiEnvelope<PosDeviceSessionResult>;
+  const envelope = (await response.json()) as ApiEnvelope<PosDeviceHeartbeatResult>;
   if (!response.ok || !envelope.data) {
     throw createDeviceSessionResponseError(
       response,
@@ -204,6 +206,86 @@ export async function openDeviceSession(
     );
   }
   return envelope.data;
+}
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () =>
+      typeof reader.result === "string"
+        ? resolve(reader.result)
+        : reject(new Error("Không thể đọc dữ liệu logo POS.")),
+    );
+    reader.addEventListener("error", () =>
+      reject(reader.error ?? new Error("Không thể đọc dữ liệu logo POS.")),
+    );
+    reader.readAsDataURL(blob);
+  });
+
+const downloadSettingsLogo = async (
+  credential: PosDeviceCredential,
+  contentUrl: string,
+): Promise<string> => {
+  const response = await fetch(`${API_BASE_URL}${contentUrl}`, {
+    headers: {
+      "X-Pos-Device-Id": credential.device_id,
+      "X-Pos-Device-Credential": credential.device_credential,
+    },
+  });
+  if (!response.ok) {
+    throw createDeviceSessionResponseError(response, "Không thể tải logo cấu hình POS.");
+  }
+  return blobToDataUrl(await response.blob());
+};
+
+export async function syncRemoteDeviceConfig(
+  credential: PosDeviceCredential,
+  knownVersions: PosDeviceConfigVersions,
+): Promise<PosDeviceConfigSyncResult> {
+  const appVersion = await getRuntimeAppVersion();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/pos/devices/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_id: credential.device_id,
+        device_credential: credential.device_credential,
+        app_version: appVersion,
+        known_versions: knownVersions,
+      }),
+    });
+  } catch {
+    throw new DeviceSessionError(
+      "Không thể kiểm tra cấu hình POS mới. JPOS sẽ tự thử lại.",
+      false,
+    );
+  }
+  const envelope = (await response.json()) as ApiEnvelope<PosDeviceConfigSyncResult>;
+  if (!response.ok || !envelope.data) {
+    throw createDeviceSessionResponseError(
+      response,
+      envelope.messages?.vi || "Không thể đồng bộ cấu hình POS.",
+    );
+  }
+  const result = envelope.data;
+  const [receiptLogo, ticketLogo] = await Promise.all([
+    result.receipt_settings?.logo_content_url
+      ? downloadSettingsLogo(credential, result.receipt_settings.logo_content_url)
+      : Promise.resolve(result.receipt_settings?.logo_data_url ?? null),
+    result.ticket_settings?.logo_content_url
+      ? downloadSettingsLogo(credential, result.ticket_settings.logo_content_url)
+      : Promise.resolve(result.ticket_settings?.logo_data_url ?? null),
+  ]);
+  return {
+    ...result,
+    receipt_settings: result.receipt_settings
+      ? { ...result.receipt_settings, logo_data_url: receiptLogo }
+      : null,
+    ticket_settings: result.ticket_settings
+      ? { ...result.ticket_settings, logo_data_url: ticketLogo }
+      : null,
+  };
 }
 
 export async function watchRemoteReceiptSettings(
@@ -388,7 +470,7 @@ export async function saveRemoteTicketSettings(
 
 export async function persistVerifiedDeviceSession(
   credential: PosDeviceCredential,
-  session: PosDeviceSessionResult,
+  session: PosDeviceHeartbeatResult,
 ): Promise<PosDeviceCredential> {
   const serverTime = new Date(session.server_time);
   const lastVerifiedAt = Number.isFinite(serverTime.getTime())

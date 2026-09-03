@@ -58,12 +58,11 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Đồng bộ thuế suất trực tiếp từ dữ liệu của từng sản phẩm và lưu vào dữ liệu POS.
-            - Chốt giá trước thuế, thuế suất và tiền thuế chính xác khi tạo đơn hàng mới.
-            - Bill hiển thị đơn giá, thành tiền từng dòng và tạm tính theo giá trước thuế.
-            - Tách riêng tiền thuế theo từng mặt hàng và tổng tiền thuế của toàn đơn.
-            - Tự hiệu chỉnh khi in các đơn cũ có thuế suất nhưng tiền thuế bị lưu bằng 0.
-            - Không in dòng thuế khi thuế suất hoặc tiền thuế thực tế bằng 0.
+            - Thay ba kết nối long-poll bằng một lần kiểm tra phiên bản cấu hình mỗi 3 phút.
+            - Tách heartbeat thiết bị khỏi dữ liệu cấu hình và giảm tần suất heartbeat xuống 5 phút.
+            - Chỉ tải lại nhóm cấu hình có phiên bản thay đổi.
+            - Tải logo hóa đơn và vé từ Cloud Storage khi logo thay đổi, không nhận lại base64 trong mỗi heartbeat.
+            - Giảm request nền và lưu lượng mạng tới JPULSE để tối ưu chi phí Cloud Run và Firestore.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

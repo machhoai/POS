@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo } from "react";
+
 import { mapRemoteReceiptSettings } from "@/features/receipt/helpers/remoteReceiptSettings";
 import { useReceiptSettingsStore } from "@/features/receipt/store/useReceiptSettingsStore";
 import { mapRemoteTicketSettings } from "@/features/ticket/helpers/remoteTicketSettings";
@@ -13,21 +14,21 @@ import {
 import {
   DeviceSessionError,
   isDeviceEnrollmentRuntime,
-  watchRemoteCustomerDisplaySettings,
-  watchRemoteReceiptSettings,
-  watchRemoteTicketSettings,
+  syncRemoteDeviceConfig,
 } from "@/lib/services/deviceEnrollmentService";
-import { cachePaymentSettings } from "@/lib/services/paymentSettingsCacheService";
+import {
+  cachePaymentSettings,
+  clearCachedPaymentSettings,
+  loadCachedPaymentSettings,
+} from "@/lib/services/paymentSettingsCacheService";
 import { useCustomerDisplayAdvertisingStore } from "@/lib/stores/useCustomerDisplayAdvertisingStore";
 import type {
+  PosDeviceConfigSyncResult,
   PosDeviceCredential,
-  PosDeviceSessionResult,
 } from "@/lib/types/deviceEnrollment";
-import {
-  createRemoteSettingsWatchCredential,
-  getRemoteSettingsRetryDelayMs,
-  REMOTE_SETTINGS_SUCCESS_RECONNECT_DELAY_MS,
-} from "@/lib/utils/remoteSettingsPolling";
+import { getRemoteSettingsRetryDelayMs } from "@/lib/utils/remoteSettingsPolling";
+
+const CONFIG_POLL_INTERVAL_MS = 3 * 60 * 1000;
 
 interface RemoteSettingsSyncInput {
   credential: PosDeviceCredential | null;
@@ -36,30 +37,33 @@ interface RemoteSettingsSyncInput {
   onRevoked: (message: string) => void;
 }
 
-export function useRemoteDeviceSettingsSync({ credential, blocked, enabled, onRevoked }: RemoteSettingsSyncInput) {
+export function useRemoteDeviceSettingsSync({
+  credential,
+  blocked,
+  enabled,
+  onRevoked,
+}: RemoteSettingsSyncInput): void {
   const applyReceipt = useReceiptSettingsStore((state) => state.applyRemoteSettings);
   const clearReceipt = useReceiptSettingsStore((state) => state.clearRemoteSettings);
-  const receiptVersion = useReceiptSettingsStore((state) => state.remoteVersion);
   const applyTicket = useTicketSettingsStore((state) => state.applyRemoteSettings);
   const clearTicket = useTicketSettingsStore((state) => state.clearRemoteSettings);
-  const ticketVersion = useTicketSettingsStore((state) => state.remoteVersion);
-  const advertisingVersion = useCustomerDisplayAdvertisingStore(
-    (state) => state.view?.settings?.version ?? 0,
-  );
+  const clearAdvertising = useCustomerDisplayAdvertisingStore((state) => state.clear);
   const deviceId = credential?.device_id ?? null;
   const deviceCredential = credential?.device_credential ?? null;
   const warehouseId = credential?.warehouse_id ?? null;
-  const watchCredential = useMemo<PosDeviceCredential | null>(() => {
-    if (warehouseId === null) return null;
-    return createRemoteSettingsWatchCredential({
-      device_id: deviceId ?? "",
-      device_credential: deviceCredential ?? "",
+  const pollingCredential = useMemo<PosDeviceCredential | null>(() => {
+    if (!deviceId || !deviceCredential || !warehouseId) {
+      return null;
+    }
+    return {
+      device_id: deviceId,
+      device_credential: deviceCredential,
       warehouse_id: warehouseId,
-    });
+    };
   }, [deviceCredential, deviceId, warehouseId]);
 
   const applyAdvertisingSettings = useCallback(async (
-    view: NonNullable<PosDeviceSessionResult["customer_display_settings"]>,
+    view: NonNullable<PosDeviceConfigSyncResult["customer_display_settings"]>,
   ) => {
     await applyCustomerDisplayAdvertisingView(view);
     await publishCustomerDisplayAdvertising({
@@ -68,27 +72,105 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, enabled, onRe
     });
   }, []);
 
-  const applySessionSettings = useCallback(async (session: PosDeviceSessionResult) => {
-    if (!enabled) return;
-    if (session.receipt_settings) {
-      applyReceipt(
-        session.receipt_settings.warehouse_id,
-        session.receipt_settings.version,
-        mapRemoteReceiptSettings(session.receipt_settings),
-      );
-    } else clearReceipt(session.device.warehouse_id);
-    if (session.ticket_settings) {
-      applyTicket(
-        session.ticket_settings.warehouse_id,
-        session.ticket_settings.version,
-        mapRemoteTicketSettings(session.ticket_settings),
-      );
-    } else clearTicket(session.device.warehouse_id);
-    if (session.payment_settings) cachePaymentSettings(session.payment_settings);
-    if (session.customer_display_settings) {
-      await applyAdvertisingSettings(session.customer_display_settings);
+  const applyConfig = useCallback(async (result: PosDeviceConfigSyncResult) => {
+    if (result.changed.receipt_settings) {
+      if (result.receipt_settings) {
+        applyReceipt(
+          result.receipt_settings.warehouse_id,
+          result.receipt_settings.version,
+          mapRemoteReceiptSettings(result.receipt_settings),
+        );
+      } else if (pollingCredential) {
+        clearReceipt(pollingCredential.warehouse_id);
+      }
     }
-  }, [applyAdvertisingSettings, applyReceipt, applyTicket, clearReceipt, clearTicket, enabled]);
+    if (result.changed.ticket_settings) {
+      if (result.ticket_settings) {
+        applyTicket(
+          result.ticket_settings.warehouse_id,
+          result.ticket_settings.version,
+          mapRemoteTicketSettings(result.ticket_settings),
+        );
+      } else if (pollingCredential) {
+        clearTicket(pollingCredential.warehouse_id);
+      }
+    }
+    if (result.changed.payment_settings) {
+      if (result.payment_settings) cachePaymentSettings(result.payment_settings);
+      else clearCachedPaymentSettings();
+    }
+    if (result.changed.customer_display_settings) {
+      if (result.customer_display_settings) {
+        await applyAdvertisingSettings(result.customer_display_settings);
+      } else {
+        clearAdvertising();
+      }
+    }
+  }, [
+    applyAdvertisingSettings,
+    applyReceipt,
+    applyTicket,
+    clearAdvertising,
+    clearReceipt,
+    clearTicket,
+    pollingCredential,
+  ]);
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      !pollingCredential ||
+      blocked ||
+      !isDeviceEnrollmentRuntime()
+    ) {
+      return;
+    }
+    let cancelled = false;
+    let timer: number | null = null;
+    let failureCount = 0;
+
+    const schedule = (delayMs: number) => {
+      if (cancelled) return;
+      timer = window.setTimeout(() => void poll(), delayMs);
+    };
+    const poll = async () => {
+      try {
+        const receiptState = useReceiptSettingsStore.getState();
+        const ticketState = useTicketSettingsStore.getState();
+        const advertisingState = useCustomerDisplayAdvertisingStore.getState();
+        const payment = loadCachedPaymentSettings(
+          pollingCredential.device_id,
+          pollingCredential.warehouse_id,
+        );
+        const result = await syncRemoteDeviceConfig(pollingCredential, {
+          receipt_settings: receiptState.remoteVersion || null,
+          ticket_settings: ticketState.remoteVersion || null,
+          payment_settings: payment?.version ?? null,
+          customer_display_settings: advertisingState.view?.settings?.version ?? null,
+        });
+        if (cancelled) return;
+        await applyConfig(result);
+        failureCount = 0;
+        schedule(CONFIG_POLL_INTERVAL_MS);
+      } catch (reason: unknown) {
+        if (cancelled) return;
+        if (reason instanceof DeviceSessionError && reason.revoked) {
+          onRevoked(reason.message);
+          return;
+        }
+        failureCount += 1;
+        const retryAfterMs =
+          reason instanceof DeviceSessionError ? reason.retryAfterMs : null;
+        schedule(getRemoteSettingsRetryDelayMs(failureCount, retryAfterMs));
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [applyConfig, blocked, enabled, onRevoked, pollingCredential]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -107,146 +189,4 @@ export function useRemoteDeviceSettingsSync({ credential, blocked, enabled, onRe
       stopListening?.();
     };
   }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled || !watchCredential || blocked || !isDeviceEnrollmentRuntime()) return;
-    let cancelled = false;
-    let controller: AbortController | null = null;
-    let failureCount = 0;
-    const watch = async () => {
-      while (!cancelled) {
-        controller = new AbortController();
-        try {
-          const result = await watchRemoteReceiptSettings(
-            watchCredential,
-            receiptVersion,
-            controller.signal,
-          );
-          if (cancelled) return;
-          if (result.changed && result.receipt_settings) {
-            applyReceipt(
-              result.receipt_settings.warehouse_id,
-              result.receipt_settings.version,
-              mapRemoteReceiptSettings(result.receipt_settings),
-            );
-          } else if (result.changed) clearReceipt(watchCredential.warehouse_id);
-          failureCount = 0;
-          await new Promise((resolve) =>
-            window.setTimeout(resolve, REMOTE_SETTINGS_SUCCESS_RECONNECT_DELAY_MS),
-          );
-        } catch (reason: unknown) {
-          if (cancelled) return;
-          if (reason instanceof DeviceSessionError && reason.revoked) {
-            onRevoked(reason.message);
-            return;
-          }
-          failureCount += 1;
-          const retryAfterMs =
-            reason instanceof DeviceSessionError ? reason.retryAfterMs : null;
-          await new Promise((resolve) =>
-            window.setTimeout(
-              resolve,
-              getRemoteSettingsRetryDelayMs(failureCount, retryAfterMs),
-            ),
-          );
-        }
-      }
-    };
-    void watch();
-    return () => { cancelled = true; controller?.abort(); };
-  }, [applyReceipt, blocked, clearReceipt, enabled, onRevoked, receiptVersion, watchCredential]);
-
-  useEffect(() => {
-    if (!enabled || !watchCredential || blocked || !isDeviceEnrollmentRuntime()) return;
-    let cancelled = false;
-    let controller: AbortController | null = null;
-    let failureCount = 0;
-    const watch = async () => {
-      while (!cancelled) {
-        controller = new AbortController();
-        try {
-          const result = await watchRemoteTicketSettings(
-            watchCredential,
-            ticketVersion,
-            controller.signal,
-          );
-          if (cancelled) return;
-          if (result.changed && result.ticket_settings) {
-            applyTicket(
-              result.ticket_settings.warehouse_id,
-              result.ticket_settings.version,
-              mapRemoteTicketSettings(result.ticket_settings),
-            );
-          } else if (result.changed) clearTicket(watchCredential.warehouse_id);
-          failureCount = 0;
-          await new Promise((resolve) =>
-            window.setTimeout(resolve, REMOTE_SETTINGS_SUCCESS_RECONNECT_DELAY_MS),
-          );
-        } catch (reason: unknown) {
-          if (cancelled) return;
-          if (reason instanceof DeviceSessionError && reason.revoked) {
-            onRevoked(reason.message);
-            return;
-          }
-          failureCount += 1;
-          const retryAfterMs =
-            reason instanceof DeviceSessionError ? reason.retryAfterMs : null;
-          await new Promise((resolve) =>
-            window.setTimeout(
-              resolve,
-              getRemoteSettingsRetryDelayMs(failureCount, retryAfterMs),
-            ),
-          );
-        }
-      }
-    };
-    void watch();
-    return () => { cancelled = true; controller?.abort(); };
-  }, [applyTicket, blocked, clearTicket, enabled, onRevoked, ticketVersion, watchCredential]);
-
-  useEffect(() => {
-    if (!enabled || !watchCredential || blocked || !isDeviceEnrollmentRuntime()) return;
-    let cancelled = false;
-    let controller: AbortController | null = null;
-    let failureCount = 0;
-    const watch = async () => {
-      while (!cancelled) {
-        controller = new AbortController();
-        try {
-          const result = await watchRemoteCustomerDisplaySettings(
-            watchCredential,
-            advertisingVersion,
-            controller.signal,
-          );
-          if (cancelled) return;
-          if (result.changed && result.customer_display_settings) {
-            await applyAdvertisingSettings(result.customer_display_settings);
-          }
-          failureCount = 0;
-          await new Promise((resolve) =>
-            window.setTimeout(resolve, REMOTE_SETTINGS_SUCCESS_RECONNECT_DELAY_MS),
-          );
-        } catch (reason: unknown) {
-          if (cancelled) return;
-          if (reason instanceof DeviceSessionError && reason.revoked) {
-            onRevoked(reason.message);
-            return;
-          }
-          failureCount += 1;
-          const retryAfterMs =
-            reason instanceof DeviceSessionError ? reason.retryAfterMs : null;
-          await new Promise((resolve) =>
-            window.setTimeout(
-              resolve,
-              getRemoteSettingsRetryDelayMs(failureCount, retryAfterMs),
-            ),
-          );
-        }
-      }
-    };
-    void watch();
-    return () => { cancelled = true; controller?.abort(); };
-  }, [advertisingVersion, applyAdvertisingSettings, blocked, enabled, onRevoked, watchCredential]);
-
-  return { applySessionSettings };
 }

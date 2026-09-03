@@ -36,7 +36,7 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
     setBlockReason(credential?.warehouse_id ? "REVOKED" : "PENDING");
     setError(message);
   }, [credential?.warehouse_id]);
-  const { applySessionSettings } = useRemoteDeviceSettingsSync({
+  useRemoteDeviceSettingsSync({
     credential,
     blocked,
     enabled: ownsRemoteSettings,
@@ -59,7 +59,6 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
         setBlocked(false);
         setBlockReason(null);
         setWarning("");
-        await applySessionSettings(session);
         if (
           deviceCredential.warehouse_id &&
           deviceCredential.warehouse_id !== session.device.warehouse_id
@@ -90,7 +89,7 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
         );
       }
     },
-    [applySessionSettings],
+    [],
   );
 
   useEffect(() => {
@@ -117,7 +116,7 @@ export default function DeviceActivationGate({ children }: { children: ReactNode
 
   useEffect(() => {
     if (!credential || !isDeviceEnrollmentRuntime()) return;
-    const timer = window.setInterval(() => void syncDevice(credential), 60_000);
+    const timer = window.setInterval(() => void syncDevice(credential), 5 * 60_000);
     return () => window.clearInterval(timer);
   }, [credential, syncDevice]);
 

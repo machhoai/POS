@@ -28,6 +28,8 @@ export interface RemotePosReceiptSettings {
   after_sales_text: string;
   footer_message: string;
   logo_data_url: string | null;
+  logo_content_url?: string | null;
+  logo_checksum_sha256?: string | null;
   logo_width_mm: number;
   logo_max_height_mm: number;
   logo_contrast_percent: number;
@@ -66,6 +68,8 @@ export interface RemotePosTicketSettings {
   instructions: string;
   footer_message: string;
   logo_data_url: string | null;
+  logo_content_url?: string | null;
+  logo_checksum_sha256?: string | null;
   logo_width_mm: number;
   logo_max_height_mm: number;
   logo_contrast_percent: number;
@@ -93,12 +97,25 @@ export interface PosTicketSettingsWatchResult {
   server_time: string;
 }
 
-export interface PosDeviceSessionResult {
+export interface PosDeviceHeartbeatResult {
   device: PosDeviceActivationResult["device"];
+  server_time: string;
+}
+
+export interface PosDeviceConfigVersions {
+  receipt_settings: number | null;
+  ticket_settings: number | null;
+  payment_settings: number | null;
+  customer_display_settings: number | null;
+}
+
+export interface PosDeviceConfigSyncResult {
+  versions: PosDeviceConfigVersions;
+  changed: Record<keyof PosDeviceConfigVersions, boolean>;
   receipt_settings: RemotePosReceiptSettings | null;
   ticket_settings: RemotePosTicketSettings | null;
   payment_settings: import("@/lib/types/paymentSettings").FixedTransferSettings | null;
-  customer_display_settings?: import("@/lib/types/customerDisplayAdvertising").CustomerDisplayAdvertisingView | null;
+  customer_display_settings: import("@/lib/types/customerDisplayAdvertising").CustomerDisplayAdvertisingView | null;
   server_time: string;
 }
 
