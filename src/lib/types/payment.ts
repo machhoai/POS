@@ -54,6 +54,7 @@ export interface PayOSPaymentResult {
   nextAction: PayOSNextAction;
   serverTime: string;
   manualConfirmation: PayOSManualConfirmation | null;
+  cancellationMode?: "REMOTE_CONFIRMED" | "LOCAL_ONLY";
 }
 
 export interface PayOSCheckoutController {

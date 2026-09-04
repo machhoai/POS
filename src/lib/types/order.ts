@@ -84,6 +84,10 @@ export interface PayOSPaymentAttempt {
   reference?: string;
   transactionDateTime?: string;
   error?: string;
+  /** ISO timestamp when the cashier abandoned this QR at the POS. */
+  locallyCancelledAt?: string;
+  /** Whether PayOS confirmed the cancellation or could not be reached. */
+  remoteCancellationConfirmed?: boolean;
 }
 
 export interface PayOSPaymentDetails {

@@ -274,7 +274,7 @@ export function usePayOSCheckoutController({
     const accepted = window.confirm(
       isFixedTransfer
         ? "Bạn có chắc muốn hủy mã chuyển khoản dự phòng và quay lại giỏ hàng không?"
-        : "Mã thanh toán phải được hủy trên PayOS trước khi có thể sửa giỏ hàng. Bạn có chắc muốn hủy không?",
+        : "Hệ thống sẽ yêu cầu PayOS hủy mã. Nếu PayOS không phản hồi, giỏ vẫn được mở khóa để bạn chọn hình thức thanh toán khác; hãy đảm bảo khách không tiếp tục dùng mã QR cũ. Bạn có chắc muốn hủy không?",
     );
     if (!accepted) return;
     showInfo(
@@ -295,9 +295,16 @@ export function usePayOSCheckoutController({
       if (manageCartLock) unlockCartAfterCancellation(orderId);
       onCancelled?.();
       resetPayment();
+      if (result.cancellationMode === "LOCAL_ONLY") {
+        showWarning(
+          "Đã hủy thanh toán tại POS",
+          "Giỏ hàng đã được mở khóa. PayOS chưa xác nhận hủy mã cũ; không để khách tiếp tục quét hoặc chuyển khoản bằng mã đó.",
+        );
+        return;
+      }
       showSuccess(
         "Đã hủy mã thanh toán",
-        "Giỏ hàng đã được mở khóa và có thể chỉnh sửa.",
+        "Giỏ hàng đã được mở khóa; bạn có thể chọn hình thức thanh toán khác.",
       );
     } catch {
       showError(

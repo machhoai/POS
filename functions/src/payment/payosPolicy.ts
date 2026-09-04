@@ -1,4 +1,8 @@
-import type { OrderStatus, PayOSPaymentStatus } from "../types/order";
+import type {
+  OrderStatus,
+  PayOSPaymentAttempt,
+  PayOSPaymentStatus,
+} from "../types/order";
 
 export type PayOSNextAction =
   | "WAIT"
@@ -11,6 +15,22 @@ export const PAYOS_DISPLAY_WINDOW_MS = 5 * 60 * 1000;
 export const PAYOS_DESCRIPTION_MAX_LENGTH = 25;
 export const PAYOS_STORE_CODE_MAX_LENGTH = 6;
 export const PAYOS_PAYMENT_REFERENCE_LENGTH = 12;
+export const LOCAL_PAYOS_CANCELLATION_MESSAGE =
+  "Đã hủy tại POS nhưng chưa xác nhận được trạng thái hủy với PayOS.";
+
+export function buildLocallyCancelledPayOSAttempt(
+  attempt: PayOSPaymentAttempt,
+  cancelledAt: string,
+): PayOSPaymentAttempt {
+  return {
+    ...attempt,
+    status: "CANCELLED",
+    updatedAt: cancelledAt,
+    locallyCancelledAt: cancelledAt,
+    remoteCancellationConfirmed: false,
+    error: LOCAL_PAYOS_CANCELLATION_MESSAGE,
+  };
+}
 
 /**
  * Builds the bank-transfer description from the warehouse business code and

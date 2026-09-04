@@ -2,6 +2,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  buildLocallyCancelledPayOSAttempt,
   buildPayOSPaymentDescription,
   canManuallyConfirmPayOSPayment,
   decidePayOSWebhookPayment,
@@ -91,6 +92,27 @@ test("requires a new QR when the PayOS link is expired or cancelled", () => {
     displayExpiresAt: "2026-08-03T02:05:00.000Z",
     nowMs: NOW,
   }), "RECREATE");
+});
+
+test("marks an unreachable PayOS cancellation as locally cancelled", () => {
+  const cancelledAt = "2026-08-03T02:01:00.000Z";
+  const attempt = {
+    orderCode: 123456,
+    status: "PENDING",
+    amount: 150000,
+    description: "JWC01 000000ABC123",
+    createdAt: "2026-08-03T02:00:00.000Z",
+    linkExpiresAt: "2026-08-03T02:15:00.000Z",
+    displayExpiresAt: "2026-08-03T02:05:00.000Z",
+  };
+
+  const cancelled = buildLocallyCancelledPayOSAttempt(attempt, cancelledAt);
+
+  assert.equal(cancelled.status, "CANCELLED");
+  assert.equal(cancelled.locallyCancelledAt, cancelledAt);
+  assert.equal(cancelled.remoteCancellationConfirmed, false);
+  assert.match(cancelled.error, /chưa xác nhận.*PayOS/i);
+  assert.equal(cancelled.orderCode, attempt.orderCode);
 });
 
 test("treats paid and downstream synchronization states as completed", () => {

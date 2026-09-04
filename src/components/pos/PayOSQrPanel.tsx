@@ -111,7 +111,7 @@ export default function PayOSQrPanel({ payment }: PayOSQrPanelProps) {
         <h3 className="text-lg font-extrabold text-amber-900">Chưa tải được mã QR</h3>
         <p className="text-sm leading-6 text-amber-800">
           Đơn hàng và giỏ hàng vẫn được giữ an toàn. Bạn có thể thử khôi phục mã,
-          hoặc hủy mã trên PayOS trước khi quay lại chỉnh sửa giỏ hàng.
+          hoặc hủy phiên thanh toán để quay lại chọn hình thức khác.
         </p>
         <div className="grid gap-2 sm:grid-cols-2">
           <button type="button" onClick={() => void payment.createPayment()} disabled={payment.isBusy} className="min-h-12 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white disabled:opacity-50">

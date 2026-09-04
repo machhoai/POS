@@ -352,7 +352,7 @@ export default function CashierPage() {
       if (isPaymentLocked) {
         showWarning(
           "Giỏ hàng đang được khóa",
-          "Hãy hoàn tất hoặc hủy mã chuyển khoản trên PayOS trước khi sửa đơn.",
+          "Hãy hoàn tất hoặc hủy phiên chuyển khoản trước khi sửa đơn.",
         );
         return false;
       }

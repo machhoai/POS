@@ -20,11 +20,13 @@ import type {
 } from "../types/order";
 import {
   buildPayOSPaymentDescription,
+  buildLocallyCancelledPayOSAttempt,
   canManuallyConfirmPayOSPayment,
   decidePayOSWebhookPayment,
   inferPayOSNextAction,
   isCompletedOrderStatus,
   isPayOSPaymentAmountValid,
+  LOCAL_PAYOS_CANCELLATION_MESSAGE,
   PAYOS_DISPLAY_WINDOW_MS,
   type PayOSNextAction,
 } from "./payosPolicy";
@@ -35,10 +37,15 @@ import {
   getFixedTransferSettingsForDevice,
   isFixedTransferActive,
 } from "./fixedTransferFunctions";
+import { isPayOSUnavailableError } from "./payosErrors";
 
 const PAYMENT_LINK_LIFETIME_SECONDS = 15 * 60;
 const STALE_CREATION_MS = 2 * 60 * 1000;
 const LOCAL_ORDER_ID_PATTERN = /^ORD-\d{10,13}-[A-Z0-9]{6}$/;
+const PAYOS_CANCELLATION_REQUEST_OPTIONS = {
+  timeout: 5_000,
+  maxRetries: 0,
+} as const;
 
 function hasScopedPermission(
   permissions: Record<string, Record<string, unknown>>,
@@ -455,6 +462,7 @@ async function updateAttemptStatus(
   orderCode: number,
   status: PaymentLinkStatus,
   allowCompletedOrder = false,
+  remoteCancellationConfirmed?: boolean,
 ): Promise<PosOrder> {
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(docRef);
@@ -476,6 +484,9 @@ async function updateAttemptStatus(
       ...attempt,
       status,
       updatedAt: now,
+      ...(remoteCancellationConfirmed === undefined
+        ? {}
+        : { remoteCancellationConfirmed }),
     };
     const paymentDetails = {
       ...replaceAttempt(details, nextAttempt),
@@ -566,12 +577,16 @@ export async function markPayOSPaymentPaid(
 async function syncPayOSOrder(
   docRef: DocumentReference,
   order: PosOrder,
+  requestOptions?: { timeout: number; maxRetries: number },
 ): Promise<PosOrder> {
   const attempt = getCurrentAttempt(order);
   if (!attempt || !isPayOSActive(attempt.status) || attempt.status === "CREATING") {
     return order;
   }
-  const info = await getPayOS().paymentRequests.get(attempt.orderCode);
+  const info = await getPayOS().paymentRequests.get(
+    attempt.orderCode,
+    requestOptions,
+  );
   if (info.status === "PAID") {
     const transaction = info.transactions[0];
     const paymentResult = await markPayOSPaymentPaid(docRef, attempt.orderCode, {
@@ -916,13 +931,70 @@ async function cancelRemotePayOSAttempt(
       return await getPayOS().paymentRequests.cancel(
         attempt.paymentLinkId,
         reason,
+        PAYOS_CANCELLATION_REQUEST_OPTIONS,
       );
     }
-    return await getPayOS().paymentRequests.cancel(attempt.orderCode, reason);
+    return await getPayOS().paymentRequests.cancel(
+      attempt.orderCode,
+      reason,
+      PAYOS_CANCELLATION_REQUEST_OPTIONS,
+    );
   } catch (error: unknown) {
     if (error instanceof NotFoundError) return null;
     throw error;
   }
+}
+
+async function cancelAttemptLocallyAfterPayOSFailure(
+  docRef: DocumentReference,
+  attempt: PayOSPaymentAttempt,
+  error: unknown,
+): Promise<PosOrder> {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const cancelledOrder = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists) {
+      throw new HttpsError("not-found", "Không tìm thấy đơn hàng.");
+    }
+    const order = snapshot.data() as PosOrder;
+    const details = order.paymentDetails;
+    const currentAttempt = getCurrentAttempt(order);
+    if (
+      !details ||
+      !currentAttempt ||
+      currentAttempt.orderCode !== attempt.orderCode ||
+      isCompletedOrderStatus(order.status) ||
+      currentAttempt.status === "PAID"
+    ) {
+      return order;
+    }
+
+    const now = new Date().toISOString();
+    const locallyCancelledAttempt = buildLocallyCancelledPayOSAttempt(
+      currentAttempt,
+      now,
+    );
+    const paymentDetails: PayOSPaymentDetails = {
+      ...replaceAttempt(details, locallyCancelledAttempt),
+      lastCheckedAt: now,
+      lastConnectionErrorAt: now,
+      lastError: LOCAL_PAYOS_CANCELLATION_MESSAGE,
+    };
+    const nextOrder: PosOrder = {
+      ...order,
+      paymentDetails,
+      updatedAt: now,
+    };
+    transaction.update(docRef, { paymentDetails, updatedAt: now });
+    return nextOrder;
+  });
+
+  logger.warn("[PayOS] Đã hủy phiên thanh toán cục bộ khi PayOS không phản hồi", {
+    localOrderId: cancelledOrder.localOrderId,
+    orderCode: attempt.orderCode,
+    error: errorMessage,
+  });
+  return cancelledOrder;
 }
 
 async function cancelAttemptSafely(
@@ -970,6 +1042,7 @@ async function cancelAttemptSafely(
     attempt.orderCode,
     cancellation?.status ?? "CANCELLED",
     allowCompletedOrder,
+    true,
   );
 }
 
@@ -1046,15 +1119,59 @@ export async function cancelPayOSPaymentForUser(
     );
     return buildPaymentResult(cancelledOrder);
   }
-  const synchronized = await syncPayOSOrder(authorized.docRef, authorized.order);
+  const originalAttempt = getCurrentAttempt(authorized.order);
+  let synchronized: PosOrder;
+  try {
+    synchronized = await syncPayOSOrder(
+      authorized.docRef,
+      authorized.order,
+      PAYOS_CANCELLATION_REQUEST_OPTIONS,
+    );
+  } catch (error: unknown) {
+    if (!isPayOSUnavailableError(error)) throw error;
+    if (!originalAttempt) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Đơn hàng chưa có phiên thanh toán PayOS để hủy.",
+      );
+    }
+    const cancelledOrder = await cancelAttemptLocallyAfterPayOSFailure(
+      authorized.docRef,
+      originalAttempt,
+      error,
+    );
+    return {
+      ...buildPaymentResult(cancelledOrder),
+      cancellationMode: "LOCAL_ONLY" as const,
+    };
+  }
   const attempt = getCurrentAttempt(synchronized);
   if (!attempt || inferNextAction(synchronized, attempt) === "COMPLETED") {
     return buildPaymentResult(synchronized);
   }
-  const cancelledOrder = await cancelAttemptSafely(
-    authorized.docRef,
-    attempt,
-    "Thu ngân hủy thanh toán tại quầy POS",
-  );
-  return buildPaymentResult(cancelledOrder);
+  try {
+    const cancelledOrder = await cancelAttemptSafely(
+      authorized.docRef,
+      attempt,
+      "Thu ngân hủy thanh toán tại quầy POS",
+    );
+    return {
+      ...buildPaymentResult(cancelledOrder),
+      cancellationMode:
+        getCurrentAttempt(cancelledOrder)?.remoteCancellationConfirmed === false
+          ? "LOCAL_ONLY" as const
+          : "REMOTE_CONFIRMED" as const,
+    };
+  } catch (error: unknown) {
+    if (!isPayOSUnavailableError(error)) throw error;
+    const cancelledOrder = await cancelAttemptLocallyAfterPayOSFailure(
+      authorized.docRef,
+      attempt,
+      error,
+    );
+    return {
+      ...buildPaymentResult(cancelledOrder),
+      cancellationMode: "LOCAL_ONLY" as const,
+    };
+  }
 }
