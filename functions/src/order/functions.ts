@@ -17,7 +17,11 @@ import {
   queryPaymentStatus,
 } from "../services/hkApiService";
 import { getPosAuthSession } from "../services/posAuthService";
-import { shouldSynchronizeRemoteOrder } from "./orderLifecycle";
+import {
+  canClaimRemoteOrderSync,
+  canQueueRemoteOrderRetry,
+  shouldSynchronizeRemoteOrder,
+} from "./orderLifecycle";
 import {
   createInvoiceRequestToken,
   isInvoiceRequestToken,
@@ -1095,7 +1099,7 @@ export async function retryPosOrderSyncForUser(
       "Bạn không có quyền đồng bộ lại đơn hàng này.",
     );
   }
-  if (order.status !== "SYNC_FAILED") {
+  if (!canQueueRemoteOrderRetry(order)) {
     return {
       localOrderId,
       status: order.status,
@@ -1104,16 +1108,27 @@ export async function retryPosOrderSyncForUser(
   }
 
   const updatedAt = new Date().toISOString();
-  await docRef.update({
-    status: "LOCAL_PAID",
-    updatedAt,
-    "sync.retryCount": 0,
-    "sync.lastError": null,
+  const queued = await db.runTransaction(async (transaction) => {
+    const currentSnapshot = await transaction.get(docRef);
+    if (!currentSnapshot.exists) return false;
+    const current = currentSnapshot.data() as PosOrder;
+    if (!canQueueRemoteOrderRetry(current)) return false;
+    transaction.update(docRef, {
+      status: "LOCAL_PAID",
+      paymentStatus: current.paymentStatus ?? "PAID",
+      syncStatus: "PENDING",
+      syncOperationId: null,
+      version: (current.version ?? 0) + 1,
+      updatedAt,
+      "sync.retryCount": 0,
+      "sync.lastError": null,
+    });
+    return true;
   });
   return {
     localOrderId,
-    status: "LOCAL_PAID",
-    queued: true,
+    status: queued ? "LOCAL_PAID" : order.status,
+    queued,
   };
 }
 
@@ -1127,12 +1142,49 @@ function isRemotePaymentConfirmed(response: {
 async function synchronizeRemoteOrder(
   docRef: DocumentReference,
   orderId: string,
-  order: PosOrder,
 ): Promise<void> {
-  await docRef.update({
-    status: "SYNCING",
-    updatedAt: new Date().toISOString(),
+  const operationId = crypto.randomUUID();
+  const order = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists) return null;
+    const current = snapshot.data() as PosOrder;
+    if (!canClaimRemoteOrderSync(current)) return null;
+    const updatedAt = new Date().toISOString();
+    const claimed: PosOrder = {
+      ...current,
+      status: "SYNCING",
+      paymentStatus: current.paymentStatus ?? "PAID",
+      syncStatus: "SYNCING",
+      syncOperationId: operationId,
+      version: (current.version ?? 0) + 1,
+      updatedAt,
+    };
+    transaction.update(docRef, {
+      status: claimed.status,
+      paymentStatus: claimed.paymentStatus,
+      syncStatus: claimed.syncStatus,
+      syncOperationId: claimed.syncOperationId,
+      version: claimed.version,
+      updatedAt,
+    });
+    return claimed;
   });
+  if (!order) return;
+
+  const updateCurrentOperation = async (
+    values: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>,
+  ): Promise<boolean> =>
+    db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(docRef);
+      if (!snapshot.exists) return false;
+      const current = snapshot.data() as PosOrder;
+      if (current.syncOperationId !== operationId) return false;
+      transaction.update(docRef, {
+        ...values,
+        version: (current.version ?? 0) + 1,
+      });
+      return true;
+    });
 
   let hkOrderNumber = order.hkOrderNumber;
   try {
@@ -1158,10 +1210,12 @@ async function synchronizeRemoteOrder(
         throw new Error("order_create không trả về orderNumber.");
       }
 
-      await docRef.update({
+      const retained = await updateCurrentOperation({
         hkOrderNumber,
+        remoteOrderId: order.remoteOrderId ?? null,
         updatedAt: new Date().toISOString(),
       });
+      if (!retained) return;
     }
 
     let statusResponse = order.hkOrderNumber
@@ -1193,9 +1247,12 @@ async function synchronizeRemoteOrder(
     }
 
     const syncedAt = new Date().toISOString();
-    await docRef.update({
+    await updateCurrentOperation({
       status: "SYNC_SUCCESS",
+      paymentStatus: "PAID",
+      syncStatus: "SYNC_SUCCESS",
       hkOrderNumber,
+      syncOperationId: operationId,
       updatedAt: syncedAt,
       sync: {
         retryCount: order.sync?.retryCount || 0,
@@ -1208,9 +1265,12 @@ async function synchronizeRemoteOrder(
     const errorMessage =
       error instanceof Error ? error.message : String(error);
     const updatedAt = new Date().toISOString();
-    await docRef.update({
+    await updateCurrentOperation({
       status: "SYNC_FAILED",
+      paymentStatus: order.paymentStatus ?? "PAID",
+      syncStatus: "SYNC_FAILED",
       hkOrderNumber: hkOrderNumber || null,
+      syncOperationId: operationId,
       updatedAt,
       sync: {
         retryCount: (order.sync?.retryCount || 0) + 1,
@@ -1300,7 +1360,7 @@ export const onOrderLocalPaid = onDocumentUpdated(
     const docRef = db
       .collection(POS_COLLECTIONS.orders)
       .doc(event.params.orderId);
-    await synchronizeRemoteOrder(docRef, event.params.orderId, after);
+    await synchronizeRemoteOrder(docRef, event.params.orderId);
   },
 );
 
@@ -1320,19 +1380,26 @@ export const retryFailedOrderSyncs = onSchedule(
 
     if (snapshot.empty) return;
 
-    const batch = db.batch();
     let queuedCount = 0;
     for (const document of snapshot.docs) {
-      const order = document.data() as PosOrder;
-      if (order.orderKind === "MEMBER_PACKAGE") continue;
-      batch.update(document.ref, {
-        status: "LOCAL_PAID",
-        updatedAt: new Date().toISOString(),
+      const queued = await db.runTransaction(async (transaction) => {
+        const currentSnapshot = await transaction.get(document.ref);
+        if (!currentSnapshot.exists) return false;
+        const order = currentSnapshot.data() as PosOrder;
+        if (!canQueueRemoteOrderRetry(order)) return false;
+        transaction.update(document.ref, {
+          status: "LOCAL_PAID",
+          paymentStatus: order.paymentStatus ?? "PAID",
+          syncStatus: "PENDING",
+          syncOperationId: null,
+          version: (order.version ?? 0) + 1,
+          updatedAt: new Date().toISOString(),
+        });
+        return true;
       });
-      queuedCount += 1;
+      if (queued) queuedCount += 1;
     }
     if (queuedCount === 0) return;
-    await batch.commit();
     logger.info("[Đồng bộ đơn] Đã xếp lại đơn lỗi", {
       count: queuedCount,
     });

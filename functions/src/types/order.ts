@@ -16,6 +16,22 @@ export type OrderStatus =
   | "SYNC_SUCCESS"
   | "SYNC_FAILED";
 
+export type OrderPaymentStatus =
+  | "DRAFT"
+  | "PAID"
+  | "REFUNDING"
+  | "REFUNDED"
+  | "REFUND_FAILED"
+  | "REFUND_UNKNOWN";
+
+export type OrderSyncStatus =
+  | "NOT_SYNCED"
+  | "PENDING"
+  | "SYNCING"
+  | "SYNC_FAILED"
+  | "SYNC_SUCCESS"
+  | "CANCELLED";
+
 /** Payment methods. */
 export type PaymentMethod = "CASH" | "QR_CODE";
 export type OrderKind = "STANDARD" | "MEMBER_PACKAGE";
@@ -167,6 +183,20 @@ export interface PosOrder {
   /** Member snapshot retained with the local order for history and loyalty. */
   member?: OrderMemberSnapshot;
   status: OrderStatus;
+  /** Independent lifecycle projections; optional until historical backfill completes. */
+  paymentStatus?: OrderPaymentStatus;
+  syncStatus?: OrderSyncStatus;
+  /** Optimistic-concurrency version managed by backend/Functions transactions. */
+  version?: number;
+  /** Runtime source marker. Imported JoyWorld history is read-only in JPULSE. */
+  source?: "JPOS" | "JOYWORLD_IMPORT";
+  remoteOrderId?: string | null;
+  cancellationOperationId?: string | null;
+  syncOperationId?: string | null;
+  cancelledAt?: string | null;
+  cancelledBy?: string | null;
+  cancelReason?: string | null;
+  refundOrderNumber?: string | null;
   paymentMethod: PaymentMethod;
   paymentMethodId: string;
   paymentMethodName: string;
