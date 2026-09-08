@@ -20,3 +20,16 @@ test("signs the exact timestamp, request id, and request body", () => {
   assert.equal(productSyncSignaturesMatch(signature, signature), true);
   assert.equal(productSyncSignaturesMatch("wrong", signature), false);
 });
+
+test("normalizes whitespace added by Secret Manager input pipelines", () => {
+  const args = [
+    "1725760800000",
+    "request-1",
+    '{"actor_id":"admin"}',
+  ];
+
+  assert.equal(
+    createProductSyncSignature("secret\n", ...args),
+    createProductSyncSignature("secret", ...args),
+  );
+});

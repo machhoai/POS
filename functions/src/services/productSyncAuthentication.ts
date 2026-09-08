@@ -6,7 +6,7 @@ export function createProductSyncSignature(
   requestId: string,
   rawBody: string,
 ): string {
-  return createHmac("sha256", secret)
+  return createHmac("sha256", secret.trim())
     .update(`${timestamp}.${requestId}.${rawBody}`)
     .digest("hex");
 }
