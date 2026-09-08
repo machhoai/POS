@@ -78,6 +78,8 @@ export interface SyncProduct {
   syncStatus?: ProductSyncStatus;
   /** Why a product is retained but hidden from JPOS. */
   disabledReason?: ProductDisabledReason | null;
+  /** Soft-delete marker retained for audit and possible upstream restoration. */
+  is_deleted?: boolean;
   /** ISO 8601 timestamp of last sync */
   lastSyncAt: string;
 }

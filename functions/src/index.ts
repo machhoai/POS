@@ -14,6 +14,7 @@ export { payosWebhook } from "./payment/payosWebhook";
 export { payosPayment } from "./payment/payosCallable";
 
 import * as logger from "firebase-functions/logger";
+import { randomUUID } from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import {
   joyworldPassSecret,
@@ -24,6 +25,7 @@ import {
   loadPosProductCatalog,
   synchronizePosProducts,
 } from "./services/productSyncService";
+export { syncProductsFromJpulse } from "./services/jpulseProductSyncFunction";
 
 // =============================================================================
 // getPosProducts — authenticated, read-only product catalog
@@ -55,7 +57,7 @@ export const syncProducts = onCall(
     secrets: [joyworldUserSecret, joyworldPassSecret],
   },
   async (request) => {
-    await assertActivePosDevice(request.data);
+    const device = await assertActivePosDevice(request.data);
     if (!request.auth) {
       throw new HttpsError(
         "unauthenticated",
@@ -64,7 +66,13 @@ export const syncProducts = onCall(
     }
 
     try {
-      return await synchronizePosProducts(request.auth.uid);
+      return await synchronizePosProducts({
+        actorId: request.auth.uid,
+        actionTime: new Date().toISOString(),
+        requestId: randomUUID(),
+        source: "JPOS",
+        warehouseId: device.warehouseId,
+      });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error
         ? error.message

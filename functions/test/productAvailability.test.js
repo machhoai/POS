@@ -40,13 +40,14 @@ test("retains but hides a product that no longer appears in the sellable list", 
 
 test("keeps legacy and fully active product records visible", () => {
   assert.equal(isProductAvailable({}), true);
+  assert.equal(isProductAvailable({ is_deleted: true }), false);
   assert.equal(
     isProductAvailable(resolveProductAvailability()),
     true,
   );
 });
 
-test("deletes only with explicit HK deletion evidence", () => {
+test("recognizes remote removal only with explicit HK evidence", () => {
   assert.equal(
     isConfirmedRemoteDeletion({ category: 1, detailResponseCode: 404 }),
     true,

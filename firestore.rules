@@ -29,6 +29,9 @@ service cloud.firestore {
     match /pos_devices/{deviceId} {
       allow read, write: if false;
     }
+    match /pos_product_sync_runs/{runId} {
+      allow read, write: if false;
+    }
     match /pos_device_enrollments/{enrollmentId} {
       allow read, write: if false;
     }

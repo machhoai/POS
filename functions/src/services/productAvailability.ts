@@ -55,7 +55,8 @@ export function resolveProductAvailability(
 export function isProductAvailable(
   product: Partial<SyncProduct>,
 ): boolean {
-  return product.isEnabled !== false &&
+  return product.is_deleted !== true &&
+    product.isEnabled !== false &&
     product.isOpenSales !== false &&
     product.isCategoryEnabled !== false &&
     product.syncStatus !== "disabled";

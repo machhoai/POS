@@ -32,6 +32,12 @@ import {
   SYNC_CATEGORY_IDS,
   type SyncProduct,
 } from "../types/product";
+import { coordinateProductSync } from "./productSyncCoordinator";
+import {
+  hideNewProductsByDefault,
+  type ProductSyncActorContext,
+} from "./productSyncVisibilityService";
+import { findNewProductIds } from "./productSyncVisibilityPolicy";
 const BATCH_LIMIT = 500;
 const POINT_PACKAGE_CATEGORY_IDS = new Set([1, 2, 6]);
 
@@ -62,8 +68,9 @@ type ProductMutation =
     data: Partial<SyncProduct>;
   }
   | {
-    kind: "delete";
+    kind: "soft-delete";
     ref: DocumentReference;
+    data: Partial<SyncProduct>;
   };
 
 function toNonNegativeNumber(...values: unknown[]): number {
@@ -96,6 +103,9 @@ export interface ProductSyncResult {
   disabledProductCount: number;
   removedProductCount: number;
   removedSouvenirCount: number;
+  newProductCount: number;
+  newProductIds: string[];
+  hiddenWarehouseCount: number;
   syncedAt: string;
 }
 
@@ -299,11 +309,7 @@ async function commitProductMutations(
     const chunk = mutations.slice(index, index + BATCH_LIMIT);
 
     for (const mutation of chunk) {
-      if (mutation.kind === "delete") {
-        batch.delete(mutation.ref);
-      } else {
-        batch.set(mutation.ref, mutation.data, { merge: true });
-      }
+      batch.set(mutation.ref, mutation.data, { merge: true });
     }
 
     await batch.commit();
@@ -334,6 +340,7 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
       : 1;
 
     if (
+      data.is_deleted === true ||
       !data.goodsName ||
       !Number.isFinite(price) ||
       !Number.isFinite(afterTaxPrice) ||
@@ -387,12 +394,19 @@ export async function loadPosProductCatalog(): Promise<ProductCatalogResult> {
   };
 }
 
-export async function synchronizePosProducts(
-  userId: string,
+async function synchronizePosProductsCore(
+  context: ProductSyncActorContext,
 ): Promise<ProductSyncResult> {
-  logger.info("[productSync] Starting product synchronization", { userId });
+  logger.info("[productSync] Starting product synchronization", {
+    userId: context.actorId,
+    requestId: context.requestId,
+    source: context.source,
+  });
 
   const now = new Date().toISOString();
+  const existingSnapshot = await db
+    .collection(POS_COLLECTIONS.products)
+    .get();
   const allProducts: SyncProduct[] = [];
   const synchronizedCategoryIds = new Set<number>();
 
@@ -564,6 +578,18 @@ export async function synchronizePosProducts(
   const sellableSouvenirs = mapSellableSouvenirs(rawSouvenirs, now);
   allProducts.push(...sellableSouvenirs);
 
+  const newProductIds = findNewProductIds(
+    existingSnapshot.docs.map((document) => ({
+      id: document.id,
+      isDeleted: document.data().is_deleted === true,
+    })),
+    allProducts.map((product) => product.goodsId),
+  );
+  const hiddenWarehouseCount = await hideNewProductsByDefault(
+    newProductIds,
+    context,
+  );
+
   for (let index = 0; index < allProducts.length; index += BATCH_LIMIT) {
     const batch = db.batch();
     const chunk = allProducts.slice(index, index + BATCH_LIMIT);
@@ -571,7 +597,7 @@ export async function synchronizePosProducts(
     for (const product of chunk) {
       batch.set(
         db.collection(POS_COLLECTIONS.products).doc(product.goodsId),
-        product,
+        { ...product, is_deleted: false },
         { merge: true },
       );
     }
@@ -593,9 +619,6 @@ export async function synchronizePosProducts(
       return goodsId ? [[goodsId, item] as const] : [];
     }),
   );
-  const existingSnapshot = await db
-    .collection(POS_COLLECTIONS.products)
-    .get();
   const stalePackageDocs = existingSnapshot.docs.filter((doc) => {
     const category = Number(doc.data().category);
     return synchronizedCategoryIds.has(category) &&
@@ -643,7 +666,15 @@ export async function synchronizePosProducts(
       managementCatalogIsAuthoritative: managementCatalog?.isAuthoritative,
       managementCatalogContainsProduct: false,
     })) {
-      mutations.push({ kind: "delete", ref: doc.ref });
+      mutations.push({
+        kind: "soft-delete",
+        ref: doc.ref,
+        data: {
+          ...resolveProductAvailability({ isSellable: false }),
+          is_deleted: true,
+          lastSyncAt: now,
+        },
+      });
       removedProductCount += 1;
       continue;
     }
@@ -697,7 +728,15 @@ export async function synchronizePosProducts(
         detailResponseCode: response.code,
         detailResponseMessage: `${response.msg} ${response.desc || ""}`,
       })) {
-        mutations.push({ kind: "delete", ref: doc.ref });
+        mutations.push({
+          kind: "soft-delete",
+          ref: doc.ref,
+          data: {
+            ...resolveProductAvailability({ isSellable: false }),
+            is_deleted: true,
+            lastSyncAt: now,
+          },
+        });
         removedProductCount += 1;
         continue;
       }
@@ -745,7 +784,15 @@ export async function synchronizePosProducts(
 
       const remoteSouvenir = souvenirById.get(doc.id);
       if (!remoteSouvenir) {
-        mutations.push({ kind: "delete", ref: doc.ref });
+        mutations.push({
+          kind: "soft-delete",
+          ref: doc.ref,
+          data: {
+            ...resolveProductAvailability({ isSellable: false }),
+            is_deleted: true,
+            lastSyncAt: now,
+          },
+        });
         removedSouvenirCount += 1;
         continue;
       }
@@ -778,6 +825,8 @@ export async function synchronizePosProducts(
     disabledProductCount,
     removedProductCount,
     removedSouvenirCount,
+    newProductCount: newProductIds.length,
+    hiddenWarehouseCount,
   });
 
   return {
@@ -787,6 +836,18 @@ export async function synchronizePosProducts(
     disabledProductCount,
     removedProductCount,
     removedSouvenirCount,
+    newProductCount: newProductIds.length,
+    newProductIds,
+    hiddenWarehouseCount,
     syncedAt: now,
   };
+}
+
+export async function synchronizePosProducts(
+  context: ProductSyncActorContext,
+): Promise<ProductSyncResult> {
+  return coordinateProductSync(
+    context,
+    () => synchronizePosProductsCore(context),
+  );
 }

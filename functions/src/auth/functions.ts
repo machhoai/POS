@@ -1,4 +1,5 @@
 import * as logger from "firebase-functions/logger";
+import { randomUUID } from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import {
   getPosAuthSession as loadPosAuthSession,
@@ -344,7 +345,13 @@ export const getPosAuthSession = onCall(
 
     if (action === "syncProducts") {
       try {
-        return await synchronizePosProducts(request.auth.uid);
+        return await synchronizePosProducts({
+          actorId: request.auth.uid,
+          actionTime: new Date().toISOString(),
+          requestId: randomUUID(),
+          source: "JPOS",
+          warehouseId: device.warehouseId,
+        });
       } catch (error: unknown) {
         const errorMessage = error instanceof Error
           ? error.message
