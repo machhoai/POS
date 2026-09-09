@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildPosOrderSummary } = require("../lib/order/orderSummary");
+const {
+  buildPosOrderSummary,
+  shouldApplyOrderSummary,
+} = require("../lib/order/orderSummary");
 
 test("builds a compact searchable projection from a legacy order", () => {
   const result = buildPosOrderSummary({
@@ -38,3 +41,19 @@ test("builds a compact searchable projection from a legacy order", () => {
   assert.deepEqual(result.productNames, ["Vé lượt"]);
 });
 
+test("rejects an older projection event after a newer order version", () => {
+  assert.equal(
+    shouldApplyOrderSummary(
+      { version: 5, updatedAt: "2026-09-09T08:18:58.857Z" },
+      { version: 4, updatedAt: "2026-09-09T08:18:57.165Z" },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldApplyOrderSummary(
+      { version: 4, updatedAt: "2026-09-09T08:18:57.165Z" },
+      { version: 5, updatedAt: "2026-09-09T08:18:58.857Z" },
+    ),
+    true,
+  );
+});

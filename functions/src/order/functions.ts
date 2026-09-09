@@ -20,6 +20,7 @@ import { getPosAuthSession } from "../services/posAuthService";
 import {
   canClaimRemoteOrderSync,
   canQueueRemoteOrderRetry,
+  isRevenueEligibleOrder,
   shouldSynchronizeRemoteOrder,
 } from "./orderLifecycle";
 import {
@@ -1025,7 +1026,7 @@ export async function listCloseoutOrdersForUser(
     .map((document) => document.data() as PosOrder)
     .filter((order) =>
       order.warehouseId === input.warehouseId &&
-      order.status !== "DRAFT" &&
+      isRevenueEligibleOrder(order) &&
       (input.scope === "ALL_USERS" || order.createdBy === userId)
     );
 

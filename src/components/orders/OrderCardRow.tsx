@@ -4,9 +4,13 @@
 // OrderCardRow — Thẻ đơn hàng dạng hàng (Row Card)
 // =============================================================================
 
-import type { PosOrder, OrderStatus } from "@/lib/types/order";
+import type { PosOrder } from "@/lib/types/order";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { getOrderCustomerDisplay } from "@/lib/utils/orderCustomer";
+import {
+    getOrderDisplayStatus,
+    type OrderDisplayStatus,
+} from "@/lib/utils/orderLifecycle";
 import { IoCash, IoQrCode } from "react-icons/io5";
 
 interface OrderCardRowProps {
@@ -16,7 +20,7 @@ interface OrderCardRowProps {
 }
 
 const STATUS_CONFIG: Record<
-    OrderStatus,
+    OrderDisplayStatus,
     { label: string; bgClass: string; textClass: string; borderLeftClass: string; dotClass: string }
 > = {
     SYNC_SUCCESS: {
@@ -25,6 +29,41 @@ const STATUS_CONFIG: Record<
         textClass: "text-emerald-600 dark:text-emerald-400",
         borderLeftClass: "border-l-emerald-500",
         dotClass: "bg-emerald-500",
+    },
+    REFUNDED: {
+        label: "Đã hoàn tiền",
+        bgClass: "bg-violet-50",
+        textClass: "text-violet-700",
+        borderLeftClass: "border-l-violet-500",
+        dotClass: "bg-violet-500",
+    },
+    REFUNDING: {
+        label: "Đang hoàn tiền",
+        bgClass: "bg-amber-50",
+        textClass: "text-amber-700",
+        borderLeftClass: "border-l-amber-500",
+        dotClass: "bg-amber-500 animate-pulse",
+    },
+    REFUND_FAILED: {
+        label: "Hoàn tiền thất bại",
+        bgClass: "bg-red-50",
+        textClass: "text-red-700",
+        borderLeftClass: "border-l-red-500",
+        dotClass: "bg-red-500",
+    },
+    REFUND_UNKNOWN: {
+        label: "Cần đối soát hoàn tiền",
+        bgClass: "bg-orange-50",
+        textClass: "text-orange-700",
+        borderLeftClass: "border-l-orange-500",
+        dotClass: "bg-orange-500",
+    },
+    CANCELLED: {
+        label: "Đã hủy",
+        bgClass: "bg-slate-100",
+        textClass: "text-slate-700",
+        borderLeftClass: "border-l-slate-400",
+        dotClass: "bg-slate-400",
     },
     LOCAL_PAID: {
         label: "Chờ đồng bộ",
@@ -67,7 +106,8 @@ function formatDate(iso: string) {
 }
 
 export default function OrderCardRow({ order, onSelectOrder, onRetrySync }: OrderCardRowProps) {
-    const status = STATUS_CONFIG[order.status] || STATUS_CONFIG.DRAFT;
+    const displayStatus = getOrderDisplayStatus(order);
+    const status = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.DRAFT;
     const isPaymentUnverified = order.paymentVerificationStatus === "UNVERIFIED";
     const shortId = order.localOrderId.split("-").pop() || order.localOrderId;
     const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
@@ -197,7 +237,7 @@ export default function OrderCardRow({ order, onSelectOrder, onRetrySync }: Orde
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
-                    {order.status === "SYNC_FAILED" && (
+                    {displayStatus === "SYNC_FAILED" && (
                         <button
                             type="button"
                             onClick={handleRetry}

@@ -35,6 +35,9 @@ export const DEFAULT_FILTERS: OrderFilterState = {
 const STATUS_TABS = [
     { id: "all", label: "Tất cả" },
     { id: "SYNC_SUCCESS", label: "Đã đồng bộ" },
+    { id: "REFUNDED", label: "Đã hoàn tiền" },
+    { id: "REFUNDING", label: "Đang hoàn tiền" },
+    { id: "REFUND_UNKNOWN", label: "Cần đối soát hoàn tiền" },
     { id: "LOCAL_PAID", label: "Chờ đồng bộ" },
     { id: "SYNCING", label: "Đang đồng bộ" },
     { id: "SYNC_FAILED", label: "Lỗi đồng bộ" },

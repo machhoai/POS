@@ -7,6 +7,7 @@
 import type { PosOrder } from "@/lib/types/order";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { getOrderCustomerDisplay } from "@/lib/utils/orderCustomer";
+import { getOrderDisplayStatus } from "@/lib/utils/orderLifecycle";
 import ReceiptPrintButton from "@/features/receipt/components/ReceiptPrintButton";
 import TicketPrintButton from "@/features/ticket/components/TicketPrintButton";
 import LuckyDrawPrintButton from "@/features/lucky-draw/components/LuckyDrawPrintButton";
@@ -21,6 +22,11 @@ interface OrderDetailModalProps {
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
     SYNC_SUCCESS: { label: "Đã đồng bộ", color: "text-emerald-400" },
+    REFUNDED: { label: "Đã hoàn tiền", color: "text-violet-600" },
+    REFUNDING: { label: "Đang hoàn tiền", color: "text-amber-600" },
+    REFUND_FAILED: { label: "Hoàn tiền thất bại", color: "text-red-600" },
+    REFUND_UNKNOWN: { label: "Cần đối soát hoàn tiền", color: "text-orange-600" },
+    CANCELLED: { label: "Đã hủy", color: "text-slate-600" },
     LOCAL_PAID: { label: "Chờ đồng bộ", color: "text-amber-400" },
     SYNCING: { label: "Đang đồng bộ", color: "text-blue-400" },
     SYNC_FAILED: { label: "Lỗi đồng bộ", color: "text-red-400" },
@@ -40,7 +46,8 @@ export default function OrderDetailModal({
     isRetrying,
     onRetrySync,
 }: OrderDetailModalProps) {
-    const status = STATUS_LABELS[order.status] || STATUS_LABELS.DRAFT;
+    const displayStatus = getOrderDisplayStatus(order);
+    const status = STATUS_LABELS[displayStatus] || STATUS_LABELS.DRAFT;
     const finalAmount = order.totalAmount - (order.voucherDiscount || 0);
     const isPaymentUnverified = order.paymentVerificationStatus === "UNVERIFIED";
     const customer = getOrderCustomerDisplay(order);
@@ -91,6 +98,7 @@ export default function OrderDetailModal({
                         <InfoRow label="Thanh toán" value={order.paymentMethodName || order.paymentMethod} />
                         <InfoRow label="Mã HK" value={order.hkOrderNumber || "—"} />
                         {order.operatorName && <InfoRow label="Nhân viên" value={order.operatorName} />}
+                        {order.refundOrderNumber && <InfoRow label="Mã hoàn tiền" value={order.refundOrderNumber} />}
                     </div>
 
                     {/* Thành viên / khách hàng */}
@@ -196,7 +204,7 @@ export default function OrderDetailModal({
                             className="mt-2 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-amber-500 bg-amber-50 px-4 text-sm font-bold text-amber-700 active:scale-[0.98] disabled:opacity-50"
                         />
                     )}
-                    {order.status === "SYNC_FAILED" && (
+                    {displayStatus === "SYNC_FAILED" && (
                         <button
                             type="button"
                             onClick={onRetrySync}

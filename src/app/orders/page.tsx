@@ -15,6 +15,10 @@ import OrderTable from "@/components/orders/OrderTable";
 import OrderDetailModal from "@/components/orders/OrderDetailModal";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { filterAndSortOrders } from "@/lib/utils/filterOrders";
+import {
+    getOrderDisplayStatus,
+    isOrderRevenueEligible,
+} from "@/lib/utils/orderLifecycle";
 import { retryOrderSync } from "@/lib/services/orderService";
 import { showError, showPromise } from "@/lib/utils/toast";
 import { useLuckyDrawSettingsSync } from "@/features/lucky-draw/hooks/useLuckyDrawSettingsSync";
@@ -122,19 +126,24 @@ export default function OrderHistoryPage() {
     // Stats calculation
     const totalRevenue = useMemo(
         () => filteredOrders.reduce(
-            (sum, order) => order.status === "SYNC_SUCCESS" ? sum + order.totalAmount : sum,
+            (sum, order) => isOrderRevenueEligible(order) ? sum + order.totalAmount : sum,
             0,
         ),
         [filteredOrders]
     );
 
     const successCount = useMemo(
-        () => filteredOrders.filter((o) => o.status === "SYNC_SUCCESS").length,
+        () => filteredOrders.filter(
+            (order) => getOrderDisplayStatus(order) === "SYNC_SUCCESS",
+        ).length,
         [filteredOrders]
     );
 
     const pendingOrFailedCount = useMemo(
-        () => filteredOrders.filter((o) => o.status === "LOCAL_PAID" || o.status === "SYNC_FAILED" || o.status === "SYNCING").length,
+        () => filteredOrders.filter((order) => {
+            const status = getOrderDisplayStatus(order);
+            return status === "LOCAL_PAID" || status === "SYNC_FAILED" || status === "SYNCING";
+        }).length,
         [filteredOrders]
     );
 

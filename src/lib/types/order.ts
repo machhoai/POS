@@ -10,6 +10,22 @@ export type OrderStatus =
   | "SYNC_SUCCESS" // Successfully synced with HK API
   | "SYNC_FAILED"; // Sync attempt failed (will be retried)
 
+export type OrderPaymentStatus =
+  | "DRAFT"
+  | "PAID"
+  | "REFUNDING"
+  | "REFUNDED"
+  | "REFUND_FAILED"
+  | "REFUND_UNKNOWN";
+
+export type OrderSyncStatus =
+  | "NOT_SYNCED"
+  | "PENDING"
+  | "SYNCING"
+  | "SYNC_FAILED"
+  | "SYNC_SUCCESS"
+  | "CANCELLED";
+
 /** Accepted payment methods at the POS terminal. */
 export type PaymentMethod = "CASH" | "QR_CODE";
 export type OrderKind = "STANDARD" | "MEMBER_PACKAGE";
@@ -186,6 +202,14 @@ export interface PosOrder {
 
   /** Current status in the order lifecycle */
   status: OrderStatus;
+  /** Payment and synchronization are independent after cancellation/refund. */
+  paymentStatus?: OrderPaymentStatus;
+  syncStatus?: OrderSyncStatus;
+  cancellationOperationId?: string | null;
+  cancelledAt?: string | null;
+  cancelledBy?: string | null;
+  cancelReason?: string | null;
+  refundOrderNumber?: string | null;
 
   /** How the customer paid */
   paymentMethod: PaymentMethod;

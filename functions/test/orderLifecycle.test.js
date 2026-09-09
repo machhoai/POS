@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   canClaimRemoteOrderSync,
   canQueueRemoteOrderRetry,
+  isRevenueEligibleOrder,
   shouldSynchronizeRemoteOrder,
 } = require("../lib/order/orderLifecycle");
 
@@ -21,6 +22,25 @@ test("member package orders wait for the synchronous API-first callable", () => 
   assert.equal(
     shouldSynchronizeRemoteOrder("DRAFT", "LOCAL_PAID", "MEMBER_PACKAGE"),
     false,
+  );
+});
+
+test("excludes refunded and cancelled orders from revenue", () => {
+  assert.equal(
+    isRevenueEligibleOrder({
+      status: "SYNC_SUCCESS",
+      paymentStatus: "REFUNDED",
+      syncStatus: "CANCELLED",
+    }),
+    false,
+  );
+  assert.equal(
+    isRevenueEligibleOrder({
+      status: "SYNC_SUCCESS",
+      paymentStatus: "PAID",
+      syncStatus: "SYNC_SUCCESS",
+    }),
+    true,
   );
 });
 

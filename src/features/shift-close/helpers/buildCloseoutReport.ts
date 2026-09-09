@@ -4,6 +4,7 @@ import type {
   CloseoutProductSummary,
   CloseoutReport,
 } from "@/features/shift-close/types/closeout";
+import { isOrderRevenueEligible } from "@/lib/utils/orderLifecycle";
 
 const PAYMENT_METHOD_NAMES: Record<string, string> = {
   CASH: "Tiền mặt",
@@ -33,10 +34,9 @@ export function buildCloseoutReport(orders: PosOrder[]): CloseoutReport {
   const operatorNames = new Set<string>();
   let productQuantity = 0;
   let totalRevenue = 0;
+  const revenueOrders = orders.filter(isOrderRevenueEligible);
 
-  for (const order of orders) {
-    if (order.status === "DRAFT") continue;
-
+  for (const order of revenueOrders) {
     const orderAmount = toMoney(order.totalAmount);
     totalRevenue += orderAmount;
     if (order.operatorName?.trim()) operatorNames.add(order.operatorName.trim());
@@ -81,7 +81,7 @@ export function buildCloseoutReport(orders: PosOrder[]): CloseoutReport {
   });
 
   return {
-    orderCount: orders.filter((order) => order.status !== "DRAFT").length,
+    orderCount: revenueOrders.length,
     productQuantity,
     totalRevenue,
     products: Array.from(productMap.values()).sort((left, right) =>

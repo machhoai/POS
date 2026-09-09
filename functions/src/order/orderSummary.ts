@@ -63,6 +63,21 @@ export const buildPosOrderSummary = (order: PosOrder) => {
   };
 };
 
+export const shouldApplyOrderSummary = (
+  current: Record<string, unknown> | undefined,
+  incoming: { version: number; updatedAt: string },
+): boolean => {
+  if (!current) return true;
+  const currentVersion = Number(current.version ?? -1);
+  if (incoming.version !== currentVersion) {
+    return incoming.version > currentVersion;
+  }
+  const currentUpdatedAt = typeof current.updatedAt === "string"
+    ? current.updatedAt
+    : "";
+  return incoming.updatedAt > currentUpdatedAt;
+};
+
 export const onPosOrderSummaryChanged = onDocumentWritten(
   {
     document: `${POS_COLLECTIONS.orders}/{orderId}`,
@@ -74,16 +89,27 @@ export const onPosOrderSummaryChanged = onDocumentWritten(
       .doc(event.params.orderId);
     const snapshot = event.data?.after;
     if (!snapshot?.exists) {
-      await summaryRef.set(
-        { is_deleted: true, updatedAt: new Date().toISOString() },
-        { merge: true },
-      );
+      const deletedAt = new Date().toISOString();
+      const deletedVersion = Number(event.data?.before.data()?.version ?? 0) + 1;
+      await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(summaryRef);
+        const tombstone = { version: deletedVersion, updatedAt: deletedAt };
+        if (
+          !shouldApplyOrderSummary(current.data(), tombstone)
+        ) return;
+        transaction.set(
+          summaryRef,
+          { ...tombstone, is_deleted: true },
+          { merge: true },
+        );
+      });
       return;
     }
-    await summaryRef.set(
-      buildPosOrderSummary(snapshot.data() as PosOrder),
-      { merge: false },
-    );
+    const incoming = buildPosOrderSummary(snapshot.data() as PosOrder);
+    await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(summaryRef);
+      if (!shouldApplyOrderSummary(current.data(), incoming)) return;
+      transaction.set(summaryRef, incoming, { merge: false });
+    });
   },
 );
-

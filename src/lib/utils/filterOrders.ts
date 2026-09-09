@@ -1,6 +1,7 @@
 import type { OrderFilterState } from "@/components/orders/OrderFilters";
 import type { PosOrder } from "@/lib/types/order";
 import { getOrderCustomerDisplay } from "@/lib/utils/orderCustomer";
+import { getOrderDisplayStatus } from "@/lib/utils/orderLifecycle";
 
 export function filterAndSortOrders(
   orders: PosOrder[],
@@ -27,7 +28,7 @@ export function filterAndSortOrders(
 
   if (filters.statusFilter !== "all") {
     result = result.filter(
-      (order) => order.status === filters.statusFilter,
+      (order) => getOrderDisplayStatus(order) === filters.statusFilter,
     );
   }
 

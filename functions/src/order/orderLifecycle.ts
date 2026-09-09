@@ -8,6 +8,15 @@ interface SyncGuardOrder {
   cancellationOperationId?: string | null;
 }
 
+export function isRevenueEligibleOrder(order: SyncGuardOrder): boolean {
+  if (order.syncStatus === "CANCELLED") return false;
+  if (order.paymentStatus) {
+    return order.paymentStatus !== "DRAFT" &&
+      order.paymentStatus !== "REFUNDED";
+  }
+  return order.status !== "DRAFT";
+}
+
 const isCancellationLocked = (order: SyncGuardOrder): boolean =>
   Boolean(order.cancellationOperationId) ||
   ["REFUNDING", "REFUNDED", "REFUND_UNKNOWN"].includes(
