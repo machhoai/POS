@@ -30,6 +30,7 @@ import type {
   CheckoutCheckpoint,
   CheckoutJournalRecord,
 } from "@/lib/types/checkoutRecovery";
+import type { PosVoucherResolution } from "@/lib/types/voucher";
 
 interface CheckoutContext {
   shopId: number;
@@ -40,6 +41,7 @@ interface CheckoutContext {
 export interface CartState {
   // ── State ──────────────────────────────────────────────────────────────────
   items: OrderItem[];
+  vouchers: PosVoucherResolution[];
   memberUid: string | null;
   member: OrderMemberSnapshot | null;
   paymentMethod: PaymentMethod;
@@ -61,6 +63,8 @@ export interface CartState {
 
   // ── Actions ────────────────────────────────────────────────────────────────
   addItem: (item: OrderItem) => void;
+  applyVoucher: (voucher: PosVoucherResolution) => void;
+  removeVoucher: (code: string) => void;
   setMemberUid: (uid: string | null) => void;
   setMember: (member: OrderMemberSnapshot | null) => void;
   removeItem: (goodsId: string) => void;
@@ -106,6 +110,26 @@ export const selectTotalAmount = (state: CartState): number =>
 export const selectItemCount = (state: CartState): number =>
   state.items.reduce((sum, item) => sum + item.quantity, 0);
 
+export const selectVoucherDiscount = (state: CartState): number => {
+  const subtotal = selectTotalAmount(state);
+  const freeDiscount = state.vouchers
+    .filter((voucher) => voucher.rewardType !== "DISCOUNT_PERCENT")
+    .reduce(
+      (total, voucher) => total + voucher.product.price * voucher.product.quantity,
+      0,
+    );
+  const percent = state.vouchers.find(
+    (voucher) => voucher.rewardType === "DISCOUNT_PERCENT",
+  );
+  const percentDiscount = percent
+    ? Math.round((subtotal - freeDiscount) * percent.rewardValue / 100)
+    : 0;
+  return Math.min(subtotal, freeDiscount + percentDiscount);
+};
+
+export const selectPayableAmount = (state: CartState): number =>
+  selectTotalAmount(state) - selectVoucherDiscount(state);
+
 function saveCartCheckpoint(
   state: CartState,
   checkpoint: CheckoutCheckpoint,
@@ -126,10 +150,11 @@ function saveCartCheckpoint(
     memberUid: overrides.memberUid ?? state.memberUid,
     member: overrides.member ?? state.member,
     items,
+    vouchers: overrides.vouchers ?? state.vouchers,
     paymentMethod: overrides.paymentMethod ?? state.paymentMethod,
     totalAmount:
       overrides.totalAmount ??
-      items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+      selectPayableAmount({ ...state, items }),
     orderStatus: overrides.orderStatus ?? state.currentOrderStatus,
     startedAt: overrides.startedAt ?? now,
     updatedAt: now,
@@ -145,6 +170,7 @@ function saveCartCheckpoint(
 export const useCartStore = create<CartState>((set, get) => ({
   // ── Initial State ──────────────────────────────────────────────────────────
   items: [],
+  vouchers: [],
   memberUid: null,
   member: null,
   paymentMethod: "CASH",
@@ -193,6 +219,70 @@ export const useCartStore = create<CartState>((set, get) => ({
     saveCartCheckpoint(get(), "CART_READY");
   },
 
+  applyVoucher: (voucher) => {
+    const state = get();
+    if (state.isPaymentLocked) {
+      throw new Error("Giỏ hàng đang bị khóa trong phiên thanh toán.");
+    }
+    if (state.vouchers.some((item) => item.code === voucher.code)) {
+      throw new Error("Voucher đã có trong đơn hàng.");
+    }
+    if (
+      voucher.rewardType === "DISCOUNT_PERCENT" &&
+      state.vouchers.some((item) => item.rewardType === "DISCOUNT_PERCENT")
+    ) {
+      throw new Error("Mỗi đơn chỉ được dùng một voucher giảm phần trăm.");
+    }
+    set((current) => {
+      const existing = current.items.find(
+        (item) => item.goodsId === voucher.product.goodsId,
+      );
+      const mappedItem: OrderItem = {
+        goodsId: voucher.product.goodsId,
+        goodsName: voucher.product.goodsName,
+        price: voucher.product.price,
+        quantity: voucher.product.quantity,
+        ticketsPerUnit: voucher.product.ticketsPerUnit,
+      };
+      return {
+        items: existing
+          ? current.items.map((item) =>
+              item.goodsId === mappedItem.goodsId
+                ? { ...item, quantity: item.quantity + mappedItem.quantity }
+                : item,
+            )
+          : [...current.items, mappedItem],
+        vouchers: [...current.vouchers, voucher],
+        draftOrderId: null,
+        currentOrderId: null,
+        currentHkOrderNumber: null,
+        currentOrderStatus: null,
+      };
+    });
+    saveCartCheckpoint(get(), "CART_READY");
+  },
+
+  removeVoucher: (code) => {
+    if (get().isPaymentLocked) return;
+    const voucher = get().vouchers.find((item) => item.code === code);
+    if (!voucher) return;
+    set((state) => ({
+      vouchers: state.vouchers.filter((item) => item.code !== code),
+      items: state.items.flatMap((item) => {
+        if (item.goodsId !== voucher.product.goodsId) return [item];
+        const quantity = item.quantity - voucher.product.quantity;
+        return quantity > 0 ? [{ ...item, quantity }] : [];
+      }),
+      draftOrderId: null,
+      currentOrderId: null,
+      currentHkOrderNumber: null,
+      currentOrderStatus: null,
+    }));
+    const current = get();
+    if (current.items.length === 0) void clearCheckoutJournal();
+    else saveCartCheckpoint(current, "CART_READY");
+  },
+
   setMemberUid: (memberUid) => {
     if (get().isPaymentLocked) return;
     set((state) => ({
@@ -228,9 +318,21 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   removeItem: (goodsId) => {
-    set((state) => state.isPaymentLocked
-      ? {}
-      : { items: state.items.filter((i) => i.goodsId !== goodsId) });
+    set((state) => {
+      if (state.isPaymentLocked) return {};
+      const required = state.vouchers
+        .filter((voucher) => voucher.product.goodsId === goodsId)
+        .reduce((total, voucher) => total + voucher.product.quantity, 0);
+      return {
+        items: state.items.flatMap((item) =>
+          item.goodsId !== goodsId
+            ? [item]
+            : required > 0
+              ? [{ ...item, quantity: required }]
+              : [],
+        ),
+      };
+    });
     const current = get();
     if (current.items.length === 0) void clearCheckoutJournal();
     else saveCartCheckpoint(current, "CART_READY");
@@ -242,6 +344,9 @@ export const useCartStore = create<CartState>((set, get) => ({
       ? {}
       : {
           items: state.items.filter((item) => !blocked.has(item.goodsId)),
+          vouchers: state.vouchers.filter(
+            (voucher) => !blocked.has(voucher.product.goodsId),
+          ),
           draftOrderId: null,
           currentOrderId: null,
           currentHkOrderNumber: null,
@@ -257,12 +362,15 @@ export const useCartStore = create<CartState>((set, get) => ({
   updateQuantity: (goodsId, quantity) => {
     set((state) => {
       if (state.isPaymentLocked) return {};
-      if (quantity <= 0) {
+      const required = state.vouchers
+        .filter((voucher) => voucher.product.goodsId === goodsId)
+        .reduce((total, voucher) => total + voucher.product.quantity, 0);
+      if (quantity <= 0 && required === 0) {
         return { items: state.items.filter((i) => i.goodsId !== goodsId) };
       }
       return {
         items: state.items.map((i) =>
-          i.goodsId === goodsId ? { ...i, quantity } : i
+          i.goodsId === goodsId ? { ...i, quantity: Math.max(quantity, required) } : i
         ),
       };
     });
@@ -281,6 +389,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (get().isPaymentLocked) return;
     set({
       items: [],
+      vouchers: [],
       memberUid: null,
       member: null,
       paymentMethod: "CASH",
@@ -328,6 +437,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     ].includes(journal.checkpoint);
     set({
       items: paymentFinished ? [] : journal.items,
+      vouchers: paymentFinished ? [] : journal.vouchers ?? [],
       memberUid: paymentFinished ? null : journal.memberUid ?? null,
       member: paymentFinished ? null : journal.member ?? null,
       paymentMethod: journal.paymentMethod,
@@ -385,6 +495,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           goodsId,
           quantity,
         })),
+        voucherCodes: state.vouchers.map((voucher) => voucher.code),
         ...(state.memberUid ? { uid: state.memberUid } : {}),
         ...(state.member ? { member: state.member } : {}),
       });
@@ -436,6 +547,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     });
     set({
       items: [],
+      vouchers: [],
       memberUid: null,
       member: null,
       paymentMethod: "CASH",
@@ -509,6 +621,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           goodsId,
           quantity,
         })),
+        voucherCodes: state.vouchers.map((voucher) => voucher.code),
         ...(state.memberUid ? { uid: state.memberUid } : {}),
         ...(state.member ? { member: state.member } : {}),
       });
@@ -526,6 +639,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
       set({
         items: [],
+        vouchers: [],
         memberUid: null,
         member: null,
         paymentMethod: "CASH",

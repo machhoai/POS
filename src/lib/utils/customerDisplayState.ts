@@ -34,6 +34,7 @@ interface CreateCustomerDisplayStateInput {
   payment: CustomerDisplayPaymentSource;
   lastOrder: CustomerDisplayOrderSnapshot | null;
   member?: OrderMemberSnapshot | null;
+  discountAmount?: number;
 }
 
 export function createIdleCustomerDisplayState(
@@ -51,6 +52,7 @@ export function createCustomerDisplayOrderSnapshot(
   items: readonly OrderItem[],
   paymentMethod: PaymentMethod,
   member: OrderMemberSnapshot | null = null,
+  discountAmount = 0,
 ): CustomerDisplayOrderSnapshot | null {
   if (items.length === 0) return null;
   return {
@@ -59,10 +61,10 @@ export function createCustomerDisplayOrderSnapshot(
       quantity: item.quantity,
       unitPrice: item.price,
     })),
-    totalAmount: items.reduce(
+    totalAmount: Math.max(0, items.reduce(
       (total, item) => total + item.price * item.quantity,
       0,
-    ),
+    ) - discountAmount),
     paymentMethod: paymentMethod === "QR_CODE" ? "TRANSFER" : "CASH",
     member: member
       ? {
@@ -144,6 +146,7 @@ export function createCustomerDisplayState(
     input.items,
     input.paymentMethod,
     input.member ?? null,
+    input.discountAmount ?? 0,
   );
   const order = currentOrder ?? input.lastOrder;
   const isPaid =

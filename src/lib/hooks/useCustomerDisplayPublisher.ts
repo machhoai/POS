@@ -5,7 +5,7 @@ import {
   listenCustomerDisplayReady,
   publishCustomerDisplayState,
 } from "@/lib/services/customerDisplayBridge";
-import { useCartStore } from "@/lib/stores/useCartStore";
+import { selectVoucherDiscount, useCartStore } from "@/lib/stores/useCartStore";
 import type {
   CustomerDisplayOrderSnapshot,
   CustomerDisplayState,
@@ -24,6 +24,7 @@ export function useCustomerDisplayPublisher(
   const paymentMethod = useCartStore((state) => state.paymentMethod);
   const member = useCartStore((state) => state.member);
   const orderStatus = useCartStore((state) => state.currentOrderStatus);
+  const discountAmount = useCartStore(selectVoucherDiscount);
   const lastOrderRef = useRef<CustomerDisplayOrderSnapshot | null>(null);
   const latestStateRef = useRef<CustomerDisplayState>(
     createIdleCustomerDisplayState("CONNECTED"),
@@ -37,7 +38,12 @@ export function useCustomerDisplayPublisher(
   const isBusy = payOSPayment.isBusy;
 
   useEffect(() => {
-    const currentOrder = createCustomerDisplayOrderSnapshot(items, paymentMethod, member);
+    const currentOrder = createCustomerDisplayOrderSnapshot(
+      items,
+      paymentMethod,
+      member,
+      discountAmount,
+    );
     if (currentOrder) lastOrderRef.current = currentOrder;
     const displayState = createCustomerDisplayState({
       items,
@@ -54,6 +60,7 @@ export function useCustomerDisplayPublisher(
       },
       lastOrder: lastOrderRef.current,
       member,
+      discountAmount,
     });
     latestStateRef.current = displayState;
     void publishCustomerDisplayState(displayState).catch((error: unknown) => {
@@ -62,6 +69,7 @@ export function useCustomerDisplayPublisher(
   }, [
     hasPaymentError,
     fixedTransfer,
+    discountAmount,
     isBusy,
     isCartLocked,
     items,

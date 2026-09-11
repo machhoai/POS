@@ -49,3 +49,10 @@ test("order_pay relies on the HK default payment method", () => {
   assert.equal("PaymentMethod" in body, false);
   assert.equal("PayType" in body, false);
 });
+
+test("order_pay sends the discounted amount for a voucher order", () => {
+  assert.deepEqual(buildRemoteOrderPayBody("HK-ORDER-002", 160000), {
+    OrderNumber: "HK-ORDER-002",
+    PayAmount: 160000,
+  });
+});

@@ -345,7 +345,9 @@ const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
                 {totals.discount > 0 && (
                     <div style={rowStyle}>
                         <span style={labelStyle}>
-                            {copy.discount}{order.voucherCode ? ` (${order.voucherCode})` : ""}
+                            {copy.discount}{order.voucherCodes?.length
+                              ? ` (${order.voucherCodes.join(", ")})`
+                              : order.voucherCode ? ` (${order.voucherCode})` : ""}
                         </span>
                         <span style={valueStyle}>-{formatMoney(totals.discount, language)}</span>
                     </div>

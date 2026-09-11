@@ -12,6 +12,10 @@ import { POS_COLLECTIONS } from "../config/collections";
 import { stagePosOrderForPayOS } from "../order/functions";
 import { buildPayOSRedirectUrls, getPayOS } from "../services/payosService";
 import { getPosAuthSession } from "../services/posAuthService";
+import {
+  applyOrderVouchers,
+  releaseOrderVoucherReservations,
+} from "../services/voucherService";
 import type {
   PayOSPaymentAttempt,
   PayOSPaymentDetails,
@@ -493,6 +497,13 @@ async function updateAttemptStatus(
       lastCheckedAt: now,
       lastError: null,
     };
+    if (["CANCELLED", "EXPIRED"].includes(status)) {
+      await releaseOrderVoucherReservations(
+        transaction,
+        order,
+        "Released after PayOS payment cancellation or expiry",
+      );
+    }
     const nextOrder: PosOrder = { ...order, paymentDetails, updatedAt: now };
     transaction.update(docRef, { paymentDetails, updatedAt: now });
     return nextOrder;
@@ -536,6 +547,25 @@ export async function markPayOSPaymentPaid(
         receivedAmount: payment.amount,
       });
       return "REJECTED";
+    }
+    if (decision !== "ALREADY_COMPLETED" && order.voucherCodes?.length) {
+      const calculation = await applyOrderVouchers(transaction, {
+        voucherCodes: order.voucherCodes,
+        warehouseId: order.warehouseId,
+        orderId: order.localOrderId,
+        userId: order.createdBy,
+        userName: order.operatorName,
+        deviceId: order.deviceId || "unknown",
+        items: order.items,
+        mode: "COMMIT",
+        reservedVouchers: order.vouchers,
+      });
+      if (calculation.totalAmount !== order.totalAmount) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Giá trị voucher đã thay đổi trong lúc chờ thanh toán.",
+        );
+      }
     }
 
     const paidAt = new Date().toISOString();
@@ -837,6 +867,25 @@ export async function confirmPayOSPaymentManuallyForUser(
         "Đơn hàng không ở trạng thái cho phép xác nhận chuyển khoản thủ công.",
       );
     }
+    if (order.voucherCodes?.length) {
+      const calculation = await applyOrderVouchers(transaction, {
+        voucherCodes: order.voucherCodes,
+        warehouseId: order.warehouseId,
+        orderId: order.localOrderId,
+        userId,
+        userName: authorized.operatorName,
+        deviceId: order.deviceId || "unknown",
+        items: order.items,
+        mode: "COMMIT",
+        reservedVouchers: order.vouchers,
+      });
+      if (calculation.totalAmount !== order.totalAmount) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Giá trị voucher đã thay đổi trong lúc chờ thanh toán.",
+        );
+      }
+    }
 
     const confirmedAt = new Date().toISOString();
     const paymentDetails: PayOSPaymentDetails = {
@@ -980,6 +1029,11 @@ async function cancelAttemptLocallyAfterPayOSFailure(
       lastConnectionErrorAt: now,
       lastError: LOCAL_PAYOS_CANCELLATION_MESSAGE,
     };
+    await releaseOrderVoucherReservations(
+      transaction,
+      order,
+      "Released after local PayOS cancellation",
+    );
     const nextOrder: PosOrder = {
       ...order,
       paymentDetails,

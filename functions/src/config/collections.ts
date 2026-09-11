@@ -27,4 +27,6 @@ export const POS_COLLECTIONS = {
   devices: "pos_devices",
   members: "pos_members",
   memberCompensations: "pos_member_compensations",
+  voucherCampaignSettings: "pos_voucher_campaign_settings",
+  voucherRedemptions: "pos_voucher_redemptions",
 } as const;

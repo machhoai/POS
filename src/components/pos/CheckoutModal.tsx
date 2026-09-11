@@ -12,9 +12,10 @@ import CheckoutPaymentMethods from "@/components/pos/CheckoutPaymentMethods";
 import CheckoutSummary from "@/components/pos/CheckoutSummary";
 import PayOSQrPanel from "@/components/pos/PayOSQrPanel";
 import ReceiptLanguageSelector from "@/components/pos/ReceiptLanguageSelector";
-import VoucherInput, { type AppliedVoucher } from "@/components/pos/VoucherInput";
+import VoucherInput from "@/components/pos/VoucherInput";
 import type { ReceiptLanguage } from "@/features/receipt/types/receipt";
 import type { PaymentMethod } from "@/lib/types/order";
+import type { PosVoucherResolution } from "@/lib/types/voucher";
 import type { PayOSCheckoutController, PaymentMethodOption } from "@/lib/types/payment";
 
 interface CheckoutModalProps {
@@ -28,13 +29,14 @@ interface CheckoutModalProps {
   totalAmount: number;
   finalAmount: number;
   itemCount: number;
-  appliedVoucher?: AppliedVoucher | null;
+  appliedVouchers?: PosVoucherResolution[];
+  discountAmount?: number;
   isValidatingVoucher?: boolean;
   isCheckingOut: boolean;
   onSetPaymentMethod: (method: PaymentMethod) => void;
   onSetReceiptLanguage?: (language: ReceiptLanguage) => void;
   onApplyVoucher?: (code: string) => void;
-  onRemoveVoucher?: () => void;
+  onRemoveVoucher?: (code: string) => void;
   onStartTransfer?: () => void | Promise<void>;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
@@ -112,13 +114,13 @@ export default function CheckoutModal(props: CheckoutModalProps) {
               <div className="mt-auto flex flex-col gap-3">
                 {props.onApplyVoucher && props.onRemoveVoucher ? (
                   <VoucherInput
-                    appliedVoucher={props.appliedVoucher ?? null}
+                    appliedVouchers={props.appliedVouchers ?? []}
                     onApplyVoucher={props.onApplyVoucher}
                     onRemoveVoucher={props.onRemoveVoucher}
                     isValidating={props.isValidatingVoucher}
                   />
                 ) : null}
-                <CheckoutSummary itemCount={props.itemCount} totalAmount={props.totalAmount} finalAmount={props.finalAmount} appliedVoucher={props.appliedVoucher ?? null} cashPayment={isCashPayment ? { receivedAmount: cashReceived, missingAmount: missingCash, changeAmount: cashChange } : undefined} />
+                <CheckoutSummary itemCount={props.itemCount} totalAmount={props.totalAmount} finalAmount={props.finalAmount} voucherCodes={(props.appliedVouchers ?? []).map((voucher) => voucher.code)} discountAmount={props.discountAmount ?? 0} cashPayment={isCashPayment ? { receivedAmount: cashReceived, missingAmount: missingCash, changeAmount: cashChange } : undefined} />
               </div>
             </>
           )}

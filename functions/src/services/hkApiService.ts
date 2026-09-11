@@ -57,7 +57,7 @@ export type RemoteOrderCreateBody = {
 
 export type RemoteOrderPayBody = {
   OrderNumber: string;
-  PayAmount: null;
+  PayAmount: number | null;
 };
 
 export type RemoteMemberCompensationBody = {
@@ -128,8 +128,11 @@ export function buildRemoteOrderCreateBody(params: {
  * The HK system uses its one default payment method. PayAmount=null asks it to
  * settle the full remote order and no JPOS/PayOS payment method is transmitted.
  */
-export function buildRemoteOrderPayBody(orderNumber: string): RemoteOrderPayBody {
-  return { OrderNumber: orderNumber, PayAmount: null };
+export function buildRemoteOrderPayBody(
+  orderNumber: string,
+  payAmount: number | null = null,
+): RemoteOrderPayBody {
+  return { OrderNumber: orderNumber, PayAmount: payAmount };
 }
 
 // =============================================================================
@@ -524,10 +527,11 @@ export async function createRemoteOrder(params: {
  */
 export async function confirmRemotePayment(params: {
   orderNumber: string;
+  payAmount?: number | null;
 }): Promise<HKApiResponse> {
   return sendToHKApi(
     "order_pay",
-    buildRemoteOrderPayBody(params.orderNumber),
+    buildRemoteOrderPayBody(params.orderNumber, params.payAmount ?? null),
   );
 }
 

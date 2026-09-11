@@ -48,7 +48,11 @@ export default function OrderDetailModal({
 }: OrderDetailModalProps) {
     const displayStatus = getOrderDisplayStatus(order);
     const status = STATUS_LABELS[displayStatus] || STATUS_LABELS.DRAFT;
-    const finalAmount = order.totalAmount - (order.voucherDiscount || 0);
+    const discountAmount = order.discountAmount ?? order.voucherDiscount ?? 0;
+    const subtotalAmount = order.subtotalAmount ?? order.totalAmount;
+    const finalAmount = order.subtotalAmount !== undefined
+        ? order.totalAmount
+        : order.totalAmount - discountAmount;
     const isPaymentUnverified = order.paymentVerificationStatus === "UNVERIFIED";
     const customer = getOrderCustomerDisplay(order);
     const luckyDrawTicketCount = buildPrintableLuckyDrawTickets(order).length;
@@ -152,13 +156,13 @@ export default function OrderDetailModal({
                     </div>
 
                     {/* Voucher */}
-                    {order.voucherCode && (
+                    {(order.voucherCodes?.length || order.voucherCode) && (
                         <div className="flex items-center justify-between p-3 bg-amber-900/15 border border-amber-700/20 rounded-xl">
                             <div>
-                                <p className="text-xs font-medium text-amber-300">Voucher: {order.voucherCode}</p>
+                                <p className="text-xs font-medium text-amber-300">Voucher: {order.voucherCodes?.join(", ") || order.voucherCode}</p>
                             </div>
                             <span className="text-sm font-medium text-amber-400">
-                                -{formatCurrency(order.voucherDiscount || 0)}
+                                -{formatCurrency(discountAmount)}
                             </span>
                         </div>
                     )}
@@ -176,12 +180,12 @@ export default function OrderDetailModal({
                 <div className="px-5 py-4 border-t border-[var(--color-border)] shrink-0 space-y-1">
                     <div className="flex justify-between text-sm text-[var(--color-text-secondary)]">
                         <span>Tạm tính</span>
-                        <span>{formatCurrency(order.totalAmount)}</span>
+                        <span>{formatCurrency(subtotalAmount)}</span>
                     </div>
-                    {order.voucherDiscount && (
+                    {discountAmount > 0 && (
                         <div className="flex justify-between text-sm text-amber-400">
                             <span>Giảm giá</span>
-                            <span>-{formatCurrency(order.voucherDiscount)}</span>
+                            <span>-{formatCurrency(discountAmount)}</span>
                         </div>
                     )}
                     <div className="flex justify-between pt-1 border-t border-[var(--color-border)]">

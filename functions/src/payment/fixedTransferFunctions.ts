@@ -3,6 +3,10 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { db } from "../config/firebase";
 import { POS_COLLECTIONS } from "../config/collections";
 import { getPosAuthSession } from "../services/posAuthService";
+import {
+  applyOrderVouchers,
+  releaseOrderVoucherReservations,
+} from "../services/voucherService";
 import type {
   FixedTransferDetails,
   FixedTransferReason,
@@ -277,6 +281,25 @@ export async function confirmFixedTransferForOrder(
         "Đơn hàng chưa có mã QR tài khoản cố định đang chờ xác nhận.",
       );
     }
+    if (order.voucherCodes?.length) {
+      const calculation = await applyOrderVouchers(transaction, {
+        voucherCodes: order.voucherCodes,
+        warehouseId: order.warehouseId,
+        orderId: order.localOrderId,
+        userId,
+        userName: operatorName,
+        deviceId: order.deviceId || "unknown",
+        items: order.items,
+        mode: "COMMIT",
+        reservedVouchers: order.vouchers,
+      });
+      if (calculation.totalAmount !== order.totalAmount) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Giá trị voucher đã thay đổi trong lúc chờ thanh toán.",
+        );
+      }
+    }
     const confirmedAt = new Date().toISOString();
     const fixedTransferDetails: FixedTransferDetails = {
       ...order.fixedTransferDetails!,
@@ -334,6 +357,11 @@ export async function cancelFixedTransferForOrder(
       status: "CANCELLED",
       updatedAt,
     };
+    await releaseOrderVoucherReservations(
+      transaction,
+      order,
+      "Released after fixed-transfer cancellation",
+    );
     transaction.update(docRef, { fixedTransferDetails, updatedAt });
     return { ...order, fixedTransferDetails, updatedAt };
   });

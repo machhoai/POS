@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IoAlbums, IoDesktop, IoDocument, IoHome, IoPeople, IoSettings, IoTime } from "react-icons/io5";
+import { IoAlbums, IoDesktop, IoDocument, IoHome, IoPeople, IoSettings, IoTicket, IoTime } from "react-icons/io5";
 import { useUpdater } from "@/features/updater/components/UpdateProvider";
 
 interface SidebarProps {
@@ -20,6 +20,11 @@ const NAV_ITEMS = [
         href: "/orders",
         label: "Đơn hàng",
         icon: <IoDocument />
+    },
+    {
+        href: "/voucher-redemption",
+        label: "Đổi voucher",
+        icon: <IoTicket />
     },
     {
         href: "/shift-close",

@@ -28,6 +28,7 @@ interface PayOSCheckoutInput {
   member?: OrderMemberSnapshot | null;
   draftOrderId: string | null;
   items: OrderItem[];
+  voucherCodes?: string[];
   onCompleted: (
     localOrderId: string,
     status: OrderStatus,
@@ -45,6 +46,7 @@ export function usePayOSCheckoutController({
   member = null,
   draftOrderId,
   items,
+  voucherCodes = [],
   onCompleted,
   onCancelled,
   manageCartLock = true,
@@ -186,6 +188,7 @@ export function usePayOSCheckoutController({
         ...(memberUid ? { uid: memberUid } : {}),
         ...(member ? { member } : {}),
         items: items.map(({ goodsId, quantity }) => ({ goodsId, quantity })),
+        voucherCodes,
       });
       if (result.nextAction === "WAIT") {
         showSuccess("Đã tạo mã thanh toán", "Mời khách quét mã QR để chuyển khoản.");
@@ -212,6 +215,7 @@ export function usePayOSCheckoutController({
     shopId,
     startPayment,
     warehouseId,
+    voucherCodes,
   ]);
 
   const checkPayment = useCallback(async () => {

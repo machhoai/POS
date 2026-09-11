@@ -4,6 +4,7 @@ import type {
   OrderStatus,
   PaymentMethod,
 } from "@/lib/types/order";
+import type { PosVoucherResolution } from "@/lib/types/voucher";
 
 export type CheckoutCheckpoint =
   | "CART_READY"
@@ -23,6 +24,7 @@ export interface CheckoutJournalRecord {
   memberUid?: string | null;
   member?: OrderMemberSnapshot | null;
   items: OrderItem[];
+  vouchers?: PosVoucherResolution[];
   paymentMethod: PaymentMethod;
   totalAmount: number;
   orderStatus: OrderStatus | null;

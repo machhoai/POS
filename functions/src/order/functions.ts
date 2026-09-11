@@ -1,8 +1,6 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
-  onDocumentUpdated,
-  type Change,
-  type FirestoreEvent,
+  onDocumentWritten,
 } from "firebase-functions/v2/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
@@ -34,6 +32,10 @@ import type {
 } from "../types/order";
 import { getLuckyDrawSettingsForWarehouse } from "../luckyDraw/luckyDrawSettingsFunctions";
 import { resolveLuckyDrawTicketCount } from "../luckyDraw/luckyDrawSettingsPolicy";
+import {
+  applyOrderVouchers,
+  voucherFieldsForOrder,
+} from "../services/voucherService";
 
 interface OrderItemInput {
   goodsId: string;
@@ -48,6 +50,7 @@ interface OrderInput {
   member?: OrderMemberSnapshot;
   deviceId?: string;
   items: OrderItemInput[];
+  voucherCodes: string[];
 }
 
 interface CheckoutInput extends OrderInput {
@@ -136,6 +139,21 @@ function validateOrderInput(data: unknown): OrderInput {
     throw new HttpsError("invalid-argument", "UID thành viên không hợp lệ.");
   }
   const uid = typeof input.uid === "string" ? input.uid.trim() : undefined;
+  const voucherCodes = Array.isArray(input.voucherCodes)
+    ? input.voucherCodes.map((code) => {
+        if (
+          typeof code !== "string" ||
+          code.trim().length < 4 ||
+          code.trim().length > 80
+        ) {
+          throw new HttpsError("invalid-argument", "Mã voucher không hợp lệ.");
+        }
+        return code.trim().normalize("NFKC").toUpperCase();
+      })
+    : [];
+  if (new Set(voucherCodes).size !== voucherCodes.length) {
+    throw new HttpsError("invalid-argument", "Đơn hàng chứa voucher bị trùng.");
+  }
   let member: OrderMemberSnapshot | undefined;
   if (input.member !== undefined) {
     if (!input.member || typeof input.member !== "object") {
@@ -205,6 +223,7 @@ function validateOrderInput(data: unknown): OrderInput {
         ? input.deviceId
         : undefined,
     items,
+    voucherCodes,
   };
 }
 
@@ -376,7 +395,12 @@ function createDraftOrder(
     paymentMethod: "CASH",
     paymentMethodId: "CASH",
     paymentMethodName: "Tiền mặt",
+    subtotalAmount: calculateTotal(items),
+    discountAmount: 0,
     totalAmount: calculateTotal(items),
+    ...(input.voucherCodes.length > 0
+      ? { voucherCodes: input.voucherCodes }
+      : {}),
     items,
     sync: {
       retryCount: 0,
@@ -474,8 +498,8 @@ export async function stagePosOrderForPayOS(
     assertWarehouseAccess(userId, input.warehouseId),
     loadAuthoritativeItems(input.items, input.warehouseId),
   ]);
-  const totalAmount = calculateTotal(items);
-  if (!Number.isSafeInteger(totalAmount) || totalAmount <= 0) {
+  const subtotalAmount = calculateTotal(items);
+  if (!Number.isSafeInteger(subtotalAmount) || subtotalAmount <= 0) {
     throw new HttpsError(
       "failed-precondition",
       "Tổng tiền thanh toán PayOS phải là số nguyên dương.",
@@ -485,6 +509,30 @@ export async function stagePosOrderForPayOS(
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(docRef);
     const now = new Date().toISOString();
+    const voucherCalculation = input.voucherCodes.length > 0
+      ? await applyOrderVouchers(transaction, {
+          voucherCodes: input.voucherCodes,
+          warehouseId: input.warehouseId,
+          orderId: input.localOrderId,
+          userId,
+          userName: operator.name,
+          deviceId: input.deviceId || "unknown",
+          items,
+          mode: "RESERVE",
+        })
+      : {
+          subtotalAmount,
+          discountAmount: 0,
+          totalAmount: subtotalAmount,
+          vouchers: [],
+        };
+    if (voucherCalculation.totalAmount <= 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Đơn đã được voucher thanh toán đủ, không cần tạo mã chuyển khoản.",
+      );
+    }
+    const voucherFields = voucherFieldsForOrder(voucherCalculation);
 
     if (!snapshot.exists) {
       const draft: PosOrder = {
@@ -492,7 +540,7 @@ export async function stagePosOrderForPayOS(
         paymentMethod: "QR_CODE",
         paymentMethodId: "QR_CODE",
         paymentMethodName: "Chuyển khoản",
-        totalAmount,
+        ...voucherFields,
         updatedAt: now,
       };
       transaction.create(docRef, draft);
@@ -532,7 +580,7 @@ export async function stagePosOrderForPayOS(
       paymentMethod: "QR_CODE",
       paymentMethodId: "QR_CODE",
       paymentMethodName: "Chuyển khoản",
-      totalAmount,
+      ...voucherFields,
       items,
       updatedAt: now,
     };
@@ -550,7 +598,11 @@ export async function stagePosOrderForPayOS(
       paymentMethod: stagedOrder.paymentMethod,
       paymentMethodId: stagedOrder.paymentMethodId,
       paymentMethodName: stagedOrder.paymentMethodName,
+      subtotalAmount: stagedOrder.subtotalAmount,
+      discountAmount: stagedOrder.discountAmount,
       totalAmount: stagedOrder.totalAmount,
+      voucherCodes: stagedOrder.voucherCodes ?? [],
+      vouchers: stagedOrder.vouchers ?? [],
       items: stagedOrder.items,
       updatedAt: stagedOrder.updatedAt,
     });
@@ -650,36 +702,66 @@ export async function checkoutPosOrderForUser(
     assertWarehouseAccess(userId, input.warehouseId),
     loadAuthoritativeItems(input.items, input.warehouseId),
   ]);
-  const totalAmount = calculateTotal(items);
+  const subtotalAmount = calculateTotal(items);
   const docRef = db.collection(POS_COLLECTIONS.orders).doc(input.localOrderId);
 
   try {
     const shouldMarkPaid = await db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(docRef);
       const now = new Date().toISOString();
+      const existing = snapshot.exists ? snapshot.data() as PosOrder : null;
 
-      if (!snapshot.exists) {
+      if (existing) {
+        if (existing.createdBy !== userId) {
+          throw new HttpsError(
+            "permission-denied",
+            "Bạn không có quyền thanh toán đơn hàng này.",
+          );
+        }
+        assertMemberAssociation(existing, input);
+        if (existing.status !== "DRAFT") return false;
+      }
+
+      const voucherCalculation = input.voucherCodes.length > 0
+        ? await applyOrderVouchers(transaction, {
+            voucherCodes: input.voucherCodes,
+            warehouseId: input.warehouseId,
+            orderId: input.localOrderId,
+            userId,
+            userName: operator.name,
+            deviceId: input.deviceId || "unknown",
+            items,
+            mode: "COMMIT",
+            reservedVouchers: existing?.vouchers,
+          })
+        : {
+            subtotalAmount,
+            discountAmount: 0,
+            totalAmount: subtotalAmount,
+            vouchers: [],
+          };
+      const voucherFields = voucherFieldsForOrder(voucherCalculation);
+      const completesAtomically = input.voucherCodes.length > 0;
+      const completionFields = completesAtomically
+        ? {
+            status: "LOCAL_PAID" as const,
+            paymentStatus: "PAID" as const,
+            syncStatus: "PENDING" as const,
+            paidAt: now,
+          }
+        : {};
+
+      if (!existing) {
         transaction.create(docRef, {
           ...createDraftOrder(input, items, operator),
           paymentMethod: selectedPaymentMethod.id,
           paymentMethodId: selectedPaymentMethod.id,
           paymentMethodName: selectedPaymentMethod.methodName,
-          totalAmount,
+          ...voucherFields,
+          ...completionFields,
           updatedAt: now,
         });
-        return true;
-      }
-
-      const existing = snapshot.data() as PosOrder;
-      if (existing.createdBy !== userId) {
-        throw new HttpsError(
-          "permission-denied",
-          "Bạn không có quyền thanh toán đơn hàng này.",
-        );
-      }
-      assertMemberAssociation(existing, input);
-      if (existing.status !== "DRAFT") {
-        return false;
+        return !completesAtomically;
       }
 
       transaction.update(docRef, {
@@ -698,11 +780,12 @@ export async function checkoutPosOrderForUser(
         paymentMethod: selectedPaymentMethod.id,
         paymentMethodId: selectedPaymentMethod.id,
         paymentMethodName: selectedPaymentMethod.methodName,
-        totalAmount,
+        ...voucherFields,
+        ...completionFields,
         items,
         updatedAt: now,
       });
-      return true;
+      return !completesAtomically;
     });
 
     if (shouldMarkPaid) {
@@ -1226,6 +1309,7 @@ async function synchronizeRemoteOrder(
     if (!statusResponse || !isRemotePaymentConfirmed(statusResponse)) {
       const payResponse = await confirmRemotePayment({
         orderNumber: hkOrderNumber,
+        payAmount: order.voucherCodes?.length ? order.totalAmount : null,
       });
       statusResponse = await queryPaymentStatus({
         orderNumber: hkOrderNumber,
@@ -1332,22 +1416,19 @@ async function recordPosOrderAudit(
   }
 }
 
-export const onOrderLocalPaid = onDocumentUpdated(
+export const onOrderLocalPaid = onDocumentWritten(
   {
     document: `${POS_COLLECTIONS.orders}/{orderId}`,
     region: "asia-southeast1",
     timeoutSeconds: 120,
   },
-  async (
-    event: FirestoreEvent<
-      Change<FirebaseFirestore.QueryDocumentSnapshot> | undefined,
-      { orderId: string }
-    >,
-  ) => {
+  async (event) => {
     if (!event.data) return;
-
-    const before = event.data.before.data() as PosOrder;
+    if (!event.data.after.exists) return;
     const after = event.data.after.data() as PosOrder;
+    const before = event.data.before.exists
+      ? event.data.before.data() as PosOrder
+      : { ...after, status: "DRAFT" as const };
     if (!shouldSynchronizeRemoteOrder(
       before.status,
       after.status,

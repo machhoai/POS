@@ -1,11 +1,11 @@
-import type { AppliedVoucher } from "@/components/pos/VoucherInput";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 
 interface CheckoutSummaryProps {
     itemCount: number;
     totalAmount: number;
     finalAmount: number;
-    appliedVoucher: AppliedVoucher | null;
+    voucherCodes: string[];
+    discountAmount: number;
     cashPayment?: {
         receivedAmount: number;
         missingAmount: number;
@@ -17,7 +17,8 @@ export default function CheckoutSummary({
     itemCount,
     totalAmount,
     finalAmount,
-    appliedVoucher,
+    voucherCodes,
+    discountAmount,
     cashPayment,
 }: CheckoutSummaryProps) {
     return (
@@ -37,11 +38,11 @@ export default function CheckoutSummary({
                         {formatCurrency(totalAmount)}
                     </span>
                 </div>
-                {appliedVoucher && (
+                {discountAmount > 0 && (
                     <div className="flex items-center justify-between text-sm text-emerald-600">
-                        <span>Giảm giá ({appliedVoucher.code})</span>
+                        <span>Voucher ({voucherCodes.length} mã)</span>
                         <span className="font-bold">
-                            -{formatCurrency(appliedVoucher.discountAmount)}
+                            -{formatCurrency(discountAmount)}
                         </span>
                     </div>
                 )}

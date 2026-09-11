@@ -14,6 +14,7 @@ export interface CreatePayOSPaymentInput {
   uid?: string;
   member?: OrderMemberSnapshot;
   items: Array<Pick<OrderItem, "goodsId" | "quantity">>;
+  voucherCodes?: string[];
 }
 
 type PayOSPaymentAction =

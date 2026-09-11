@@ -41,5 +41,13 @@ service cloud.firestore {
     match /pos_ticket_settings/{warehouseId} {
       allow read, write: if false;
     }
+    // Voucher policy and redemption records are read and written only through
+    // authenticated backends so redemption and order updates stay atomic.
+    match /pos_voucher_campaign_settings/{settingId} {
+      allow read, write: if false;
+    }
+    match /pos_voucher_redemptions/{redemptionId} {
+      allow read, write: if false;
+    }
   }
 }

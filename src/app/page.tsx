@@ -11,11 +11,17 @@ import { useEffect, useCallback, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { useCartStore, selectTotalAmount, selectItemCount } from "@/lib/stores/useCartStore";
+import {
+  useCartStore,
+  selectTotalAmount,
+  selectItemCount,
+  selectVoucherDiscount,
+  selectPayableAmount,
+} from "@/lib/stores/useCartStore";
 import { selectVisibleProducts, useProductStore } from "@/lib/stores/useProductStore";
 import { JPOS_PAYMENT_METHODS } from "@/lib/data/paymentMethods";
 import { syncProducts } from "@/lib/services/productService";
-import { fetchOrderForReceipt } from "@/lib/services/orderService";
+import { fetchOrderForReceipt, resolveVoucher } from "@/lib/services/orderService";
 import {
   cancelMemberCardRead,
   readMemberCard,
@@ -101,10 +107,19 @@ export default function CashierPage() {
   const currentHkOrderNumber = useCartStore((s) => s.currentHkOrderNumber);
   const currentOrderStatus = useCartStore((s) => s.currentOrderStatus);
   const totalAmount = useCartStore(selectTotalAmount);
+  const voucherDiscount = useCartStore(selectVoucherDiscount);
+  const payableAmount = useCartStore(selectPayableAmount);
   const itemCount = useCartStore(selectItemCount);
+  const vouchers = useCartStore((s) => s.vouchers);
+  const voucherCodes = useMemo(
+    () => vouchers.map((voucher) => voucher.code),
+    [vouchers],
+  );
   const addItem = useCartStore((s) => s.addItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
+  const applyVoucher = useCartStore((s) => s.applyVoucher);
+  const removeVoucher = useCartStore((s) => s.removeVoucher);
   const setCartMember = useCartStore((s) => s.setMember);
   const setPaymentMethod = useCartStore((s) => s.setPaymentMethod);
   const checkout = useCartStore((s) => s.checkout);
@@ -127,7 +142,9 @@ export default function CashierPage() {
   const [receiptLanguage, setReceiptLanguage] = useState<ReceiptLanguage>("vi");
   const [memberReadStatus, setMemberReadStatus] = useState<"IDLE" | "READING" | "LOOKING_UP" | "FAILED">("IDLE");
   const [memberReadError, setMemberReadError] = useState<string | null>(null);
+  const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
   const memberReadAttemptRef = useRef(0);
+  const voucherRequestRef = useRef(false);
   const shopId = Number(process.env.NEXT_PUBLIC_SHOP_ID) || 1;
 
   const handleReadMemberCard = useCallback(async () => {
@@ -296,6 +313,7 @@ export default function CashierPage() {
     member: cartMember,
     draftOrderId,
     items: cartItems,
+    voucherCodes,
     orderKind: "STANDARD",
     onCompleted: handlePayOSCompleted,
   });
@@ -382,20 +400,52 @@ export default function CashierPage() {
     ]
   );
 
+  const handleApplyVoucher = useCallback(async (rawCode: string) => {
+    const code = rawCode.trim().toUpperCase();
+    if (!code || voucherRequestRef.current) return;
+    if (!effectiveWarehouseId) {
+      showError("Chưa chọn điểm bán", "Vui lòng chọn điểm bán trước khi quét voucher.");
+      return;
+    }
+    if (isPaymentLocked) {
+      showWarning("Giỏ hàng đang được khóa", "Hãy hoàn tất hoặc hủy phiên thanh toán hiện tại.");
+      return;
+    }
+
+    voucherRequestRef.current = true;
+    setIsValidatingVoucher(true);
+    try {
+      const voucher = await resolveVoucher(code, effectiveWarehouseId);
+      applyVoucher(voucher);
+      showSuccess(
+        "Đã áp dụng voucher",
+        voucher.rewardType === "DISCOUNT_PERCENT"
+          ? `${voucher.campaignName}: giảm ${voucher.rewardValue}% toàn đơn.`
+          : `${voucher.product.goodsName} đã được tự động thêm vào giỏ hàng.`,
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error
+        ? error.message
+        : "Voucher không hợp lệ hoặc không thể sử dụng tại điểm bán này.";
+      console.error("[Voucher] Không thể áp dụng voucher:", error);
+      showError("Không thể áp dụng voucher", message);
+    } finally {
+      voucherRequestRef.current = false;
+      setIsValidatingVoucher(false);
+    }
+  }, [applyVoucher, effectiveWarehouseId, isPaymentLocked]);
+
   const handleBarcodeScan = useCallback((barcode: string) => {
     const product = findProductByBarcode(allProducts, barcode);
     if (!product) {
-      showWarning(
-        "Không tìm thấy mã vạch",
-        `Không có sản phẩm nào mang mã ${barcode} trong danh mục hiện tại.`,
-      );
+      void handleApplyVoucher(barcode);
       return;
     }
 
     if (handleAddToCart(product)) {
       showSuccess("Đã quét sản phẩm", `${product.goodsName} đã được thêm vào giỏ hàng.`);
     }
-  }, [allProducts, handleAddToCart]);
+  }, [allProducts, handleAddToCart, handleApplyVoucher]);
 
   useBarcodeScanner({
     enabled: !authLoading && Boolean(user && userDoc) && !needsWarehouseSelection,
@@ -492,7 +542,7 @@ export default function CashierPage() {
       fallback={(retry) => (
         <div className="h-screen bg-[var(--color-background)]">
           <MinimalCheckoutFallback
-            totalAmount={totalAmount}
+            totalAmount={payableAmount}
             itemCount={itemCount}
             isBusy={isCheckingOut || payOSPayment.isBusy}
             onRetryInterface={retry}
@@ -548,7 +598,7 @@ export default function CashierPage() {
         <CheckoutSafetyBoundary
           fallback={(retry) => (
             <MinimalCheckoutFallback
-              totalAmount={totalAmount}
+              totalAmount={payableAmount}
               itemCount={itemCount}
               isBusy={isCheckingOut || payOSPayment.isBusy}
               onRetryInterface={retry}
@@ -581,8 +631,13 @@ export default function CashierPage() {
             currentOrderStatus={currentOrderStatus}
             totalAmount={totalAmount}
             itemCount={itemCount}
+            vouchers={vouchers}
+            discountAmount={voucherDiscount}
+            isValidatingVoucher={isValidatingVoucher}
             onUpdateQuantity={updateQuantity}
             onRemoveItem={removeItem}
+            onApplyVoucher={(code) => void handleApplyVoucher(code)}
+            onRemoveVoucher={removeVoucher}
             onReadMemberCard={() => void handleReadMemberCard()}
             onCancelMemberCardRead={handleCancelMemberCardRead}
             onLookupMemberByPhone={handleLookupMemberByPhone}

@@ -14,6 +14,7 @@ import type {
   OrderMemberSnapshot,
   PaymentMethod,
 } from "@/lib/types/order";
+import type { PosVoucherResolution } from "@/lib/types/voucher";
 
 /**
  * Generate a unique local order ID using timestamp and a random suffix.
@@ -34,6 +35,22 @@ interface OrderRequest {
   uid?: string;
   member?: OrderMemberSnapshot;
   items: Array<Pick<OrderItem, "goodsId" | "quantity">>;
+  voucherCodes?: string[];
+}
+
+export async function resolveVoucher(
+  code: string,
+  warehouseId: string,
+): Promise<PosVoucherResolution> {
+  const callable = httpsCallable<
+    { action: "resolveVoucher"; payload: { code: string; warehouseId: string } },
+    PosVoucherResolution
+  >(functions, "getPosAuthSession");
+  const result = await callable(await withDeviceAuth({
+    action: "resolveVoucher" as const,
+    payload: { code, warehouseId },
+  }));
+  return result.data;
 }
 
 interface PreparedOrderResult {

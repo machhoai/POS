@@ -1,3 +1,5 @@
+import type { PosOrderVoucherSnapshot } from "./voucher";
+
 // =============================================================================
 // POS Order Types — Shared interface (duplicated from frontend for isolation)
 // =============================================================================
@@ -200,7 +202,13 @@ export interface PosOrder {
   paymentMethod: PaymentMethod;
   paymentMethodId: string;
   paymentMethodName: string;
+  /** Authoritative total before voucher benefits. */
+  subtotalAmount?: number;
+  /** Total voucher benefit applied to the order. */
+  discountAmount?: number;
   totalAmount: number;
+  voucherCodes?: string[];
+  vouchers?: PosOrderVoucherSnapshot[];
   items: OrderItem[];
   /** Every PayOS order code ever created for this order, used by the webhook. */
   payosOrderCodes?: number[];

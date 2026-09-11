@@ -79,3 +79,30 @@ test("keeps a tax-free receipt free of tax amounts", () => {
   assert.equal(line.taxRate, 0);
   assert.equal(line.taxAmount, 0);
 });
+
+test("prints the stored net total for an order discounted by voucher", () => {
+  const order = {
+    subtotalAmount: 220_000,
+    discountAmount: 44_000,
+    totalAmount: 176_000,
+    voucherCodes: ["SALE20"],
+    items: [
+      {
+        goodsId: "ticket-01",
+        goodsName: "Ticket",
+        price: 220_000,
+        quantity: 1,
+        unitPriceBeforeTax: 200_000,
+        taxRate: 10,
+        taxAmount: 20_000,
+      },
+    ],
+  };
+
+  assert.deepEqual(calculateReceiptTotals(order, 0), {
+    subtotal: 200_000,
+    taxTotal: 20_000,
+    discount: 44_000,
+    grandTotal: 176_000,
+  });
+});

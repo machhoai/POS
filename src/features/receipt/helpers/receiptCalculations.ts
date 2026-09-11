@@ -82,12 +82,16 @@ export function calculateReceiptTotals(
     (total, line) => total + line.taxAmount,
     0,
   );
-  const discount = Math.max(0, order.voucherDiscount || 0);
+  const discount = Math.max(
+    0,
+    order.discountAmount ?? order.voucherDiscount ?? 0,
+  );
+  const usesNetTotal = order.subtotalAmount !== undefined;
 
   return {
     subtotal,
     taxTotal,
     discount,
-    grandTotal: Math.max(0, order.totalAmount - discount),
+    grandTotal: Math.max(0, usesNetTotal ? order.totalAmount : order.totalAmount - discount),
   };
 }

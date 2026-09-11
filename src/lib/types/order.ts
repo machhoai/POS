@@ -1,3 +1,5 @@
+import type { PosOrderVoucherSnapshot } from "@/lib/types/voucher";
+
 // =============================================================================
 // POS Order Types — Shared between frontend (Next.js) and backend (Cloud Functions)
 // =============================================================================
@@ -218,6 +220,18 @@ export interface PosOrder {
 
   /** Total amount in the local currency */
   totalAmount: number;
+
+  /** Tổng giá trị trước ưu đãi voucher. */
+  subtotalAmount?: number;
+
+  /** Tổng số tiền được giảm bởi voucher. */
+  discountAmount?: number;
+
+  /** Các mã voucher được backend xác nhận cho đơn. */
+  voucherCodes?: string[];
+
+  /** Snapshot quyền lợi voucher tại thời điểm thanh toán. */
+  vouchers?: PosOrderVoucherSnapshot[];
 
   /** Line items in the order */
   items: OrderItem[];

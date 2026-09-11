@@ -5,7 +5,6 @@ import { CreditCard, LoaderCircle, Search, UserRound, X } from "lucide-react";
 import CartItem, { EmptyCart } from "@/components/pos/CartItem";
 import CheckoutModal from "@/components/pos/CheckoutModal";
 import OrderNumberStatus from "@/components/pos/OrderNumberStatus";
-import type { AppliedVoucher } from "@/components/pos/VoucherInput";
 import type { ReceiptLanguage } from "@/features/receipt/types/receipt";
 import type {
     OrderItem,
@@ -15,6 +14,7 @@ import type {
 } from "@/lib/types/order";
 import type { PaymentMethodOption } from "@/lib/types/payment";
 import type { PayOSCheckoutController } from "@/lib/types/payment";
+import type { PosVoucherResolution } from "@/lib/types/voucher";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { showWarning } from "@/lib/utils/toast";
 
@@ -34,6 +34,9 @@ interface CartPanelProps {
     currentOrderStatus: OrderStatus | null;
     totalAmount: number;
     itemCount: number;
+    vouchers: PosVoucherResolution[];
+    discountAmount: number;
+    isValidatingVoucher: boolean;
     onUpdateQuantity: (goodsId: string, quantity: number) => void;
     onRemoveItem: (goodsId: string) => void;
     onReadMemberCard: () => void;
@@ -44,6 +47,8 @@ interface CartPanelProps {
     onSetReceiptLanguage: (language: ReceiptLanguage) => void;
     onCheckout: () => void | Promise<void>;
     onClearCart: () => void;
+    onApplyVoucher: (code: string) => void;
+    onRemoveVoucher: (code: string) => void;
     openCheckoutRequested: boolean;
     onCheckoutOpened: () => void;
 }
@@ -64,6 +69,9 @@ export default function CartPanel({
     currentOrderStatus,
     totalAmount,
     itemCount,
+    vouchers,
+    discountAmount,
+    isValidatingVoucher,
     onUpdateQuantity,
     onRemoveItem,
     onReadMemberCard,
@@ -74,6 +82,8 @@ export default function CartPanel({
     onSetReceiptLanguage,
     onCheckout,
     onClearCart,
+    onApplyVoucher,
+    onRemoveVoucher,
     openCheckoutRequested,
     onCheckoutOpened,
 }: CartPanelProps) {
@@ -83,20 +93,7 @@ export default function CartPanel({
     const [modalCartKey, setModalCartKey] = useState<string | null>(() =>
         openCheckoutRequested && items.length > 0 ? currentCartKey : null,
     );
-    const [appliedVoucher, setAppliedVoucher] =
-        useState<AppliedVoucher | null>(null);
-    const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
     const [memberPhone, setMemberPhone] = useState("");
-
-    const handleApplyVoucher = useCallback(async (code: string) => {
-        setIsValidatingVoucher(true);
-        console.error("[Giỏ hàng] Chưa có API xác thực/áp dụng voucher:", code);
-        showWarning(
-            "Chưa thể áp dụng voucher",
-            "OpenAPI hiện chưa cung cấp API xác thực và khấu trừ voucher khi tạo đơn.",
-        );
-        setIsValidatingVoucher(false);
-    }, []);
 
     const closeModal = useCallback(() => {
         if (!isCheckingOut) setModalCartKey(null);
@@ -105,12 +102,10 @@ export default function CartPanel({
     const confirmCheckout = useCallback(async () => {
         await onCheckout();
         setModalCartKey(null);
-        setAppliedVoucher(null);
     }, [onCheckout]);
 
     const clearCart = useCallback(() => {
         setModalCartKey(null);
-        setAppliedVoucher(null);
         setMemberPhone("");
         onClearCart();
     }, [onClearCart]);
@@ -140,10 +135,8 @@ export default function CartPanel({
         onRemoveMember();
     }, [onRemoveMember]);
 
-    const finalAmount = appliedVoucher
-        ? Math.max(0, totalAmount - appliedVoucher.discountAmount)
-        : totalAmount;
-    const isModalOpen = items.length > 0 && modalCartKey === currentCartKey;
+    const finalAmount = Math.max(0, totalAmount - discountAmount);
+    const isModalOpen = items.length > 0 && modalCartKey !== null;
 
     useEffect(() => {
         if (!openCheckoutRequested || items.length === 0) return;
@@ -332,13 +325,14 @@ export default function CartPanel({
                     totalAmount={totalAmount}
                     finalAmount={finalAmount}
                     itemCount={itemCount}
-                    appliedVoucher={appliedVoucher}
+                    appliedVouchers={vouchers}
+                    discountAmount={discountAmount}
                     isValidatingVoucher={isValidatingVoucher}
                     isCheckingOut={isCheckingOut}
                     onSetPaymentMethod={onSetPaymentMethod}
                     onSetReceiptLanguage={onSetReceiptLanguage}
-                    onApplyVoucher={handleApplyVoucher}
-                    onRemoveVoucher={() => setAppliedVoucher(null)}
+                    onApplyVoucher={onApplyVoucher}
+                    onRemoveVoucher={onRemoveVoucher}
                     onClose={closeModal}
                     onConfirm={confirmCheckout}
                 />

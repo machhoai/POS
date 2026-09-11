@@ -25,6 +25,7 @@ import {
   retryPosOrderSyncForUser,
 } from "../order/functions";
 import { assertActivePosDevice } from "../services/posDeviceAccessService";
+import { resolveVoucherForCart } from "../services/voucherService";
 import {
   listPosMemberCardsForUser,
   listPosMemberPassTicketsForUser,
@@ -233,6 +234,7 @@ export const getPosAuthSession = onCall(
       action === "getOrders" ||
       action === "getCloseoutOrders" ||
       action === "getLatestOrder" ||
+      action === "resolveVoucher" ||
       action === "retryOrderSync"
     ) {
       try {
@@ -255,6 +257,12 @@ export const getPosAuthSession = onCall(
               ...request.data?.payload,
               warehouseId: device.warehouseId,
             },
+          );
+        }
+        if (action === "resolveVoucher") {
+          return await resolveVoucherForCart(
+            request.data?.payload?.code,
+            device.warehouseId,
           );
         }
         if (action === "getCloseoutOrders") {
