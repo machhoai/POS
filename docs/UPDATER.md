@@ -1,6 +1,6 @@
 # Phát hành cập nhật JPOS
 
-JPOS dùng Tauri Updater v2 và GitHub Releases. Bản `0.1.12` là bản bootstrap đầu tiên có khả năng tự cập nhật.
+JPOS dùng Tauri Updater v2. GitHub Releases lưu bản phát hành và `latest.json`; installer được mirror sang Firebase Storage để tránh tuyến CDN GitHub chậm tại cửa hàng. Bản `0.1.12` là bản bootstrap đầu tiên có khả năng tự cập nhật.
 
 ## Khóa ký
 
@@ -24,6 +24,9 @@ Khóa hiện tại không có mật khẩu; workflow đã truyền giá trị r�
 3. Commit và push thay đổi.
 4. Chạy workflow **Release JPOS Desktop** trong GitHub Actions, hoặc tạo và push tag `jpos-v0.1.13`.
 5. Kiểm tra GitHub Release có `latest.json`, installer NSIS và file `.sig`.
+6. Kiểm tra URL installer trong `latest.json` trỏ tới Firebase Storage và tải được không cần đăng nhập.
+
+Workflow dùng GitHub OIDC qua Workload Identity Provider `github-pos` và service account `github-jpos-release@jw-system-f2104.iam.gserviceaccount.com` để upload mirror. Không tạo hoặc lưu khóa service account trong GitHub Secrets.
 
 Không phát hành lại cùng một version. Tauri chỉ đề xuất bản có SemVer cao hơn bản đang chạy.
 

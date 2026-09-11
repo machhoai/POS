@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release-windows:
@@ -70,7 +71,16 @@ jobs:
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
 
-      - name: Use direct GitHub download URL in updater manifest
+      - name: Authenticate Google Cloud release mirror
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/107789134874/locations/global/workloadIdentityPools/github-actions/providers/github-pos
+          service_account: github-jpos-release@jw-system-f2104.iam.gserviceaccount.com
+
+      - name: Install Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Mirror installer to Firebase Storage
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -87,11 +97,23 @@ jobs:
 
           $manifestDirectory = Join-Path $env:RUNNER_TEMP "jpos-updater-manifest"
           New-Item -ItemType Directory -Force -Path $manifestDirectory | Out-Null
+          gh release download $tag --pattern $installer.name --dir $manifestDirectory --clobber
           gh release download $tag --pattern latest.json --dir $manifestDirectory --clobber
+          $installerPath = Join-Path $manifestDirectory $installer.name
           $manifestPath = Join-Path $manifestDirectory "latest.json"
+          $storageObject = "gs://jw-system-f2104.firebasestorage.app/jpos-updates/$version/$($installer.name)"
+          $downloadToken = [guid]::NewGuid().ToString()
+          gcloud storage cp $installerPath $storageObject
+          gcloud storage objects update $storageObject `
+            --content-type=application/octet-stream `
+            --cache-control="public,max-age=31536000,immutable" `
+            --custom-metadata="firebaseStorageDownloadTokens=$downloadToken"
+
+          $encodedObject = [uri]::EscapeDataString("jpos-updates/$version/$($installer.name)")
+          $mirrorUrl = "https://firebasestorage.googleapis.com/v0/b/jw-system-f2104.firebasestorage.app/o/$encodedObject`?alt=media&token=$downloadToken"
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
           foreach ($platform in $manifest.platforms.PSObject.Properties) {
-            $platform.Value.url = $installer.url
+            $platform.Value.url = $mirrorUrl
           }
           $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestPath -Encoding utf8NoBOM
           gh release upload $tag $manifestPath --clobber
