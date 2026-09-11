@@ -17,9 +17,9 @@ const NAV_ITEMS = [
         icon: <IoHome />
     },
     {
-        href: "/orders",
-        label: "Đơn hàng",
-        icon: <IoDocument />
+        href: "/members",
+        label: "Thành viên",
+        icon: <IoPeople />
     },
     {
         href: "/voucher-redemption",
@@ -27,24 +27,24 @@ const NAV_ITEMS = [
         icon: <IoTicket />
     },
     {
+        href: "/orders",
+        label: "Đơn hàng",
+        icon: <IoDocument />
+    },
+    {
         href: "/shift-close",
         label: "Kết ca",
         icon: <IoTime />
     },
     {
-        href: "/members",
-        label: "Thành viên",
-        icon: <IoPeople />
+        href: "/display-control",
+        label: "Điều khiển màn hình khách",
+        icon: <IoDesktop />
     },
     {
         href: "/members/batch",
         label: "Tạo thẻ hàng loạt",
         icon: <IoAlbums />
-    },
-    {
-        href: "/display-control",
-        label: "Điều khiển màn hình khách",
-        icon: <IoDesktop />
     },
 ];
 
