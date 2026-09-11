@@ -58,13 +58,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Thêm màn hình đổi voucher do J-PULSE phát hành bằng máy quét barcode hoặc QR.
-            - Tự động ánh xạ voucher vé/quà sang sản phẩm và kiểm tra phạm vi cửa hàng trước khi sử dụng.
-            - Hỗ trợ voucher giảm phần trăm trên toàn đơn, tối đa một mã giảm phần trăm cho mỗi đơn.
-            - Bỏ qua lần đọc trùng của máy quét để nhân viên không nhận hai kết quả trái ngược cho cùng một mã.
-            - Gom các voucher vé/quà thành một bill; tự chốt sau 10 giây hoặc chốt ngay bằng nút Xác nhận & in.
-            - Giữ nguyên việc in từng vé tương ứng với sản phẩm và hỗ trợ in lại khi máy in gặp lỗi.
-            - Cải thiện khả năng khôi phục đơn thanh toán có voucher khi ứng dụng bị gián đoạn.
+            - Sắp xếp lại các trang trên thanh điều hướng để phù hợp hơn với luồng thao tác tại quầy.
+            - Đưa Thành viên và Đổi voucher lên ngay sau trang Bán hàng để nhân viên truy cập nhanh hơn.
+            - Giữ các trang Đơn hàng, Kết ca, Điều khiển màn hình khách và Tạo thẻ hàng loạt theo thứ tự vận hành.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true
