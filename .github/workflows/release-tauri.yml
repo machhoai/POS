@@ -69,3 +69,29 @@ jobs:
           updaterJsonPreferNsis: true
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
+
+      - name: Use direct GitHub download URL in updater manifest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "jpos-v$version"
+          $release = gh release view $tag --json assets | ConvertFrom-Json
+          $installer = $release.assets |
+            Where-Object { $_.name -match '_x64-setup\.exe$' } |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw "Không tìm thấy installer NSIS trong release $tag."
+          }
+
+          $manifestDirectory = Join-Path $env:RUNNER_TEMP "jpos-updater-manifest"
+          New-Item -ItemType Directory -Force -Path $manifestDirectory | Out-Null
+          gh release download $tag --pattern latest.json --dir $manifestDirectory --clobber
+          $manifestPath = Join-Path $manifestDirectory "latest.json"
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          foreach ($platform in $manifest.platforms.PSObject.Properties) {
+            $platform.Value.url = $installer.url
+          }
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestPath -Encoding utf8NoBOM
+          gh release upload $tag $manifestPath --clobber
