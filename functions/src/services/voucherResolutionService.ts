@@ -35,7 +35,11 @@ export const normalizeVoucherCode = (value: unknown): string => {
   if (typeof value !== "string") {
     throw new HttpsError("invalid-argument", "Mã voucher không hợp lệ.");
   }
-  const code = value.trim().normalize("NFKC").toUpperCase();
+  const code = value
+    .normalize("NFKC")
+    .split(";", 1)[0]
+    .trim()
+    .toUpperCase();
   if (!/^[A-Z0-9-]{4,80}$/u.test(code)) {
     throw new HttpsError("invalid-argument", "Mã voucher không hợp lệ.");
   }

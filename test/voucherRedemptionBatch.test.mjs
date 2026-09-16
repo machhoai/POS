@@ -4,12 +4,20 @@ import test from "node:test";
 import {
   aggregateVoucherProducts,
   isDuplicateVoucherScan,
+  normalizeVoucherScan,
   VOUCHER_BATCH_IDLE_MS,
   VOUCHER_DUPLICATE_WINDOW_MS,
 } from "../src/lib/utils/voucherRedemptionBatch.ts";
 
 test("keeps the redemption batch open for ten seconds after the last scan", () => {
   assert.equal(VOUCHER_BATCH_IDLE_MS, 10_000);
+});
+
+test("uses only the voucher code before the AEON Mall payload separator", () => {
+  assert.equal(
+    normalizeVoucherScan(" AMTP-Voucher;123456;513245 "),
+    "AMTP-VOUCHER",
+  );
 });
 
 const voucher = (code, goodsId, quantity) => ({

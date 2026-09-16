@@ -59,9 +59,9 @@ jobs:
           releaseBody: |
             Bản cập nhật JPOS v__VERSION__.
 
-            - Sắp xếp lại các trang trên thanh điều hướng để phù hợp hơn với luồng thao tác tại quầy.
-            - Đưa Thành viên và Đổi voucher lên ngay sau trang Bán hàng để nhân viên truy cập nhanh hơn.
-            - Giữ các trang Đơn hàng, Kết ca, Điều khiển màn hình khách và Tạo thẻ hàng loạt theo thứ tự vận hành.
+            - Hỗ trợ mã QR voucher từ ứng dụng AEON Mall có định dạng nhiều phần, ví dụ AMTP-Voucher;123456;513245.
+            - JPOS chỉ sử dụng mã voucher ở phần đầu trước dấu chấm phẩy để kiểm tra và đổi voucher.
+            - Đồng bộ quy tắc chuẩn hóa mã ở ứng dụng và Cloud Functions để tránh lỗi tra cứu hoặc hiển thị dữ liệu thừa.
 
             Ứng dụng JPOS sẽ tự kiểm tra, xác thực chữ ký và cài đặt bản phát hành này.
           generateReleaseNotes: true

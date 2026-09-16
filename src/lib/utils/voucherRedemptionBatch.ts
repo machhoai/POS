@@ -3,6 +3,14 @@ import type { PosVoucherResolution } from "@/lib/types/voucher";
 export const VOUCHER_BATCH_IDLE_MS = 10_000;
 export const VOUCHER_DUPLICATE_WINDOW_MS = 3_000;
 
+export function normalizeVoucherScan(rawCode: string): string {
+  return rawCode
+    .normalize("NFKC")
+    .split(";", 1)[0]
+    .trim()
+    .toUpperCase();
+}
+
 export function isDuplicateVoucherScan(
   code: string,
   activeCodes: ReadonlySet<string>,

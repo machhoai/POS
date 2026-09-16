@@ -15,6 +15,10 @@ const product = {
 
 test("normalizes voucher codes before lookup", () => {
   assert.equal(normalizeVoucherCode("  jp-abc123  "), "JP-ABC123");
+  assert.equal(
+    normalizeVoucherCode("AMTP-Voucher;123456;513245"),
+    "AMTP-VOUCHER",
+  );
   assert.throws(() => normalizeVoucherCode("bad code"));
 });
 

@@ -13,6 +13,7 @@ import type { VoucherRedemptionMode, VoucherRedemptionResult } from "@/lib/types
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import {
   isDuplicateVoucherScan,
+  normalizeVoucherScan,
   VOUCHER_BATCH_IDLE_MS,
   VOUCHER_DUPLICATE_WINDOW_MS,
 } from "@/lib/utils/voucherRedemptionBatch";
@@ -182,7 +183,7 @@ export function useVoucherRedemptionQueue(shopId: number, warehouseId: string) {
   }, [markHandled, mode, upsertResult, warehouseId]);
 
   const enqueue = useCallback((rawCode: string) => {
-    const code = rawCode.trim().toUpperCase();
+    const code = normalizeVoucherScan(rawCode);
     if (!code || isDuplicateVoucherScan(code, activeCodesRef.current, recentCodesRef.current)) return;
     if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
     batchTimerRef.current = null;
